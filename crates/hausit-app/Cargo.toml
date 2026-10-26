@@ -1,0 +1,24 @@
+[package]
+name = "hausit-app"
+description = "Hausit desktop application with a Revit-style user interface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "hausit"
+path = "src/main.rs"
+
+[dependencies]
+hausit-core.workspace = true
+hausit-model.workspace = true
+hausit-views.workspace = true
+hausit-schedules.workspace = true
+hausit-io.workspace = true
+hausit-rvt.workspace = true
+glam.workspace = true
+eframe.workspace = true
+egui.workspace = true
+egui_extras.workspace = true
+image.workspace = true
+rfd.workspace = true

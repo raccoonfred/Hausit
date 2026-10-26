@@ -1,0 +1,84 @@
+use crate::category::Category;
+use crate::params::ParamValue;
+use hausit_core::ElementId;
+use indexmap::IndexMap;
+use serde::{Deserialize, Serialize};
+
+/// Parameters stored on a type, by name, in display order.
+pub type TypeParams = IndexMap<String, ParamValue>;
+
+/// A family type, e.g. `Basic Wall : Generic - 200mm` or
+/// `M_Single-Flush : 0864 x 2032mm`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FamilyType {
+    pub id: ElementId,
+    pub category: Category,
+    pub family: String,
+    pub name: String,
+    pub params: TypeParams,
+}
+
+impl FamilyType {
+    pub fn length(&self, name: &str) -> Option<f64> {
+        match self.params.get(name)? {
+            ParamValue::Length(v) => Some(*v),
+            _ => None,
+        }
+    }
+
+    pub fn length_or(&self, name: &str, default: f64) -> f64 {
+        self.length(name).unwrap_or(default)
+    }
+
+    pub fn display_name(&self) -> String {
+        format!("{} : {}", self.family, self.name)
+    }
+
+    /// Thickness of walls/floors/roofs ("Width" for walls, as in Revit).
+    pub fn thickness(&self) -> f64 {
+        match self.category {
+            Category::Walls => self.length_or("Width", 200.0),
+            Category::Doors | Category::Windows => self.length_or("Thickness", 50.0),
+            _ => self.length_or("Thickness", 200.0),
+        }
+    }
+
+    pub fn width(&self) -> f64 {
+        self.length_or("Width", 900.0)
+    }
+
+    pub fn height(&self) -> f64 {
+        self.length_or("Height", 2100.0)
+    }
+}
+
+/// Parameters a newly created type of each category starts with.
+pub fn default_type_params(category: Category) -> TypeParams {
+    let mut p = TypeParams::new();
+    let len = |v| ParamValue::Length(v);
+    match category {
+        Category::Walls => {
+            p.insert("Width".into(), len(200.0));
+            p.insert("Function".into(), ParamValue::Text("Exterior".into()));
+        }
+        Category::Floors | Category::Roofs => {
+            p.insert("Thickness".into(), len(200.0));
+        }
+        Category::Doors => {
+            p.insert("Width".into(), len(900.0));
+            p.insert("Height".into(), len(2100.0));
+            p.insert("Thickness".into(), len(50.0));
+            p.insert("Leaves".into(), ParamValue::Integer(1));
+        }
+        Category::Windows => {
+            p.insert("Width".into(), len(900.0));
+            p.insert("Height".into(), len(1200.0));
+            p.insert("Default Sill Height".into(), len(900.0));
+            p.insert("Thickness".into(), len(50.0));
+        }
+        Category::Levels | Category::Grids => {}
+    }
+    p.insert("Type Mark".into(), ParamValue::Text(String::new()));
+    p.insert("Description".into(), ParamValue::Text(String::new()));
+    p
+}

@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+default-members = ["crates/hausit-app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/raccoonfred/Hausit"
+rust-version = "1.95"
+
+[workspace.dependencies]
+hausit-core = { path = "crates/hausit-core" }
+hausit-model = { path = "crates/hausit-model" }
+hausit-views = { path = "crates/hausit-views" }
+hausit-schedules = { path = "crates/hausit-schedules" }
+hausit-io = { path = "crates/hausit-io" }
+hausit-rvt = { path = "crates/hausit-rvt" }
+
+glam = { version = "0.34", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+thiserror = "2"
+indexmap = { version = "2", features = ["serde"] }
+cfb = "0.15"
+eframe = { version = "0.37", features = ["glow"] }
+egui = "0.37"
+egui_extras = { version = "0.37", features = ["image"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+rfd = "0.16"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2

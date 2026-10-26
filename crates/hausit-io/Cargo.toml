@@ -1,0 +1,13 @@
+[package]
+name = "hausit-io"
+description = "Native .hausit project file format and the importer/exporter registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hausit-model.workspace = true
+hausit-rvt.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

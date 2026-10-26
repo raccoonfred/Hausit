@@ -1,0 +1,12 @@
+[package]
+name = "hausit-views"
+description = "Views (plan, 3D, section, elevation) and the projection of model geometry into them"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hausit-core.workspace = true
+hausit-model.workspace = true
+glam.workspace = true
+serde.workspace = true
