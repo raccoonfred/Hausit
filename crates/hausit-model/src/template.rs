@@ -222,7 +222,7 @@ pub fn sample_project() -> Document {
         DVec2::new(12750.0, 8750.0),
         DVec2::new(-750.0, 8750.0),
     ];
-    doc.add_element(ElementData::Roof(Roof {
+    let roof = doc.add_element(ElementData::Roof(Roof {
         type_id: roof_t,
         level: l2,
         footprint: eaves,
@@ -231,6 +231,13 @@ pub fn sample_project() -> Document {
         shape: RoofShape::Hip,
         defines_slope: vec![],
     }));
+    // Exterior walls are attached to the roof, as Revit offers when the
+    // roof is created.
+    for w in &walls {
+        if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {
+            w.attached_top = vec![roof];
+        }
+    }
 
     if let Some(t) = doc.family_type_mut(win) {
         t.params.insert("Type Mark".into(), ParamValue::Text("W1".into()));

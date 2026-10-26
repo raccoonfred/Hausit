@@ -45,6 +45,8 @@ pub struct Dialogs {
     pub allow_close: bool,
     /// Lowest Level Notice for a new roof: (current level, level above).
     pub roof_level: Option<(ElementId, ElementId)>,
+    /// After creating a roof: attach these walls to it?
+    pub attach_walls: Option<(ElementId, Vec<ElementId>)>,
 }
 
 impl Dialogs {
@@ -74,6 +76,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     revit_file(app, ctx);
     confirm(app, ctx);
     roof_level(app, ctx);
+    attach_walls(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;
@@ -489,6 +492,41 @@ fn roof_level(app: &mut HausitApp, ctx: &Context) {
         app.options.roof_level = level;
         app.dialogs.roof_level = None;
     }
+}
+
+fn attach_walls(app: &mut HausitApp, ctx: &Context) {
+    let Some((roof, walls)) = app.dialogs.attach_walls.clone() else {
+        return;
+    };
+    let mut choice = None;
+    window("Hausit").show(ctx, |ui| {
+        ui.label("Would you like to attach the highlighted walls to the roof?");
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button("  Attach  ").clicked() {
+                choice = Some(true);
+            }
+            if ui.button("  Don't attach  ").clicked() {
+                choice = Some(false);
+            }
+        });
+    });
+    let Some(attach) = choice else { return };
+    app.dialogs.attach_walls = None;
+    if attach {
+        app.transact("Attach Top/Base", |doc| {
+            for w in &walls {
+                if let Some(hausit_model::ElementData::Wall(wall)) = doc.element_mut(*w).map(|e| &mut e.data) {
+                    if !wall.attached_top.contains(&roof) {
+                        wall.attached_top.push(roof);
+                    }
+                }
+            }
+            Ok(())
+        });
+        app.status = format!("Attached {} walls to the roof.", walls.len());
+    }
+    app.selection.clear();
 }
 
 /// Revit-style Home screen.

@@ -758,9 +758,13 @@ mod tests {
 
     #[test]
     fn openings_cut_walls() {
-        let doc = sample_project();
-        // South wall hosts a door and a window.
+        let mut doc = sample_project();
+        // South wall hosts a door and a window. Detached, it is a plain
+        // 4 m high prism.
         let south = doc.elements_of(Category::Walls).nth(3).unwrap().id;
+        if let Some(ElementData::Wall(w)) = doc.element_mut(south).map(|e| &mut e.data) {
+            w.attached_top.clear();
+        }
         let g = element_geometry(&doc, south).unwrap();
         let w = doc.element(south).unwrap().as_wall().unwrap();
         let vol: f64 = g
@@ -784,5 +788,46 @@ mod tests {
         assert_eq!(faces.iter().filter(|f| f.normal().z > 0.3).count(), 4);
         assert_eq!(faces.iter().filter(|f| f.normal().z < -0.3).count(), 4);
         assert_eq!(faces.iter().filter(|f| f.normal().z.abs() < 1e-9).count(), 4);
+    }
+
+    /// Walls attached to a gable roof fill the triangle under it.
+    #[test]
+    fn walls_fill_gable() {
+        for overhang in [750.0, 150.0, 0.0] {
+            let mut doc = sample_project();
+            let roof = doc.elements_of(Category::Roofs).next().unwrap().id;
+            let walls: Vec<ElementId> = doc.elements_of(Category::Walls).map(|e| e.id).take(4).collect();
+            if let Some(ElementData::Roof(r)) = doc.element_mut(roof).map(|e| &mut e.data) {
+                r.defines_slope = vec![true, false, true, false];
+                let (a, b) = (-overhang, overhang);
+                r.footprint = vec![
+                    DVec2::new(a, a),
+                    DVec2::new(12000.0 + b, a),
+                    DVec2::new(12000.0 + b, 8000.0 + b),
+                    DVec2::new(a, 8000.0 + b),
+                ];
+            }
+            for w in &walls {
+                if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {
+                    w.attached_top = vec![roof];
+                }
+            }
+            let roof_z = doc.elements_of(Category::Levels).map(|e| e.id).collect::<Vec<_>>();
+            let base = doc.level_elevation(roof_z[1]);
+            let top = |id: ElementId| {
+                element_geometry(&doc, id)
+                    .unwrap()
+                    .parts
+                    .iter()
+                    .flat_map(|p| p.faces())
+                    .flat_map(|f| f.pts)
+                    .map(|p| p.z)
+                    .fold(f64::NEG_INFINITY, f64::max)
+            };
+            // West wall (x = 0) is a gable end: it rises close to the ridge.
+            let ridge = base + (4000.0 + overhang) * 30f64.to_radians().tan();
+            let west = top(walls[0]);
+            assert!(west > ridge - 600.0, "overhang {overhang}: west wall top {west}, ridge {ridge}");
+        }
     }
 }

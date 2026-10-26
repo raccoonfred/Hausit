@@ -1399,8 +1399,34 @@ pub fn finish_sketch(app: &mut HausitApp) {
                 },
                 defines_slope: corners.iter().map(|c| c.1.slope).collect(),
             };
-            app.transact("Create Roof", |doc| Ok(doc.add_element(ElementData::Roof(r))));
+            let roof_z = app.doc.level_elevation(roof_level);
+            let footprint = r.footprint.clone();
+            let Some(roof) = app.transact("Create Roof", |doc| Ok(doc.add_element(ElementData::Roof(r)))) else {
+                return;
+            };
             app.status = format!("Roof created on {}.", app.doc.level_name(roof_level));
+            // As in Revit: offer to attach the walls under the roof, so
+            // gable ends and slopes close up against it.
+            let picked: Vec<ElementId> = corners.iter().filter_map(|c| c.1.wall).collect();
+            let walls: Vec<ElementId> = app
+                .doc
+                .elements_of(Category::Walls)
+                .filter(|e| {
+                    let w = e.as_wall().unwrap();
+                    // Picked walls; with drawn lines, the walls topping
+                    // out under the roof.
+                    picked.contains(&e.id)
+                        || (picked.is_empty()
+                            && (app.doc.wall_top_z(w) - roof_z).abs() < 1.0
+                            && hausit_core::geom::point_in_polygon((w.start + w.end) * 0.5, &footprint))
+                })
+                .filter(|e| !e.as_wall().unwrap().attached_top.contains(&roof))
+                .map(|e| e.id)
+                .collect();
+            if !walls.is_empty() {
+                app.selection = walls.clone();
+                app.dialogs.attach_walls = Some((roof, walls));
+            }
         }
         other => app.tool = other,
     }
