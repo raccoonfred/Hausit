@@ -33,24 +33,26 @@ and status bar.
 
 | Area | In this version |
 |------|-----------------|
-| Model | Levels, grids, walls (with automatic corner and T joins), floors, footprint roofs (flat, hip, gable), doors and windows hosted in walls |
+| Model | Levels, grids, walls (with automatic corner and T joins, Attach Top/Base to roofs and floors), floors, footprint roofs (flat, hip, gable), doors and windows hosted in walls, structural columns, rooms (bounded automatically by walls, columns and room separation lines, with area, perimeter and volume) |
+| Annotation | Aligned dimensions to wall faces, wall centerlines and grids; room tags with area; door and window tags |
 | Families and types | Wall, floor and roof types; door and window families with types. Type Properties dialog with Duplicate, Rename and editable type parameters |
 | Properties | Revit-style instance parameters (Base Constraint, Top Constraint, Unconnected Height, Sill Height, Mark, Comments…) with live Length/Area/Volume |
 | Views | Floor plans (cut plane, poché, door swings, window symbols, grid bubbles), elevations and sections (with level heads and cut elements), orthographic 3D with a Revit ViewCube (faces, edges, corners, compass, Home, roll arrows, drag to orbit). Wireframe, Hidden Line, Shaded and Consistent Colors styles |
-| Tools | Wall (line or rectangle, chain, location line, typed lengths, Space to flip), Door, Window (Space flips the hand), Floor and Roof by Footprint in sketch mode (Pick Walls, Line, Rectangle, Defines Slope, overhang, Lowest Level Notice; hips, valleys and gables on any footprint shape), Level, Grid, Section, Move, Copy, Delete, Undo/Redo. In plan, selected walls show end grips, and selected elements can be dragged |
+| Tools | Wall (line or rectangle, chain, location line, typed lengths, Space to flip), Door, Window (Space flips the hand), Floor and Roof by Footprint in sketch mode (Pick Walls, Line, Rectangle, Defines Slope, overhang, Lowest Level Notice; hips, valleys and gables on any footprint shape), Structural Column (with At Grids), Room, Room Separator, Aligned Dimension, Level, Grid, Section, Move, Copy, Rotate, Mirror (pick or draw axis, with Copy), Trim/Extend to Corner, Split, Attach/Detach Top/Base, Delete, Undo/Redo. In plan, selected walls show end grips, and selected elements can be dragged |
 | Selection | Click, Ctrl/Shift to add/remove, window (left→right) and crossing (right→left) selection, pre-highlight on hover |
 | Snapping | Endpoints, midpoints, intersections, perpendicular, nearest, dashed alignment lines, 15° angle and zoom-based length increments, with Revit's snap glyphs and tooltips. Temporary dimensions show length and angle |
-| Schedules | Door, window, wall, floor and roof schedules with field selection, sorting, grouping, grand totals and CSV export |
+| Schedules | Door, window, wall, floor, roof, room and structural column schedules with field selection, sorting, grouping, grand totals and CSV export |
 | Files | Native `.hausit` project format (versioned JSON) |
 | Revit files | `.rvt/.rfa/.rte/.rft` files can be opened to show the Revit version, build and preview image. See below |
 
 Revit keyboard shortcuts work: `WA` wall, `DR` door, `WN` window, `FL` floor,
-`RF` roof, `LL` level, `GR` grid, `MV` move, `CO` copy, `DE` delete, `ZF`
-zoom to fit, plus `Esc`, `Delete`, `Tab` (cycle overlapping elements) and
+`RF` roof, `CL` column, `RM` room, `DI` dimension, `LL` level, `GR` grid,
+`MV` move, `CO` copy, `RO` rotate, `MM`/`DM` mirror, `TR` trim, `SL` split,
+`DE` delete, `ZF` zoom to fit, plus `Esc`, `Delete`, `Tab` (cycle overlapping elements) and
 `Ctrl+Z/Y/S/O/N`.
 
-Ribbon buttons for features that are not built yet (stairs, rooms,
-dimensions, tags, sheets, rotate, mirror and so on) are shown greyed out with
+Ribbon buttons for features that are not built yet (stairs, railings,
+ceilings, beams, foundations, text, sheets and so on) are shown greyed out with
 a "planned" tooltip, so the layout matches Revit while the features arrive.
 
 ## Opening Revit files
