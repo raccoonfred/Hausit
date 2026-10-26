@@ -3,6 +3,7 @@ name = "hausit-schedules"
 description = "Schedules / quantities: tabular views over model elements"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]

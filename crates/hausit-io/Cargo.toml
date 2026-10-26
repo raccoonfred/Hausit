@@ -3,6 +3,7 @@ name = "hausit-io"
 description = "Native .hausit project file format and the importer/exporter registry"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]

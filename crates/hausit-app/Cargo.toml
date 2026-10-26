@@ -3,6 +3,7 @@ name = "hausit-app"
 description = "Hausit desktop application with a Revit-style user interface"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [[bin]]

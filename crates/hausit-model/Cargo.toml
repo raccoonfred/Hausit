@@ -3,6 +3,7 @@ name = "hausit-model"
 description = "Parametric BIM element model: levels, grids, walls, floors, roofs, doors, windows, families and types"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]

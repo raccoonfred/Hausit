@@ -84,3 +84,12 @@ crates/
 ```
 
 Internal lengths are millimetres. Run the tests with `cargo test --workspace`.
+
+## License
+
+Hausit is dual-licensed under either of
+
+- the MIT license ([LICENSE-MIT](LICENSE-MIT)), or
+- the Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)),
+
+at your option. Unless you explicitly state otherwise, any contribution you intentionally submit for inclusion in Hausit, as defined in the Apache-2.0 license, is dual-licensed as above, without any additional terms or conditions.

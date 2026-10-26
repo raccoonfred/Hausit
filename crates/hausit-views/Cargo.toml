@@ -3,6 +3,7 @@ name = "hausit-views"
 description = "Views (plan, 3D, section, elevation) and the projection of model geometry into them"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]

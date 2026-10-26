@@ -3,6 +3,7 @@ name = "hausit-core"
 description = "Core math, ids and units shared by every Hausit crate"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]

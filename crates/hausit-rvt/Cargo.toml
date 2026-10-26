@@ -3,6 +3,7 @@ name = "hausit-rvt"
 description = "Autodesk Revit (.rvt/.rfa/.rte/.rft) reader. Currently inspects the container only; element import is a research milestone."
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
