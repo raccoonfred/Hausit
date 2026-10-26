@@ -82,9 +82,20 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     // Hover / pre-selection.
     let pointer = response.hover_pos();
     app.hover = None;
-    if let (Some(p), Tool::Modify) = (pointer, &app.tool) {
+    app.options.pick_tol = xf.px(8.0);
+    let picking = matches!(
+        app.tool,
+        Tool::Modify | Tool::Mirror { draw: false, .. } | Tool::Trim { .. } | Tool::Split | Tool::Attach { .. }
+    );
+    if let (Some(p), true) = (pointer, picking) {
         // Tab cycles through overlapping elements, as in Revit.
         let mut candidates = hit_candidates(&dl, &xf, p);
+        candidates.retain(|id| {
+            app.doc
+                .element(*id)
+                .map(|e| app.tool.picks(e.category()))
+                .unwrap_or(app.tool == Tool::Modify)
+        });
         // Model elements win over datums and view marks drawn over them.
         candidates.sort_by_key(|id| match app.doc.element(*id).map(|e| e.category()) {
             Some(Category::Grids | Category::Levels) => 1,
@@ -123,7 +134,18 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         } else {
             app.options.shape
         };
-        let drawing = !matches!(app.tool, Tool::Modify | Tool::Door | Tool::Window);
+        let drawing = !matches!(
+            app.tool,
+            Tool::Modify
+                | Tool::Door
+                | Tool::Window
+                | Tool::Room
+                | Tool::Dimension { .. }
+                | Tool::Trim { .. }
+                | Tool::Split
+                | Tool::Attach { .. }
+                | Tool::Mirror { draw: false, .. }
+        );
         if is_plan && drawing && !(app.tool.is_sketch() && mode == DrawShape::PickWalls) {
             snap = tools::snap(app, p, xf.px(10.0));
             let weak = snap
@@ -144,7 +166,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         if let Some(p) = snapped {
             if app.tool == Tool::Modify {
                 select_click(app, app.hover, ctrl, shift);
-            } else if app.tool.is_sketch() || is_plan || matches!(app.tool, Tool::Level) {
+            } else if app.tool.is_sketch() || is_plan || matches!(app.tool, Tool::Level | Tool::Attach { .. }) {
                 tools::click(app, p);
             }
         }
@@ -366,7 +388,13 @@ pub fn paint_list(painter: &egui::Painter, xf: &Xform, dl: &DisplayList, highlig
                     shapes.push(Shape::circle_stroke(c, r, s));
                 }
             }
-            Prim::Text { pos, text, height, anchor } => {
+            Prim::Text {
+                pos,
+                text,
+                height,
+                anchor,
+                angle,
+            } => {
                 let px = (*height * xf.cam.zoom) as f32;
                 if px < 5.0 || highlight.is_some() {
                     continue;
@@ -378,14 +406,22 @@ pub fn paint_list(painter: &egui::Painter, xf: &Xform, dl: &DisplayList, highlig
                     Anchor::BottomLeft => egui::Align2::LEFT_BOTTOM,
                     Anchor::BottomRight => egui::Align2::RIGHT_BOTTOM,
                 };
-                texts.push((xf.to_screen(*pos), align, text, px));
+                texts.push((xf.to_screen(*pos), align, text, px, -*angle as f32));
             }
         }
     }
     painter.extend(shapes);
     // Text last, so it sits on top of bubble and tag fills.
-    for (pos, align, text, px) in texts {
-        painter.text(pos, align, text, FontId::proportional(px), Color32::BLACK);
+    for (pos, align, text, px, angle) in texts {
+        if angle.abs() < 1e-4 {
+            painter.text(pos, align, text, FontId::proportional(px), Color32::BLACK);
+        } else {
+            // Rotated text (vertical dimensions) is centred on `pos`.
+            let galley = painter.layout_no_wrap(text.clone(), FontId::proportional(px), Color32::BLACK);
+            let half = galley.size() / 2.0;
+            let corner = pos - egui::emath::Rot2::from_angle(angle) * half;
+            painter.add(egui::epaint::TextShape::new(corner, galley, Color32::BLACK).with_angle(angle));
+        }
     }
 }
 
@@ -803,7 +839,103 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                 seg(*a, p);
             }
         }
-        Tool::Grid { start: Some(a) } | Tool::Section { start: Some(a) } => seg(*a, p),
+        Tool::Grid { start: Some(a) } | Tool::Section { start: Some(a) } | Tool::RoomSeparation { start: Some(a) } => seg(*a, p),
+        Tool::Mirror {
+            draw: true,
+            start: Some(a),
+        } => {
+            let d = (p - *a).normalize_or_zero() * xf.px(4000.0);
+            painter.add(Shape::dashed_line(
+                &[xf.to_screen(*a - d), xf.to_screen(p + d)],
+                Stroke::new(1.0, PREVIEW),
+                10.0,
+                4.0,
+            ));
+        }
+        Tool::Room => {
+            let Some(level) = app.active_level() else { return };
+            let segs = hausit_model::rooms::bounding_segments(&app.doc, level);
+            let region = hausit_model::rooms::regions(&segs)
+                .into_iter()
+                .filter(|f| hausit_core::geom::point_in_polygon(p, f))
+                .min_by(|a, b| hausit_core::geom::polygon_area(a).total_cmp(&hausit_core::geom::polygon_area(b)));
+            match region {
+                Some(r) => {
+                    let sp: Vec<Pos2> = r.iter().map(|q| xf.to_screen(*q)).collect();
+                    let mut shapes = Vec::new();
+                    fill_polygon(&sp, Color32::from_rgba_unmultiplied(0, 120, 230, 40), &mut shapes);
+                    painter.extend(shapes);
+                    painter.add(Shape::closed_line(sp, Stroke::new(2.0, PREVIEW)));
+                    let area = hausit_core::geom::polygon_area(&r).abs() / 1e6;
+                    label_at(painter, xf.to_screen(p) + vec2(0.0, -18.0), &format!("Room  {area:.2} m²"));
+                }
+                None => label_at(painter, xf.to_screen(p) + vec2(0.0, -18.0), "Not enclosed"),
+            }
+        }
+        Tool::Column => {
+            let Some(t) = app.type_for(Category::StructuralColumns).and_then(|t| app.doc.family_type(t)) else {
+                return;
+            };
+            let (b, h) = (t.length_or("b", 300.0) / 2.0, t.length_or("h", 300.0) / 2.0);
+            let (b, h) = if app.options.flip { (h, b) } else { (b, h) };
+            let r: Vec<Pos2> = [(-b, -h), (b, -h), (b, h), (-b, h)]
+                .iter()
+                .map(|(x, y)| xf.to_screen(p + DVec2::new(*x, *y)))
+                .collect();
+            painter.add(Shape::convex_polygon(r, Color32::from_rgba_unmultiplied(0, 120, 230, 60), s));
+        }
+        Tool::Dimension { refs } => {
+            let hovered = tools::pick_dim_ref(app, p, app.options.pick_tol);
+            if let Some((_, (a, b))) = hovered {
+                painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(3.0, PREVIEW));
+            }
+            for r in refs {
+                if let Some((a, b)) = hausit_model::dimensions::ref_segment(&app.doc, r) {
+                    painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(2.0, SELECT));
+                }
+            }
+            if refs.len() >= 2 && hovered.is_none() {
+                let view = app.active_view.unwrap_or(ElementId::INVALID);
+                let d = hausit_model::Dimension {
+                    view,
+                    refs: refs.clone(),
+                    line_point: p,
+                };
+                if let Some(l) = hausit_model::dimensions::layout(&app.doc, &d) {
+                    let scale = app.doc.view(view).map(|v| v.scale as f64).unwrap_or(100.0);
+                    let mut dl = DisplayList::default();
+                    hausit_views::draw_dimension(&mut dl, &l, scale, unit, None);
+                    paint_list(painter, xf, &dl, None);
+                }
+            }
+        }
+        Tool::Rotate { center, from } => {
+            let c = xf.to_screen(*center);
+            painter.circle(c, 5.0, Color32::WHITE, Stroke::new(1.5, PREVIEW));
+            painter.circle_filled(c, 2.0, PREVIEW);
+            if let Some(f) = from {
+                painter.line_segment([c, xf.to_screen(*f)], s);
+                painter.line_segment([c, xf.to_screen(p)], s);
+                let (u, v) = (*f - *center, p - *center);
+                let angle = (u.x * v.y - u.y * v.x).atan2(u.dot(v));
+                let mut ids = app.selection.clone();
+                ids.retain(|id| app.doc.element(*id).is_some());
+                label_at(painter, xf.to_screen(p) + vec2(0.0, -18.0), &format!("{:.2}°", angle.to_degrees()));
+                // Ghost of the rotated selection.
+                let mut ghost = app.doc.clone();
+                ghost.rotate(&ids, *center, angle.to_degrees());
+                if let Some(v) = app.active_view.and_then(|v| app.doc.view(v)) {
+                    let dl = hausit_views::build(&ghost, v);
+                    paint_list(painter, xf, &dl, Some((&ids, PREVIEW)));
+                }
+            } else {
+                painter.line_segment([c, xf.to_screen(p)], s);
+            }
+        }
+        Tool::Trim { first: Some((w, _)) } => {
+            let dl = app.cache.list.clone();
+            paint_list(painter, xf, &dl, Some((&[*w], SELECT)));
+        }
         Tool::Move { base: Some(a) } | Tool::Copy { base: Some(a) } => {
             seg(*a, p);
             let dl = app.cache.list.clone();

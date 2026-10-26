@@ -7,7 +7,9 @@
 use crate::category::Category;
 use crate::document::Document;
 use crate::element::*;
-use hausit_core::geom::{clip_polygon_2d, cross2, distance_to_segment, line_intersection, perp, polygon_area, polygon_normal};
+use hausit_core::geom::{
+    clip_polygon_2d, cross2, distance_to_segment, line_intersection, perp, point_in_polygon, polygon_area, polygon_normal,
+};
 use hausit_core::skeleton::{straight_skeleton, Skeleton};
 use hausit_core::{Aabb, DVec2, DVec3, ElementId, EPS, JOIN_TOLERANCE};
 
@@ -171,7 +173,18 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         ElementData::Roof(r) => roof_parts(doc, id, r),
         ElementData::Door(o) => opening_parts(doc, id, o, true),
         ElementData::Window(o) => opening_parts(doc, id, o, false),
-        ElementData::Level(_) | ElementData::Grid(_) => return None,
+        ElementData::Column(c) => {
+            let (z0, z1) = column_extent(doc, c);
+            if z1 - z0 < EPS {
+                return None;
+            }
+            vec![Part::prism(Material::Default, Prism::new(column_outline(doc, id)?, z0, z1))]
+        }
+        ElementData::Level(_)
+        | ElementData::Grid(_)
+        | ElementData::Room(_)
+        | ElementData::RoomSeparation(_)
+        | ElementData::Dimension(_) => return None,
     };
     if parts.is_empty() {
         return None;
@@ -290,8 +303,14 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
         return vec![];
     };
     let Some(outline) = wall_outline(doc, id) else { return vec![] };
-    let (zb, zt) = (doc.wall_base_z(w), doc.wall_top_z(w));
-    if zt - zb < EPS {
+    let (zb, mut zt) = (doc.wall_base_z(w), doc.wall_top_z(w));
+    // Attached tops: the straight part stops at the lowest point of the
+    // surface above; sloped pieces fill up to it.
+    let attached = attached_top_parts(doc, w, &outline, zt);
+    if let Some((zmin, _)) = &attached {
+        zt = zmin.max(zb);
+    }
+    if zt - zb < EPS && attached.is_none() {
         return vec![];
     }
     let dir = w.direction();
@@ -347,7 +366,186 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
             parts.push(Part::prism(Material::Default, Prism::new(poly, z, zt)));
         }
     }
+    if let Some((_, upper)) = attached {
+        parts.extend(upper);
+    }
     parts
+}
+
+/// Planar pieces of the surfaces a wall top can attach to: plan polygon
+/// and the plane `z = a·x + b·y + c` of the underside over it.
+fn attach_surfaces(doc: &Document, target: ElementId) -> Vec<(Vec<DVec2>, DVec3)> {
+    let Some(e) = doc.element(target) else { return vec![] };
+    match &e.data {
+        ElementData::Roof(r) => {
+            let zb = doc.level_elevation(r.level) + r.base_offset;
+            match roof_skeleton(r) {
+                Some(sk) => {
+                    let tan = r.slope.to_radians().tan();
+                    let slopes = r.edge_slopes();
+                    sk.faces
+                        .iter()
+                        .filter(|f| slopes[f.edge])
+                        .filter_map(|f| {
+                            let pts: Vec<DVec3> = f.pts.iter().map(|p| DVec3::new(p.x, p.y, zb + p.z * tan)).collect();
+                            plane_of(&pts).map(|pl| (pts.iter().map(|p| p.truncate()).collect(), pl))
+                        })
+                        .collect()
+                }
+                None => vec![(r.footprint.clone(), DVec3::new(0.0, 0.0, zb))],
+            }
+        }
+        ElementData::Floor(f) => {
+            let t = doc.type_of(target).map(|t| t.thickness()).unwrap_or(200.0);
+            let top = doc.level_elevation(f.level) + f.height_offset;
+            vec![(f.boundary.clone(), DVec3::new(0.0, 0.0, top - t))]
+        }
+        _ => vec![],
+    }
+}
+
+/// `(a, b, c)` with z = a·x + b·y + c through a non-vertical planar polygon.
+fn plane_of(pts: &[DVec3]) -> Option<DVec3> {
+    let n = polygon_normal(pts);
+    if n.z.abs() < 1e-9 {
+        return None;
+    }
+    let p = pts[0];
+    Some(DVec3::new(-n.x / n.z, -n.y / n.z, p.z + (n.x * p.x + n.y * p.y) / n.z))
+}
+
+/// Solids between a wall's straight top and the surfaces it is attached
+/// to, cut into slices along the wall wherever the surface changes plane.
+/// Returns the lowest attached height and the slices.
+fn attached_top_parts(doc: &Document, w: &Wall, outline: &[DVec2; 4], zt: f64) -> Option<(f64, Vec<Part>)> {
+    let surfaces: Vec<(Vec<DVec2>, DVec3)> = w.attached_top.iter().flat_map(|t| attach_surfaces(doc, *t)).collect();
+    if surfaces.is_empty() {
+        return None;
+    }
+    let dir = w.direction();
+    let base = dir.dot(w.start);
+    let height_at = |p: DVec2| -> Option<f64> {
+        surfaces
+            .iter()
+            .filter(|(poly, _)| point_in_polygon(p, poly))
+            .map(|(_, pl)| pl.x * p.x + pl.y * p.y + pl.z)
+            .min_by(f64::total_cmp)
+    };
+    // Slice wherever a surface edge crosses the wall.
+    let faces = [(outline[0], outline[1]), (outline[3], outline[2])];
+    let mut us: Vec<f64> = outline.iter().map(|p| dir.dot(*p) - base).collect();
+    for (poly, _) in &surfaces {
+        for i in 0..poly.len() {
+            let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+            for (p, q) in faces {
+                if let Some(x) = line_intersection(p, q - p, a, b - a) {
+                    let (on_face, on_edge) = (
+                        (x - p).dot(q - p) / (q - p).length_squared(),
+                        (x - a).dot(b - a) / (b - a).length_squared(),
+                    );
+                    if (-1e-9..=1.0 + 1e-9).contains(&on_face) && (-1e-9..=1.0 + 1e-9).contains(&on_edge) {
+                        us.push(dir.dot(x) - base);
+                    }
+                }
+            }
+        }
+    }
+    us.sort_by(f64::total_cmp);
+    us.dedup_by(|a, b| (*a - *b).abs() < 1.0);
+
+    let mut slices: Vec<(Vec<DVec2>, Vec<f64>)> = Vec::new();
+    for pair in us.windows(2) {
+        let mut poly = clip_polygon_2d(outline, -dir, -(base + pair[0]));
+        poly = clip_polygon_2d(&poly, dir, base + pair[1]);
+        if poly.len() < 3 || polygon_area(&poly).abs() < EPS {
+            continue;
+        }
+        let c = poly.iter().copied().sum::<DVec2>() / poly.len() as f64;
+        // The plane over the slice's centre, evaluated at its corners.
+        let plane = surfaces
+            .iter()
+            .filter(|(sp, _)| point_in_polygon(c, sp))
+            .map(|(_, pl)| *pl)
+            .min_by(|a, b| (a.x * c.x + a.y * c.y + a.z).total_cmp(&(b.x * c.x + b.y * c.y + b.z)));
+        let tops: Vec<f64> = match plane {
+            Some(pl) => poly.iter().map(|p| pl.x * p.x + pl.y * p.y + pl.z).collect(),
+            None => poly.iter().map(|p| height_at(*p).unwrap_or(zt)).collect(),
+        };
+        slices.push((poly, tops));
+    }
+    let zmin = slices.iter().flat_map(|s| s.1.iter().copied()).fold(f64::INFINITY, f64::min);
+    if !zmin.is_finite() {
+        return None;
+    }
+    let mut parts = Vec::new();
+    for (mut poly, mut tops) in slices {
+        if polygon_area(&poly) < 0.0 {
+            poly.reverse();
+            tops.reverse();
+        }
+        if tops.iter().all(|t| *t - zmin < EPS) {
+            continue;
+        }
+        let n = poly.len();
+        let at = |i: usize, z: f64| DVec3::new(poly[i].x, poly[i].y, z);
+        let mut faces = vec![
+            Face {
+                pts: (0..n).rev().map(|i| at(i, zmin)).collect(),
+            },
+            Face {
+                pts: (0..n).map(|i| at(i, tops[i])).collect(),
+            },
+        ];
+        for i in 0..n {
+            let j = (i + 1) % n;
+            let mut pts = vec![at(i, zmin), at(j, zmin)];
+            if tops[j] - zmin > EPS {
+                pts.push(at(j, tops[j]));
+            }
+            if tops[i] - zmin > EPS {
+                pts.push(at(i, tops[i]));
+            }
+            if pts.len() >= 3 {
+                faces.push(Face { pts });
+            }
+        }
+        parts.push(Part {
+            material: Material::Default,
+            shape: Shape::Faces(faces),
+        });
+    }
+    Some((zmin, parts))
+}
+
+// ----- columns --------------------------------------------------------------
+
+/// Bottom and top heights of a structural column.
+pub fn column_extent(doc: &Document, c: &Column) -> (f64, f64) {
+    let z0 = doc.level_elevation(c.base_level) + c.base_offset;
+    let z1 = if doc.level(c.top_level).is_some() {
+        doc.level_elevation(c.top_level) + c.top_offset
+    } else {
+        z0 + 3000.0 + c.top_offset
+    };
+    (z0, z1)
+}
+
+/// Plan outline of a rectangular column ("b" across, "h" deep).
+pub fn column_outline(doc: &Document, id: ElementId) -> Option<Vec<DVec2>> {
+    let ElementData::Column(c) = &doc.element(id)?.data else {
+        return None;
+    };
+    let t = doc.type_of(id);
+    let b = t.map(|t| t.length_or("b", 300.0)).unwrap_or(300.0) / 2.0;
+    let h = t.map(|t| t.length_or("h", 300.0)).unwrap_or(300.0) / 2.0;
+    let (s, co) = c.rotation.to_radians().sin_cos();
+    let (u, v) = (DVec2::new(co, s), DVec2::new(-s, co));
+    Some(vec![
+        c.point - u * b - v * h,
+        c.point + u * b - v * h,
+        c.point + u * b + v * h,
+        c.point - u * b + v * h,
+    ])
 }
 
 // ----- doors & windows ------------------------------------------------------

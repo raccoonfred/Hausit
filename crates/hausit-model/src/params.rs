@@ -194,10 +194,53 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Flip Hand", G::Other, V::Bool(o.flip_hand)));
             p.push(Parameter::new("Flip Facing", G::Other, V::Bool(o.flip_facing)));
         }
+        ElementData::Column(c) => {
+            p.push(Parameter::new("Base Level", G::Constraints, V::Element(c.base_level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Base Offset", G::Constraints, V::Length(c.base_offset)));
+            p.push(Parameter::new("Top Level", G::Constraints, V::Element(c.top_level)).kind(ParamKind::LevelOrNone));
+            p.push(Parameter::new("Top Offset", G::Constraints, V::Length(c.top_offset)));
+            p.push(Parameter::new("Rotation", G::Constraints, V::Angle(c.rotation)));
+            let (z0, z1) = crate::geometry::column_extent(doc, c);
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(z1 - z0)).ro());
+            let area = doc
+                .type_of(id)
+                .map(|t| t.length_or("b", 300.0) * t.length_or("h", 300.0))
+                .unwrap_or(0.0);
+            p.push(Parameter::new("Volume", G::Dimensions, V::Volume(area * (z1 - z0))).ro());
+        }
+        ElementData::Room(r) => {
+            let info = crate::rooms::room_info(doc, r);
+            p.push(
+                Parameter::new("Level", G::Constraints, V::Element(r.level))
+                    .kind(ParamKind::Level)
+                    .ro(),
+            );
+            p.push(Parameter::new("Upper Limit", G::Constraints, V::Element(r.upper_limit)).kind(ParamKind::LevelOrNone));
+            p.push(Parameter::new("Limit Offset", G::Constraints, V::Length(r.limit_offset)));
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(info.area)).ro());
+            p.push(Parameter::new("Perimeter", G::Dimensions, V::Length(info.perimeter)).ro());
+            p.push(Parameter::new("Unbounded Height", G::Dimensions, V::Length(info.height)).ro());
+            p.push(Parameter::new("Volume", G::Dimensions, V::Volume(info.volume)).ro());
+            p.push(Parameter::new("Number", G::IdentityData, V::Text(r.number.clone())));
+            p.push(Parameter::new("Name", G::IdentityData, V::Text(r.name.clone())));
+        }
+        ElementData::RoomSeparation(l) => {
+            p.push(
+                Parameter::new("Level", G::Constraints, V::Element(l.level))
+                    .kind(ParamKind::Level)
+                    .ro(),
+            );
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(l.start.distance(l.end))).ro());
+        }
+        ElementData::Dimension(d) => {
+            p.push(Parameter::new("Segments", G::Other, V::Integer(d.refs.len().saturating_sub(1) as i64)).ro());
+        }
     }
-    if !matches!(el.data, ElementData::Level(_) | ElementData::Grid(_)) {
+    if el.category().is_model() {
         p.push(Parameter::new("Comments", G::IdentityData, V::Text(el.comments.clone())));
         p.push(Parameter::new("Mark", G::IdentityData, V::Text(el.mark.clone())));
+    } else if el.category() == crate::Category::Rooms {
+        p.push(Parameter::new("Comments", G::IdentityData, V::Text(el.comments.clone())));
     }
     p.sort_by_key(|p| p.group);
     p
@@ -272,6 +315,22 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Flip Facing", V::Bool(b)) => o.flip_facing = b,
                 _ => return Err(bad()),
             },
+            ElementData::Column(c) => match (name, value) {
+                ("Base Level", V::Element(l)) if l.is_valid() => c.base_level = l,
+                ("Base Offset", V::Length(v)) => c.base_offset = v,
+                ("Top Level", V::Element(l)) => c.top_level = l,
+                ("Top Offset", V::Length(v)) => c.top_offset = v,
+                ("Rotation", V::Angle(a)) => c.rotation = a,
+                _ => return Err(bad()),
+            },
+            ElementData::Room(r) => match (name, value) {
+                ("Upper Limit", V::Element(l)) => r.upper_limit = l,
+                ("Limit Offset", V::Length(v)) => r.limit_offset = v,
+                ("Number", V::Text(s)) => r.number = s,
+                ("Name", V::Text(s)) => r.name = s,
+                _ => return Err(bad()),
+            },
+            ElementData::RoomSeparation(_) | ElementData::Dimension(_) => return Err(bad()),
         },
     }
     doc.touch();

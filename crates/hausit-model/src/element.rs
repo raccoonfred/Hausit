@@ -27,7 +27,12 @@ impl Element {
             ElementData::Floor(f) => Some(f.type_id),
             ElementData::Roof(r) => Some(r.type_id),
             ElementData::Door(o) | ElementData::Window(o) => Some(o.type_id),
-            ElementData::Level(_) | ElementData::Grid(_) => None,
+            ElementData::Column(c) => Some(c.type_id),
+            ElementData::Level(_)
+            | ElementData::Grid(_)
+            | ElementData::Room(_)
+            | ElementData::RoomSeparation(_)
+            | ElementData::Dimension(_) => None,
         }
     }
 
@@ -37,7 +42,12 @@ impl Element {
             ElementData::Floor(f) => f.type_id = t,
             ElementData::Roof(r) => r.type_id = t,
             ElementData::Door(o) | ElementData::Window(o) => o.type_id = t,
-            ElementData::Level(_) | ElementData::Grid(_) => {}
+            ElementData::Column(c) => c.type_id = t,
+            ElementData::Level(_)
+            | ElementData::Grid(_)
+            | ElementData::Room(_)
+            | ElementData::RoomSeparation(_)
+            | ElementData::Dimension(_) => {}
         }
     }
 
@@ -72,6 +82,10 @@ pub enum ElementData {
     Roof(Roof),
     Door(HostedOpening),
     Window(HostedOpening),
+    Column(Column),
+    Room(Room),
+    RoomSeparation(SketchedLine),
+    Dimension(Dimension),
 }
 
 impl ElementData {
@@ -84,6 +98,10 @@ impl ElementData {
             ElementData::Roof(_) => Category::Roofs,
             ElementData::Door(_) => Category::Doors,
             ElementData::Window(_) => Category::Windows,
+            ElementData::Column(_) => Category::StructuralColumns,
+            ElementData::Room(_) => Category::Rooms,
+            ElementData::RoomSeparation(_) => Category::RoomSeparation,
+            ElementData::Dimension(_) => Category::Dimensions,
         }
     }
 }
@@ -154,6 +172,10 @@ pub struct Wall {
     pub structural: bool,
     #[serde(default = "yes")]
     pub room_bounding: bool,
+    /// Roofs and floors the wall top is attached to (Attach Top/Base):
+    /// the wall extends or shortens to meet their underside.
+    #[serde(default)]
+    pub attached_top: Vec<ElementId>,
 }
 
 impl Wall {
@@ -270,4 +292,74 @@ pub struct HostedOpening {
 
 fn yes() -> bool {
     true
+}
+
+/// A structural column: a vertical member at a point, from its base level
+/// up to its top level.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Column {
+    pub type_id: ElementId,
+    pub point: DVec2,
+    /// Rotation in plan, degrees.
+    #[serde(default)]
+    pub rotation: f64,
+    pub base_level: ElementId,
+    #[serde(default)]
+    pub base_offset: f64,
+    pub top_level: ElementId,
+    #[serde(default)]
+    pub top_offset: f64,
+}
+
+/// A room, placed at a point; its boundary comes from the room-bounding
+/// walls, columns and room separation lines around that point.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Room {
+    pub level: ElementId,
+    pub point: DVec2,
+    pub name: String,
+    pub number: String,
+    /// Upper Limit level (`INVALID`: the room's own level).
+    #[serde(default)]
+    pub upper_limit: ElementId,
+    /// Limit Offset above the upper limit, mm.
+    #[serde(default)]
+    pub limit_offset: f64,
+}
+
+/// A line drawn on a level, such as a room separation line.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SketchedLine {
+    pub level: ElementId,
+    pub start: DVec2,
+    pub end: DVec2,
+}
+
+/// What a dimension measures to. Wall references follow the wall when it
+/// moves.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub enum DimRef {
+    /// A wall face or centreline: `side` 1 = exterior face, 0 = location
+    /// line (centreline), -1 = interior face.
+    Wall {
+        wall: ElementId,
+        side: i8,
+    },
+    Grid {
+        grid: ElementId,
+    },
+    /// A fixed line through `point` along `dir`.
+    Line {
+        point: DVec2,
+        dir: DVec2,
+    },
+}
+
+/// A linear (aligned) dimension string in one view.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Dimension {
+    pub view: ElementId,
+    pub refs: Vec<DimRef>,
+    /// A point the dimension line passes through.
+    pub line_point: DVec2,
 }

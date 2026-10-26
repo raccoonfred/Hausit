@@ -82,12 +82,32 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::Door | Tool::Window => {
                         ui.label(RichText::new("Hover over a wall in plan. The side you click sets the swing side; Space flips the hand.").color(Color32::DARK_GRAY));
                     }
+                    Tool::Rotate { .. } | Tool::Mirror { .. } => {
+                        ui.checkbox(&mut app.options.copy, "Copy");
+                        ui.separator();
+                        let tip = if matches!(app.tool, Tool::Rotate { .. }) {
+                            "Rotates about the centre of the selection. Type an angle (counter-clockwise) and press Enter."
+                        } else {
+                            "MM picks an axis, DM draws one."
+                        };
+                        ui.label(RichText::new(tip).color(Color32::DARK_GRAY));
+                    }
+                    Tool::Column => {
+                        if ui.button("At Grids").on_hover_text("Place a column at every grid intersection").clicked() {
+                            crate::tools::columns_at_grids(app);
+                        }
+                        ui.separator();
+                        ui.label(RichText::new("Space rotates the column 90°.").color(Color32::DARK_GRAY));
+                    }
+                    Tool::RoomSeparation { .. } => {
+                        ui.checkbox(&mut app.options.chain, "Chain");
+                    }
                     Tool::Move { .. } | Tool::Copy { .. } => {
                         ui.label(RichText::new("Hold Shift to constrain to horizontal/vertical.").color(Color32::DARK_GRAY));
                     }
                     Tool::Modify => {
                         if app.selection.is_empty() {
-                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · MV move · CO copy · ZF zoom to fit").color(Color32::DARK_GRAY));
+                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · CL column · MV move · CO copy · RO rotate · MM mirror · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
                         } else {
                             ui.label(format!("{} selected", app.selection.len()));
                         }
@@ -96,7 +116,8 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 }
                 if !app.options.typed.is_empty() {
                     ui.separator();
-                    ui.label(RichText::new(format!("Length: {}", app.options.typed)).strong().color(Color32::from_rgb(20, 60, 140)));
+                    let what = if matches!(app.tool, Tool::Rotate { .. }) { "Angle" } else { "Length" };
+                    ui.label(RichText::new(format!("{what}: {}", app.options.typed)).strong().color(Color32::from_rgb(20, 60, 140)));
                 }
             });
         });

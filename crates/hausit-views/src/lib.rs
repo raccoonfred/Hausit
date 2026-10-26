@@ -7,10 +7,12 @@
 
 mod annotate;
 mod bsp;
+mod dims;
 pub mod frame;
 mod plan;
 mod project;
 
+pub use dims::draw_dimension;
 pub use frame::ViewFrame;
 
 use hausit_core::{DVec2, ElementId};
@@ -92,6 +94,8 @@ pub enum Prim {
         text: String,
         height: f64,
         anchor: Anchor,
+        /// Counter-clockwise rotation in view coordinates, radians.
+        angle: f64,
     },
 }
 

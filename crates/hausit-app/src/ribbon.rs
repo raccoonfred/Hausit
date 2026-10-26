@@ -281,7 +281,7 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
         tool_button(app, ui, Icon::Door, "Door", "Door (DR)", Tool::Door);
         tool_button(app, ui, Icon::Window, "Window", "Window (WN)", Tool::Window);
         planned(ui, Icon::Planned, "Component", "Place a Component");
-        planned(ui, Icon::Column, "Column", "Column: Architectural");
+        tool_button(app, ui, Icon::Column, "Column", "Structural Column (CL)", Tool::Column);
         tool_button(
             app,
             ui,
@@ -309,7 +309,17 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
         planned(ui, Icon::Planned, "Stair", "Stair");
         planned(ui, Icon::Planned, "Railing", "Railing");
     });
-    panel(ui, "Room & Area", |ui| planned(ui, Icon::Room, "Room", "Room"));
+    panel(ui, "Room & Area", |ui| {
+        tool_button(app, ui, Icon::Room, "Room", "Room (RM)", Tool::Room);
+        tool_button(
+            app,
+            ui,
+            Icon::RoomSeparator,
+            "Separator",
+            "Room Separator: divide a space into rooms without walls",
+            Tool::RoomSeparation { start: None },
+        );
+    });
     panel(ui, "Datum", |ui| {
         tool_button(
             app,
@@ -339,7 +349,7 @@ fn structure(app: &mut HausitApp, ui: &mut Ui) {
                 structural: true,
             },
         );
-        planned(ui, Icon::Column, "Column", "Structural Column");
+        tool_button(app, ui, Icon::Column, "Column", "Structural Column (CL)", Tool::Column);
         tool_button(
             app,
             ui,
@@ -392,7 +402,14 @@ fn insert(app: &mut HausitApp, ui: &mut Ui) {
 fn annotate(app: &mut HausitApp, ui: &mut Ui) {
     select_panel(app, ui);
     panel(ui, "Dimension", |ui| {
-        planned(ui, Icon::Dimension, "Aligned", "Aligned Dimension (DI)");
+        tool_button(
+            app,
+            ui,
+            Icon::Dimension,
+            "Aligned",
+            "Aligned Dimension (DI)",
+            Tool::Dimension { refs: vec![] },
+        );
         planned(ui, Icon::Dimension, "Linear", "Linear Dimension");
     });
     panel(ui, "Text", |ui| planned(ui, Icon::Planned, "Text", "Text (TX)"));
@@ -508,15 +525,87 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         if big(ui, Icon::Copy, "Copy", "Copy (CO)", matches!(app.tool, Tool::Copy { .. }), has_sel) {
             tools::start(app, Tool::Copy { base: None });
         }
-        planned(ui, Icon::Planned, "Rotate", "Rotate (RO)");
-        planned(ui, Icon::Planned, "Mirror", "Mirror (MM)");
-        planned(ui, Icon::Planned, "Trim", "Trim/Extend to Corner (TR)");
+        if big(
+            ui,
+            Icon::Rotate,
+            "Rotate",
+            "Rotate (RO)",
+            matches!(app.tool, Tool::Rotate { .. }),
+            has_sel,
+        ) {
+            tools::start(
+                app,
+                Tool::Rotate {
+                    center: Default::default(),
+                    from: None,
+                },
+            );
+        }
+        if big(
+            ui,
+            Icon::Mirror,
+            "Mirror",
+            "Mirror - Pick Axis (MM)",
+            matches!(app.tool, Tool::Mirror { draw: false, .. }),
+            has_sel,
+        ) {
+            tools::start(app, Tool::Mirror { draw: false, start: None });
+        }
+        if big(
+            ui,
+            Icon::Mirror,
+            "Draw Axis",
+            "Mirror - Draw Axis (DM)",
+            matches!(app.tool, Tool::Mirror { draw: true, .. }),
+            has_sel,
+        ) {
+            tools::start(app, Tool::Mirror { draw: true, start: None });
+        }
+        tool_button(
+            app,
+            ui,
+            Icon::Trim,
+            "Trim",
+            "Trim/Extend to Corner (TR)",
+            Tool::Trim { first: None },
+        );
+        tool_button(app, ui, Icon::Split, "Split", "Split Element (SL)", Tool::Split);
         if big(ui, Icon::Delete, "Delete", "Delete (DE)", false, !app.selection.is_empty()) {
             app.delete_selection();
         }
     });
+    wall_panel(app, ui);
+    if matches!(app.tool, Tool::Column) {
+        panel(ui, "Multiple", |ui| {
+            if big(ui, Icon::Grid, "At Grids", "Place a column at every grid intersection", false, true) {
+                tools::columns_at_grids(app);
+            }
+        });
+    }
     draw_panel(app, ui);
     mode_panel(app, ui);
+}
+
+/// "Modify Wall" panel, shown when walls are selected.
+fn wall_panel(app: &mut HausitApp, ui: &mut Ui) {
+    let walls = app
+        .selection
+        .iter()
+        .any(|id| app.doc.element(*id).and_then(|e| e.as_wall()).is_some());
+    if !walls || !matches!(app.tool, Tool::Modify | Tool::Attach { .. }) {
+        return;
+    }
+    panel(ui, "Modify Wall", |ui| {
+        for (detach, label, tip) in [
+            (false, "Attach", "Attach Top/Base: extend the walls up to a roof or floor"),
+            (true, "Detach", "Detach Top/Base"),
+        ] {
+            let active = matches!(&app.tool, Tool::Attach { detach: d, .. } if *d == detach);
+            if big(ui, Icon::Attach, label, tip, active, true) {
+                tools::start(app, Tool::Attach { walls: vec![], detach });
+            }
+        }
+    });
 }
 
 /// "Draw" panel of the contextual tab: how walls and sketch lines are

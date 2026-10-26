@@ -27,6 +27,9 @@ pub enum ScheduleField {
     Host,
     Slope,
     Structural,
+    Name,
+    Number,
+    UnboundedHeight,
 }
 
 impl ScheduleField {
@@ -56,6 +59,9 @@ impl ScheduleField {
             Host => "Host",
             Slope => "Slope",
             Structural => "Structural",
+            Name => "Name",
+            Number => "Number",
+            UnboundedHeight => "Unbounded Height",
         }
     }
 
@@ -71,6 +77,9 @@ impl ScheduleField {
     /// "Schedule Properties ▸ Fields" list.
     pub fn available(cat: Category) -> Vec<ScheduleField> {
         use ScheduleField::*;
+        if cat == Category::Rooms {
+            return vec![Number, Name, Level, Area, Perimeter, UnboundedHeight, Volume, Comments, Count];
+        }
         let mut v = vec![Family, Type, FamilyAndType, TypeMark, Mark, Comments, Count];
         match cat {
             Category::Walls => v.extend([
@@ -86,7 +95,8 @@ impl ScheduleField {
             Category::Floors => v.extend([Level, Area, Perimeter, Volume, Thickness, Structural]),
             Category::Roofs => v.extend([Level, Area, Slope, Thickness]),
             Category::Doors | Category::Windows => v.extend([Level, Width, Height, SillHeight, HeadHeight, Host]),
-            Category::Levels | Category::Grids => return vec![],
+            Category::StructuralColumns => v.extend([Level, Length, Volume]),
+            Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => return vec![],
         }
         v
     }
@@ -99,7 +109,9 @@ impl ScheduleField {
             Category::Floors => vec![Type, Level, Area, Volume],
             Category::Roofs => vec![Type, Level, Area, Slope],
             Category::Doors | Category::Windows => vec![Mark, Type, Width, Height, Level, Count],
-            Category::Levels | Category::Grids => vec![],
+            Category::StructuralColumns => vec![Type, Level, Length, Count],
+            Category::Rooms => vec![Number, Name, Level, Area, Perimeter, Volume],
+            Category::Levels | Category::Grids | Category::RoomSeparation | Category::Dimensions => vec![],
         }
     }
 }
@@ -122,6 +134,7 @@ impl ScheduleDef {
             fields: ScheduleField::defaults(category),
             sort_by: Some(match category {
                 Category::Doors | Category::Windows => ScheduleField::Mark,
+                Category::Rooms => ScheduleField::Number,
                 _ => ScheduleField::Type,
             }),
             itemize: true,

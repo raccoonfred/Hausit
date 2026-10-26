@@ -12,16 +12,61 @@ use hausit_model::{Category, ElementData, ViewKind};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Tool {
     Modify,
-    Wall { start: Option<DVec2>, structural: bool },
+    Wall {
+        start: Option<DVec2>,
+        structural: bool,
+    },
     Door,
     Window,
-    Floor { sketch: Sketch, structural: bool },
-    Roof { sketch: Sketch },
+    Floor {
+        sketch: Sketch,
+        structural: bool,
+    },
+    Roof {
+        sketch: Sketch,
+    },
     Level,
-    Grid { start: Option<DVec2> },
-    Section { start: Option<DVec2> },
-    Move { base: Option<DVec2> },
-    Copy { base: Option<DVec2> },
+    Grid {
+        start: Option<DVec2>,
+    },
+    Section {
+        start: Option<DVec2>,
+    },
+    Move {
+        base: Option<DVec2>,
+    },
+    Copy {
+        base: Option<DVec2>,
+    },
+    Column,
+    Room,
+    RoomSeparation {
+        start: Option<DVec2>,
+    },
+    /// Aligned dimension: references picked so far.
+    Dimension {
+        refs: Vec<DimRef>,
+    },
+    /// Rotates the selection about `center`; `from` is the start ray.
+    Rotate {
+        center: DVec2,
+        from: Option<DVec2>,
+    },
+    /// Mirror - Pick Axis (`draw` false) or Draw Axis.
+    Mirror {
+        draw: bool,
+        start: Option<DVec2>,
+    },
+    /// Trim/Extend to Corner: the first wall and where it was clicked.
+    Trim {
+        first: Option<(ElementId, DVec2)>,
+    },
+    Split,
+    /// Attach Top/Base (or Detach) of these walls to a roof or floor.
+    Attach {
+        walls: Vec<ElementId>,
+        detach: bool,
+    },
 }
 
 impl Tool {
@@ -39,6 +84,16 @@ impl Tool {
             Tool::Section { .. } => "Modify | Section",
             Tool::Move { .. } => "Modify | Move",
             Tool::Copy { .. } => "Modify | Copy",
+            Tool::Column => "Modify | Place Structural Column",
+            Tool::Room => "Modify | Place Room",
+            Tool::RoomSeparation { .. } => "Modify | Place Room Separation",
+            Tool::Dimension { .. } => "Modify | Place Dimensions",
+            Tool::Rotate { .. } => "Modify | Rotate",
+            Tool::Mirror { .. } => "Modify | Mirror",
+            Tool::Trim { .. } => "Modify | Trim/Extend",
+            Tool::Split => "Modify | Split Element",
+            Tool::Attach { detach: false, .. } => "Modify | Walls > Attach Top/Base",
+            Tool::Attach { .. } => "Modify | Walls > Detach Top/Base",
         }
     }
 
@@ -60,6 +115,21 @@ impl Tool {
             Tool::Section { .. } => "Click to enter section end point.",
             Tool::Move { base: None } | Tool::Copy { base: None } => "Click to enter move start point.",
             Tool::Move { .. } | Tool::Copy { .. } => "Click to enter move end point.",
+            Tool::Column => "Click to place a structural column. Space rotates it 90°. At Grids places one at every grid intersection.",
+            Tool::Room => "Click inside an area enclosed by walls or room separation lines to place a room.",
+            Tool::RoomSeparation { start: None } => "Click to enter room separation line start point.",
+            Tool::RoomSeparation { .. } => "Click to enter line end point. Esc ends the chain.",
+            Tool::Dimension { refs } if refs.len() < 2 => "Click wall faces, wall centerlines or grids to dimension.",
+            Tool::Dimension { .. } => "Click more parallel references, or click an empty spot to place the dimension.",
+            Tool::Rotate { from: None, .. } => "Click to enter the start ray, or type an angle and press Enter.",
+            Tool::Rotate { .. } => "Click to enter the end ray, or type an angle and press Enter.",
+            Tool::Mirror { draw: false, .. } => "Pick a wall or grid to mirror about.",
+            Tool::Mirror { start: None, .. } => "Click to enter the start of the mirror axis.",
+            Tool::Mirror { .. } => "Click to enter the end of the mirror axis.",
+            Tool::Trim { first: None } => "Click the first wall, on the part you want to keep.",
+            Tool::Trim { .. } => "Click the second wall, on the part you want to keep.",
+            Tool::Split => "Click a wall where you want to split it.",
+            Tool::Attach { .. } => "Pick a roof or floor to attach the selected walls to.",
         }
     }
 
@@ -70,15 +140,33 @@ impl Tool {
             Tool::Window => Some(Category::Windows),
             Tool::Floor { .. } => Some(Category::Floors),
             Tool::Roof { .. } => Some(Category::Roofs),
+            Tool::Column => Some(Category::StructuralColumns),
             _ => None,
+        }
+    }
+
+    /// Tools that work by clicking existing elements: the canvas
+    /// pre-highlights the ones of these categories under the cursor.
+    pub fn picks(&self, cat: Category) -> bool {
+        match self {
+            Tool::Modify => true,
+            Tool::Mirror { draw: false, .. } => matches!(cat, Category::Walls | Category::Grids | Category::RoomSeparation),
+            Tool::Trim { .. } | Tool::Split => cat == Category::Walls,
+            Tool::Attach { .. } => matches!(cat, Category::Roofs | Category::Floors),
+            _ => false,
         }
     }
 
     /// The last fixed point, used for rubber-band lines and typed lengths.
     pub fn anchor(&self) -> Option<DVec2> {
         match self {
-            Tool::Wall { start, .. } | Tool::Grid { start } | Tool::Section { start } => *start,
+            Tool::Wall { start, .. }
+            | Tool::Grid { start }
+            | Tool::Section { start }
+            | Tool::RoomSeparation { start }
+            | Tool::Mirror { start, .. } => *start,
             Tool::Move { base } | Tool::Copy { base } => *base,
+            Tool::Rotate { center, .. } => Some(*center),
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start,
             _ => None,
         }
@@ -105,8 +193,15 @@ impl Tool {
     /// Forgets in-progress input but stays in the tool.
     pub fn cancel_keep_kind(&mut self) {
         match self {
-            Tool::Wall { start, .. } | Tool::Grid { start } | Tool::Section { start } => *start = None,
+            Tool::Wall { start, .. }
+            | Tool::Grid { start }
+            | Tool::Section { start }
+            | Tool::RoomSeparation { start }
+            | Tool::Mirror { start, .. } => *start = None,
             Tool::Move { base } | Tool::Copy { base } => *base = None,
+            Tool::Rotate { from, .. } => *from = None,
+            Tool::Dimension { refs } => refs.clear(),
+            Tool::Trim { first } => *first = None,
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start = None,
             _ => {}
         }
@@ -119,7 +214,13 @@ impl Tool {
     /// Esc: first clears in-progress input, then leaves the tool. A
     /// sketch with lines stays open until Finish or Cancel, as in Revit.
     pub fn escape(&mut self) {
-        if self.anchor().is_some() {
+        let in_progress = match self {
+            Tool::Rotate { from, .. } => from.is_some(),
+            Tool::Dimension { refs } => !refs.is_empty(),
+            Tool::Trim { first } => first.is_some(),
+            _ => self.anchor().is_some(),
+        };
+        if in_progress {
             self.cancel_keep_kind();
         } else if !self.sketch().map(|s| s.lines.is_empty()).unwrap_or(true) {
         } else {
@@ -237,8 +338,13 @@ pub struct ToolOptions {
     pub roof_level: ElementId,
     /// Length typed while drawing.
     pub typed: String,
-    /// Spacebar flip while placing walls, doors and windows.
+    /// Spacebar flip while placing walls, doors and windows (and a 90°
+    /// turn for columns).
     pub flip: bool,
+    /// Mirror and Rotate: "Copy" on the options bar.
+    pub copy: bool,
+    /// Picking tolerance at the current zoom, model mm.
+    pub pick_tol: f64,
 }
 
 impl Default for ToolOptions {
@@ -256,25 +362,63 @@ impl Default for ToolOptions {
             roof_level: ElementId::INVALID,
             typed: String::new(),
             flip: false,
+            copy: false,
+            pick_tol: 200.0,
         }
     }
 }
 
 // ----- starting tools ---------------------------------------------------------
 
-pub fn start(app: &mut HausitApp, tool: Tool) {
+pub fn start(app: &mut HausitApp, mut tool: Tool) {
     let needs_plan = matches!(
         tool,
-        Tool::Wall { .. } | Tool::Door | Tool::Window | Tool::Floor { .. } | Tool::Roof { .. } | Tool::Grid { .. } | Tool::Section { .. }
+        Tool::Wall { .. }
+            | Tool::Door
+            | Tool::Window
+            | Tool::Floor { .. }
+            | Tool::Roof { .. }
+            | Tool::Grid { .. }
+            | Tool::Section { .. }
+            | Tool::Column
+            | Tool::Room
+            | Tool::RoomSeparation { .. }
+            | Tool::Dimension { .. }
+            | Tool::Rotate { .. }
+            | Tool::Mirror { .. }
+            | Tool::Trim { .. }
+            | Tool::Split
     );
-    let needs_selection = matches!(tool, Tool::Move { .. } | Tool::Copy { .. });
+    let needs_selection = matches!(
+        tool,
+        Tool::Move { .. } | Tool::Copy { .. } | Tool::Rotate { .. } | Tool::Mirror { .. } | Tool::Attach { .. }
+    );
     if needs_plan && app.active_level().is_none() {
         app.status = "This tool works in a floor plan. Open a floor plan from the Project Browser.".into();
         return;
     }
     if needs_selection && app.selection.iter().all(|id| app.doc.element(*id).is_none()) {
-        app.status = "Select elements first, then choose Move or Copy.".into();
+        app.status = "Select elements first, then choose the modify tool.".into();
         return;
+    }
+    match &mut tool {
+        Tool::Rotate { center, .. } => match selection_center(app) {
+            Some(c) => *center = c,
+            None => return,
+        },
+        Tool::Attach { walls, .. } => {
+            *walls = app
+                .selection
+                .iter()
+                .copied()
+                .filter(|id| app.doc.element(*id).and_then(|e| e.as_wall()).is_some())
+                .collect();
+            if walls.is_empty() {
+                app.status = "Select walls first.".into();
+                return;
+            }
+        }
+        _ => {}
     }
     if matches!(tool, Tool::Level) {
         let ok = app
@@ -591,6 +735,7 @@ fn build_wall(app: &mut HausitApp, a: DVec2, b: DVec2, structural: bool) -> Opti
         top,
         structural,
         room_bounding: true,
+        attached_top: vec![],
     })
 }
 
@@ -759,6 +904,138 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
             }
             _ => {}
         },
+        Tool::Column => {
+            let Some(level) = app.active_level() else { return };
+            let Some(type_id) = app.type_for(Category::StructuralColumns) else {
+                return;
+            };
+            let c = new_column(app, type_id, level, p);
+            app.transact("Create Structural Column", |doc| Ok(doc.add_element(ElementData::Column(c))));
+        }
+        Tool::Room => {
+            if let Some(id) = place_room(app, p) {
+                app.status = format!("Placed {}.", app.doc.describe(id));
+                app.tool = tool;
+                return;
+            }
+        }
+        Tool::RoomSeparation { start } => match *start {
+            None => *start = Some(p),
+            Some(a) if a.distance(p) > 10.0 => {
+                let Some(level) = app.active_level() else { return };
+                let l = SketchedLine { level, start: a, end: p };
+                app.transact("Create Room Separation", |doc| Ok(doc.add_element(ElementData::RoomSeparation(l))));
+                *start = if app.options.chain { Some(p) } else { None };
+            }
+            _ => {}
+        },
+        Tool::Dimension { refs } => match pick_dim_ref(app, p, app.options.pick_tol) {
+            Some((r, _)) if refs.contains(&r) => {}
+            Some((r, _))
+                if refs
+                    .first()
+                    .map(|f| hausit_model::dimensions::parallel(&app.doc, f, &r))
+                    .unwrap_or(true) =>
+            {
+                refs.push(r)
+            }
+            Some(_) => {
+                app.status = "References must be parallel to the first one.".into();
+                app.tool = tool;
+                return;
+            }
+            None if refs.len() >= 2 => {
+                if let Some(view) = app.active_view {
+                    let d = Dimension {
+                        view,
+                        refs: std::mem::take(refs),
+                        line_point: p,
+                    };
+                    app.transact("Create Dimension", |doc| Ok(doc.add_element(ElementData::Dimension(d))));
+                }
+            }
+            None => {}
+        },
+        Tool::Rotate { center, from } => match *from {
+            None if p.distance(*center) > 1.0 => *from = Some(p),
+            None => {}
+            Some(f) => {
+                let (u, v) = (f - *center, p - *center);
+                let angle = (u.x * v.y - u.y * v.x).atan2(u.dot(v)).to_degrees();
+                rotate_selection(app, *center, angle);
+                return;
+            }
+        },
+        Tool::Mirror { draw: false, .. } => {
+            let axis = app.hover.and_then(|h| app.doc.element(h)).and_then(|e| match &e.data {
+                ElementData::Wall(w) => Some((w.start, w.end)),
+                ElementData::Grid(g) => Some((g.start, g.end)),
+                ElementData::RoomSeparation(l) => Some((l.start, l.end)),
+                _ => None,
+            });
+            match axis {
+                Some((a, b)) => {
+                    mirror_selection(app, a, b);
+                    return;
+                }
+                None => app.status = "Pick a wall, grid or line to use as the mirror axis.".into(),
+            }
+        }
+        Tool::Mirror { start, .. } => match *start {
+            None => *start = Some(p),
+            Some(a) if a.distance(p) > 1.0 => {
+                mirror_selection(app, a, p);
+                return;
+            }
+            _ => {}
+        },
+        Tool::Trim { first } => {
+            let wall = app.hover.filter(|h| app.doc.element(*h).and_then(|e| e.as_wall()).is_some());
+            match (wall, *first) {
+                (None, _) => app.status = "Click a wall.".into(),
+                (Some(w), None) => *first = Some((w, p)),
+                (Some(w), Some((w1, _))) if w == w1 => {}
+                (Some(w), Some((w1, p1))) => {
+                    trim_to_corner(app, (w1, p1), (w, p));
+                    *first = None;
+                    app.tool = tool;
+                    return;
+                }
+            }
+        }
+        Tool::Split => {
+            if let Some(w) = app.hover.filter(|h| app.doc.element(*h).and_then(|e| e.as_wall()).is_some()) {
+                split_wall(app, w, p);
+                app.tool = tool;
+                return;
+            }
+        }
+        Tool::Attach { walls, detach } => {
+            let target = app
+                .hover
+                .filter(|h| matches!(app.doc.element(*h).map(|e| e.category()), Some(Category::Roofs | Category::Floors)));
+            let Some(target) = target else {
+                app.status = "Pick a roof or floor.".into();
+                app.tool = tool;
+                return;
+            };
+            let (walls, detach) = (walls.clone(), *detach);
+            app.transact(if detach { "Detach Top/Base" } else { "Attach Top/Base" }, |doc| {
+                for w in &walls {
+                    if let Some(ElementData::Wall(wall)) = doc.element_mut(*w).map(|e| &mut e.data) {
+                        wall.attached_top.retain(|t| *t != target);
+                        if !detach {
+                            wall.attached_top.push(target);
+                        }
+                    }
+                }
+                Ok(())
+            });
+            app.selection = walls;
+            app.tool = Tool::Modify;
+            app.status = "Ready".into();
+            return;
+        }
         Tool::Move { base } | Tool::Copy { base } => match *base {
             None => *base = Some(p),
             Some(a) => {
@@ -780,6 +1057,262 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
     app.tool = tool;
     app.options.typed.clear();
     app.status = app.tool.prompt().into();
+}
+
+fn new_column(app: &HausitApp, type_id: ElementId, level: ElementId, p: DVec2) -> Column {
+    Column {
+        type_id,
+        point: p,
+        rotation: if app.options.flip { 90.0 } else { 0.0 },
+        base_level: level,
+        base_offset: 0.0,
+        top_level: app.doc.level_above(level).unwrap_or(ElementId::INVALID),
+        top_offset: 0.0,
+    }
+}
+
+/// "At Grids": a column at every grid intersection on the active level
+/// that does not have one yet.
+pub fn columns_at_grids(app: &mut HausitApp) {
+    let Some(level) = app.active_level() else { return };
+    let Some(type_id) = app.type_for(Category::StructuralColumns) else {
+        return;
+    };
+    let grids: Vec<(DVec2, DVec2)> = app
+        .doc
+        .elements_of(Category::Grids)
+        .filter_map(|e| match &e.data {
+            ElementData::Grid(g) => Some((g.start, g.end)),
+            _ => None,
+        })
+        .collect();
+    let existing: Vec<DVec2> = app
+        .doc
+        .elements_of(Category::StructuralColumns)
+        .filter_map(|e| match &e.data {
+            ElementData::Column(c) if c.base_level == level => Some(c.point),
+            _ => None,
+        })
+        .collect();
+    let mut pts: Vec<DVec2> = Vec::new();
+    for i in 0..grids.len() {
+        for j in i + 1..grids.len() {
+            let ((a, b), (c, d)) = (grids[i], grids[j]);
+            let Some(x) = line_intersection(a, b - a, c, d - c) else { continue };
+            if distance_to_segment(x, a, b) < 1.0
+                && distance_to_segment(x, c, d) < 1.0
+                && !pts.iter().chain(&existing).any(|q| q.distance(x) < 1.0)
+            {
+                pts.push(x);
+            }
+        }
+    }
+    if pts.is_empty() {
+        app.status = "Every grid intersection already has a column.".into();
+        return;
+    }
+    let cols: Vec<Column> = pts.iter().map(|p| new_column(app, type_id, level, *p)).collect();
+    let n = cols.len();
+    app.transact("Create Structural Columns at Grids", |doc| {
+        for c in cols {
+            doc.add_element(ElementData::Column(c));
+        }
+        Ok(())
+    });
+    app.status = format!("Placed {n} structural columns at grid intersections.");
+}
+
+/// Places a room in the enclosed region at `p`, as Revit's Room tool.
+fn place_room(app: &mut HausitApp, p: DVec2) -> Option<ElementId> {
+    let level = app.active_level()?;
+    if !hausit_model::rooms::rooms_at(&app.doc, level, p).is_empty() {
+        app.status = "Room is redundant: there is already a room in this enclosed region.".into();
+        return None;
+    }
+    let (upper_limit, limit_offset) = match app.doc.level_above(level) {
+        Some(l) => (l, 0.0),
+        None => (level, 2500.0),
+    };
+    let room = Room {
+        level,
+        point: p,
+        name: "Room".into(),
+        number: app.doc.next_room_number(),
+        upper_limit,
+        limit_offset,
+    };
+    let enclosed = hausit_model::rooms::room_boundary(&app.doc, &room).is_some();
+    let id = app.transact("Create Room", |doc| Ok(doc.add_element(ElementData::Room(room))))?;
+    if !enclosed {
+        app.dialogs.error = Some("Room is not in a properly enclosed region. Add walls or room separation lines around it.".into());
+    }
+    Some(id)
+}
+
+/// The dimension reference under `p`: the nearest wall face or
+/// centreline, or a grid. Returns the reference and its line.
+pub fn pick_dim_ref(app: &HausitApp, p: DVec2, tol: f64) -> Option<(DimRef, (DVec2, DVec2))> {
+    let level = app.active_level()?;
+    let mut best: Option<(f64, DimRef, (DVec2, DVec2))> = None;
+    let mut consider = |r: DimRef, a: DVec2, b: DVec2| {
+        let d = distance_to_segment(p, a, b);
+        if d <= tol && best.as_ref().map(|x| d < x.0).unwrap_or(true) {
+            best = Some((d, r, (a, b)));
+        }
+    };
+    for e in app.doc.elements() {
+        match &e.data {
+            ElementData::Wall(w) if w.base_level == level => {
+                let Some(o) = wall_outline(&app.doc, e.id) else { continue };
+                consider(DimRef::Wall { wall: e.id, side: 1 }, o[0], o[1]);
+                consider(DimRef::Wall { wall: e.id, side: 0 }, w.start, w.end);
+                consider(DimRef::Wall { wall: e.id, side: -1 }, o[3], o[2]);
+            }
+            ElementData::Grid(g) => consider(DimRef::Grid { grid: e.id }, g.start, g.end),
+            _ => {}
+        }
+    }
+    best.map(|b| (b.1, b.2))
+}
+
+/// Bounding-box centre of the selection in plan (Rotate's default centre).
+pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
+    let mut pts: Vec<DVec2> = Vec::new();
+    for id in &app.selection {
+        let Some(e) = app.doc.element(*id) else { continue };
+        match &e.data {
+            ElementData::Wall(w) => pts.extend([w.start, w.end]),
+            ElementData::Grid(g) => pts.extend([g.start, g.end]),
+            ElementData::Floor(f) => pts.extend(&f.boundary),
+            ElementData::Roof(r) => pts.extend(&r.footprint),
+            ElementData::Column(c) => pts.push(c.point),
+            ElementData::Room(r) => pts.push(r.point),
+            ElementData::RoomSeparation(l) => pts.extend([l.start, l.end]),
+            ElementData::Door(o) | ElementData::Window(o) => {
+                if let Some(w) = app.doc.element(o.host).and_then(|h| h.as_wall()) {
+                    pts.push(w.point_at(o.offset));
+                }
+            }
+            ElementData::Level(_) | ElementData::Dimension(_) => {}
+        }
+    }
+    let first = *pts.first()?;
+    let (min, max) = pts.iter().fold((first, first), |(a, b), p| (a.min(*p), b.max(*p)));
+    Some((min + max) * 0.5)
+}
+
+/// Elements Rotate and Mirror act on: openings follow their host walls.
+fn transformable(app: &HausitApp) -> Vec<ElementId> {
+    app.selection
+        .iter()
+        .copied()
+        .filter(|id| {
+            app.doc
+                .element(*id)
+                .map(|e| !e.category().is_hosted() && e.category() != Category::Levels)
+                .unwrap_or(false)
+        })
+        .collect()
+}
+
+fn rotate_selection(app: &mut HausitApp, center: DVec2, angle: f64) {
+    let ids = transformable(app);
+    let copy = app.options.copy;
+    let new = app.transact("Rotate", |doc| {
+        let ids = if copy { doc.copy(&ids, DVec2::ZERO) } else { ids };
+        doc.rotate(&ids, center, angle);
+        Ok(ids)
+    });
+    if let Some(new) = new {
+        app.selection = new;
+    }
+    app.tool = Tool::Modify;
+    app.status = format!("Rotated {:.2}°.", angle);
+}
+
+fn mirror_selection(app: &mut HausitApp, a: DVec2, b: DVec2) {
+    let ids = transformable(app);
+    let copy = app.options.copy;
+    let new = app.transact("Mirror", |doc| {
+        let ids = if copy { doc.copy(&ids, DVec2::ZERO) } else { ids };
+        doc.mirror(&ids, a, b);
+        Ok(ids)
+    });
+    if let Some(new) = new {
+        app.selection = new;
+    }
+    app.tool = Tool::Modify;
+    app.status = "Ready".into();
+}
+
+/// Trim/Extend to Corner: both walls end at the intersection of their
+/// lines, keeping the side of each wall that was clicked.
+fn trim_to_corner(app: &mut HausitApp, (w1, p1): (ElementId, DVec2), (w2, p2): (ElementId, DVec2)) {
+    let get = |id: ElementId| app.doc.element(id).and_then(|e| e.as_wall()).cloned();
+    let (Some(a), Some(b)) = (get(w1), get(w2)) else { return };
+    let Some(x) = line_intersection(a.start, a.end - a.start, b.start, b.end - b.start) else {
+        app.status = "The walls are parallel and cannot form a corner.".into();
+        return;
+    };
+    let cut = |w: &Wall, click: DVec2| {
+        let d = w.end - w.start;
+        let t = |q: DVec2| (q - w.start).dot(d) / d.length_squared();
+        // Keep the part of the wall on the clicked side of the corner.
+        if t(click) < t(x) {
+            (w.start, x)
+        } else {
+            (x, w.end)
+        }
+    };
+    let (na, nb) = (cut(&a, p1), cut(&b, p2));
+    if na.0.distance(na.1) < 10.0 || nb.0.distance(nb.1) < 10.0 {
+        app.status = "That would make a wall too short.".into();
+        return;
+    }
+    app.transact("Trim/Extend to Corner", |doc| {
+        for (id, (s, e)) in [(w1, na), (w2, nb)] {
+            if let Some(ElementData::Wall(w)) = doc.element_mut(id).map(|e| &mut e.data) {
+                w.start = s;
+                w.end = e;
+            }
+        }
+        Ok(())
+    });
+}
+
+/// Split Element: two walls meeting at the clicked point. Openings past
+/// the split move to the new wall.
+fn split_wall(app: &mut HausitApp, id: ElementId, p: DVec2) {
+    let Some(w) = app.doc.element(id).and_then(|e| e.as_wall()).cloned() else {
+        return;
+    };
+    let (q, t) = closest_on_segment(p, w.start, w.end);
+    let at = t * w.length();
+    if at < 10.0 || w.length() - at < 10.0 {
+        app.status = "Click away from the wall's ends to split it.".into();
+        return;
+    }
+    let moved: Vec<(ElementId, f64)> = app
+        .doc
+        .openings_in(id)
+        .filter(|(_, o)| o.offset > at)
+        .map(|(e, o)| (e.id, o.offset - at))
+        .collect();
+    app.transact("Split Wall", |doc| {
+        let mut second = w.clone();
+        second.start = q;
+        let new = doc.add_element(ElementData::Wall(second));
+        if let Some(ElementData::Wall(first)) = doc.element_mut(id).map(|e| &mut e.data) {
+            first.end = q;
+        }
+        for (o, off) in moved {
+            if let Some(ElementData::Door(h) | ElementData::Window(h)) = doc.element_mut(o).map(|e| &mut e.data) {
+                h.host = new;
+                h.offset = off;
+            }
+        }
+        Ok(())
+    });
 }
 
 /// The face of the wall under `p` as a sketch line: the exterior face
@@ -875,6 +1408,15 @@ pub fn finish_sketch(app: &mut HausitApp) {
 
 /// Applies a typed length along the current rubber-band direction.
 pub fn apply_typed_length(app: &mut HausitApp, cursor: DVec2) {
+    if let Tool::Rotate { center, .. } = app.tool {
+        // Rotate takes a typed angle in degrees, counter-clockwise.
+        let angle = app.options.typed.trim().parse::<f64>();
+        app.options.typed.clear();
+        if let Ok(a) = angle {
+            rotate_selection(app, center, a);
+        }
+        return;
+    }
     let Some(anchor) = app.tool.anchor() else { return };
     let Some(len) = hausit_core::parse_length(&app.options.typed, app.doc.length_unit) else {
         app.options.typed.clear();
@@ -945,7 +1487,7 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
             app.undo();
         }
     }
-    if space && matches!(app.tool, Tool::Wall { .. } | Tool::Door | Tool::Window) {
+    if space && matches!(app.tool, Tool::Wall { .. } | Tool::Door | Tool::Window | Tool::Column) {
         // Spacebar flips the wall's exterior side or the door's hand.
         app.options.flip = !app.options.flip;
     }
@@ -1059,6 +1601,46 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "DE" => {
             app.delete_selection();
+            true
+        }
+        "RM" => {
+            start(app, Tool::Room);
+            true
+        }
+        "DI" => {
+            start(app, Tool::Dimension { refs: vec![] });
+            true
+        }
+        "CL" => {
+            start(app, Tool::Column);
+            true
+        }
+        "RO" => {
+            start(
+                app,
+                Tool::Rotate {
+                    center: DVec2::ZERO,
+                    from: None,
+                },
+            );
+            true
+        }
+        "MM" | "DM" => {
+            start(
+                app,
+                Tool::Mirror {
+                    draw: cmd == "DM",
+                    start: None,
+                },
+            );
+            true
+        }
+        "TR" => {
+            start(app, Tool::Trim { first: None });
+            true
+        }
+        "SL" => {
+            start(app, Tool::Split);
             true
         }
         _ => false,

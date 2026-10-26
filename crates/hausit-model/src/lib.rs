@@ -11,12 +11,14 @@
 //! * [`geometry`] turns elements into solids that views project and cut.
 
 pub mod category;
+pub mod dimensions;
 pub mod document;
 pub mod element;
 pub mod family;
 pub mod geometry;
 pub mod history;
 pub mod params;
+pub mod rooms;
 pub mod schedule;
 pub mod template;
 pub mod view;

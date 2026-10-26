@@ -35,6 +35,12 @@ pub enum Icon {
     Dimension,
     Import,
     Close,
+    RoomSeparator,
+    Rotate,
+    Mirror,
+    Trim,
+    Split,
+    Attach,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -332,6 +338,66 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             p.rect(rect(6.0, 12.0, 26.0, 28.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
             seg((16.0, 2.0), (16.0, 20.0), line(2.2, BLUE));
             poly(&[(11.0, 15.0), (21.0, 15.0), (16.0, 21.0)], BLUE, Stroke::NONE);
+        }
+        Icon::RoomSeparator => {
+            p.rect(rect(4.0, 6.0, 28.0, 26.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            p.add(Shape::dashed_line(
+                &[at(16.0, 6.0), at(16.0, 26.0)],
+                line(1.6, BLUE),
+                3.0 * s,
+                2.0 * s,
+            ));
+        }
+        Icon::Rotate => {
+            let c = at(16.0, 17.0);
+            let pts: Vec<Pos2> = (0..=20)
+                .map(|i| {
+                    let a = std::f32::consts::PI * (0.1 + 1.4 * i as f32 / 20.0);
+                    c + vec2(a.cos(), -a.sin()) * 10.0 * s
+                })
+                .collect();
+            let end = *pts.last().unwrap();
+            p.add(Shape::line(pts, line(1.8, INK)));
+            p.add(Shape::convex_polygon(
+                vec![end + vec2(-4.0, -3.0) * s, end + vec2(4.0, -3.0) * s, end + vec2(0.0, 3.0) * s],
+                k(INK),
+                Stroke::NONE,
+            ));
+            p.circle_filled(c, 2.0 * s, k(BLUE));
+        }
+        Icon::Mirror => {
+            p.add(Shape::dashed_line(
+                &[at(16.0, 3.0), at(16.0, 29.0)],
+                line(1.2, BLUE),
+                3.0 * s,
+                2.0 * s,
+            ));
+            poly(&[(4.0, 24.0), (13.0, 24.0), (13.0, 8.0)], Color32::WHITE, ink);
+            poly(&[(19.0, 8.0), (19.0, 24.0), (28.0, 24.0)], Color32::from_rgb(200, 220, 245), ink);
+        }
+        Icon::Trim => {
+            seg((6.0, 26.0), (6.0, 8.0), line(3.0, INK));
+            seg((6.0, 8.0), (26.0, 8.0), line(3.0, INK));
+            seg((6.0, 8.0), (6.0, 3.0), line(1.2, RED));
+            seg((6.0, 8.0), (2.0, 8.0), line(1.2, RED));
+        }
+        Icon::Split => {
+            seg((3.0, 16.0), (13.0, 16.0), line(3.0, INK));
+            seg((19.0, 16.0), (29.0, 16.0), line(3.0, INK));
+            seg((18.0, 6.0), (14.0, 26.0), line(1.4, RED));
+        }
+        Icon::Attach => {
+            poly(&[(3.0, 12.0), (16.0, 3.0), (29.0, 12.0)], BRICK, ink);
+            p.rect(
+                rect(8.0, 12.0, 24.0, 29.0),
+                0.0,
+                k(Color32::from_gray(220)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            seg((16.0, 26.0), (16.0, 15.0), line(1.8, BLUE));
+            seg((16.0, 15.0), (13.0, 19.0), line(1.8, BLUE));
+            seg((16.0, 15.0), (19.0, 19.0), line(1.8, BLUE));
         }
         Icon::Planned => {
             p.circle_stroke(at(16.0, 16.0), 11.0 * s, line(1.5, INK));

@@ -153,6 +153,18 @@ impl Document {
                     ElementData::Wall(w) => w.base_level == id,
                     ElementData::Floor(f) => f.level == id,
                     ElementData::Roof(r) => r.level == id,
+                    ElementData::Column(c) => c.base_level == id,
+                    ElementData::Room(r) => r.level == id,
+                    ElementData::RoomSeparation(l) => l.level == id,
+                    // Dimensions go with their view or any element they measure.
+                    ElementData::Dimension(d) => {
+                        d.view == id
+                            || d.refs.iter().any(|r| match r {
+                                DimRef::Wall { wall, .. } => *wall == id,
+                                DimRef::Grid { grid } => *grid == id,
+                                DimRef::Line { .. } => false,
+                            })
+                    }
                     _ => false,
                 };
                 if dep && !out.contains(&e.id) {
@@ -219,6 +231,20 @@ impl Document {
                 }
                 ElementData::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
                 ElementData::Roof(r) => r.footprint.iter_mut().for_each(|p| *p += delta),
+                ElementData::Column(c) => c.point += delta,
+                ElementData::Room(r) => r.point += delta,
+                ElementData::RoomSeparation(l) => {
+                    l.start += delta;
+                    l.end += delta;
+                }
+                ElementData::Dimension(d) => {
+                    d.line_point += delta;
+                    for r in &mut d.refs {
+                        if let DimRef::Line { point, .. } = r {
+                            *point += delta;
+                        }
+                    }
+                }
                 ElementData::Door(_) | ElementData::Window(_) | ElementData::Level(_) => {}
             }
         }
@@ -265,6 +291,9 @@ impl Document {
                     Some(h) => o.host = *h,
                     None => continue, // Revit also requires the host when copying in plan.
                 },
+                ElementData::Room(r) => r.number = self.next_room_number(),
+                // Dimensions stay with the elements they measure.
+                ElementData::Dimension(_) => continue,
                 _ => {}
             }
             let nid = self.add_element(data);
@@ -283,6 +312,99 @@ impl Document {
             delta,
         );
         new_ids
+    }
+
+    /// Next free room number ("1", "2", …), as Revit increments them.
+    pub fn next_room_number(&self) -> String {
+        let max = self
+            .elements
+            .values()
+            .filter_map(|e| match &e.data {
+                ElementData::Room(r) => r.number.parse::<u64>().ok(),
+                _ => None,
+            })
+            .max()
+            .unwrap_or(0);
+        (max + 1).to_string()
+    }
+
+    /// Rotates elements about `center` by `angle` degrees (counter-clockwise).
+    pub fn rotate(&mut self, ids: &[ElementId], center: DVec2, angle: f64) {
+        let (s, c) = angle.to_radians().sin_cos();
+        let f = move |p: DVec2| {
+            let d = p - center;
+            center + DVec2::new(d.x * c - d.y * s, d.x * s + d.y * c)
+        };
+        self.transform(ids, &f, false, angle);
+    }
+
+    /// Mirrors elements about the line through `a` and `b`.
+    pub fn mirror(&mut self, ids: &[ElementId], a: DVec2, b: DVec2) {
+        let d = (b - a).normalize_or_zero();
+        let f = move |p: DVec2| {
+            let v = p - a;
+            a + d * (2.0 * v.dot(d)) - v
+        };
+        // A column's rotation mirrors about the axis angle.
+        let axis = d.y.atan2(d.x).to_degrees();
+        self.transform(ids, &f, true, axis);
+    }
+
+    /// Applies a plan transform. Mirrored walls are reversed so their
+    /// exterior stays outside, and their openings keep their positions.
+    fn transform(&mut self, ids: &[ElementId], f: &dyn Fn(DVec2) -> DVec2, mirror: bool, angle: f64) {
+        let mut reversed: Vec<(ElementId, f64)> = Vec::new();
+        for id in ids {
+            let Some(e) = self.elements.get_mut(id) else { continue };
+            match &mut e.data {
+                ElementData::Wall(w) => {
+                    let (a, b) = (f(w.start), f(w.end));
+                    if mirror {
+                        reversed.push((*id, w.length()));
+                        w.start = b;
+                        w.end = a;
+                    } else {
+                        w.start = a;
+                        w.end = b;
+                    }
+                }
+                ElementData::Grid(g) => {
+                    g.start = f(g.start);
+                    g.end = f(g.end);
+                }
+                ElementData::Floor(fl) => fl.boundary.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Roof(r) => r.footprint.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Column(c) => {
+                    c.point = f(c.point);
+                    c.rotation = if mirror { 2.0 * angle - c.rotation } else { c.rotation + angle };
+                }
+                ElementData::Room(r) => r.point = f(r.point),
+                ElementData::RoomSeparation(l) => {
+                    l.start = f(l.start);
+                    l.end = f(l.end);
+                }
+                ElementData::Dimension(d) => {
+                    d.line_point = f(d.line_point);
+                    for r in &mut d.refs {
+                        if let DimRef::Line { point, dir } = r {
+                            let p2 = f(*point + *dir);
+                            *point = f(*point);
+                            *dir = (p2 - *point).normalize_or_zero();
+                        }
+                    }
+                }
+                ElementData::Door(_) | ElementData::Window(_) | ElementData::Level(_) => {}
+            }
+        }
+        for e in self.elements.values_mut() {
+            if let ElementData::Door(o) | ElementData::Window(o) = &mut e.data {
+                if let Some((_, len)) = reversed.iter().find(|(w, _)| *w == o.host) {
+                    o.offset = len - o.offset;
+                    o.flip_hand = !o.flip_hand;
+                }
+            }
+        }
+        self.touch();
     }
 
     // ----- levels -----------------------------------------------------------

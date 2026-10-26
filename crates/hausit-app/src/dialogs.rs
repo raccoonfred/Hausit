@@ -243,13 +243,7 @@ fn new_schedule(app: &mut HausitApp, ctx: &Context) {
     let mut result = None;
     window("New Schedule").show(ctx, |ui| {
         ui.label("Category:");
-        for cat in [
-            Category::Doors,
-            Category::Windows,
-            Category::Walls,
-            Category::Floors,
-            Category::Roofs,
-        ] {
+        for cat in Category::SCHEDULABLE {
             ui.radio_value(&mut ns.category, cat, cat.name());
         }
         ui.add_space(4.0);

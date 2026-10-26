@@ -76,7 +76,12 @@ pub fn default_type_params(category: Category) -> TypeParams {
             p.insert("Default Sill Height".into(), len(900.0));
             p.insert("Thickness".into(), len(50.0));
         }
-        Category::Levels | Category::Grids => {}
+        Category::StructuralColumns => {
+            p.insert("b".into(), len(300.0));
+            p.insert("h".into(), len(300.0));
+            p.insert("Structural Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
+        }
+        Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => {}
     }
     p.insert("Type Mark".into(), ParamValue::Text(String::new()));
     p.insert("Description".into(), ParamValue::Text(String::new()));

@@ -10,10 +10,14 @@ pub enum Category {
     Roofs,
     Doors,
     Windows,
+    StructuralColumns,
+    Rooms,
+    RoomSeparation,
+    Dimensions,
 }
 
 impl Category {
-    pub const ALL: [Category; 7] = [
+    pub const ALL: [Category; 11] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -21,13 +25,29 @@ impl Category {
         Category::Roofs,
         Category::Doors,
         Category::Windows,
+        Category::StructuralColumns,
+        Category::Rooms,
+        Category::RoomSeparation,
+        Category::Dimensions,
     ];
 
     /// Categories that have family types (and so appear under "Families").
-    pub const TYPED: [Category; 5] = [
+    pub const TYPED: [Category; 6] = [
         Category::Doors,
         Category::Floors,
         Category::Roofs,
+        Category::StructuralColumns,
+        Category::Walls,
+        Category::Windows,
+    ];
+
+    /// Categories that can be scheduled.
+    pub const SCHEDULABLE: [Category; 7] = [
+        Category::Doors,
+        Category::Floors,
+        Category::Roofs,
+        Category::Rooms,
+        Category::StructuralColumns,
         Category::Walls,
         Category::Windows,
     ];
@@ -41,6 +61,10 @@ impl Category {
             Category::Roofs => "Roofs",
             Category::Doors => "Doors",
             Category::Windows => "Windows",
+            Category::StructuralColumns => "Structural Columns",
+            Category::Rooms => "Rooms",
+            Category::RoomSeparation => "Room Separation Lines",
+            Category::Dimensions => "Dimensions",
         }
     }
 
@@ -54,11 +78,25 @@ impl Category {
             Category::Roofs => "Roof",
             Category::Doors => "Door",
             Category::Windows => "Window",
+            Category::StructuralColumns => "Structural Column",
+            Category::Rooms => "Room",
+            Category::RoomSeparation => "Room Separation Line",
+            Category::Dimensions => "Dimension",
         }
     }
 
     /// Hosted categories are placed in a wall.
     pub fn is_hosted(self) -> bool {
         matches!(self, Category::Doors | Category::Windows)
+    }
+}
+
+impl Category {
+    /// Annotation and spatial categories have no 3D geometry.
+    pub fn is_model(self) -> bool {
+        !matches!(
+            self,
+            Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions
+        )
     }
 }

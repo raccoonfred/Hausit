@@ -3,11 +3,15 @@
 //! symbols, grids, and section/elevation marks.
 
 use crate::annotate::{grid_bubble, view_marks};
-use crate::{DisplayList, Prim, Rgba, Stroke, HEAVY, MEDIUM, THIN};
+use crate::{Anchor, DisplayList, Prim, Rgba, Stroke, HEAVY, MEDIUM, THIN};
 use hausit_core::geom::perp;
-use hausit_core::{DVec2, ElementId};
-use hausit_model::geometry::{element_geometry, opening_frame, roof_plan_lines, Material, Shape};
-use hausit_model::{Category, Document, ElementData, View};
+use hausit_core::{DVec2, ElementId, LengthUnit};
+use hausit_model::geometry::{column_extent, column_outline, element_geometry, opening_frame, roof_plan_lines, Material, Shape};
+use hausit_model::rooms::room_info;
+use hausit_model::{Category, Document, ElementData, ParamValue, View};
+
+/// Paper height of tag text, mm.
+const TAG_TEXT: f64 = 2.5;
 
 /// Revit draws glazing in plan as thin black lines.
 const GLASS: Rgba = [0, 0, 0, 255];
@@ -55,6 +59,47 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    // Rooms: an invisible region that can be picked, plus a room tag
+    // (name, number and area, as Revit's "Room Tag With Area").
+    for e in doc.elements_of(Category::Rooms) {
+        let ElementData::Room(r) = &e.data else { continue };
+        if r.level != level {
+            continue;
+        }
+        let info = room_info(doc, r);
+        if let Some(b) = &info.boundary {
+            dl.push(Prim::Polygon(b.clone()), None, Some([0, 0, 0, 0]), Some(e.id));
+        }
+        let h = TAG_TEXT * scale;
+        let area = match &info.boundary {
+            Some(_) => format_area(info.area, doc.length_unit),
+            None => "Not Enclosed".into(),
+        };
+        for (i, (text, k)) in [(r.name.clone(), 1.0), (r.number.clone(), 1.0), (area, 0.85)]
+            .into_iter()
+            .enumerate()
+        {
+            dl.push(
+                Prim::Text {
+                    pos: r.point + DVec2::new(0.0, h * (1.3 - 1.3 * i as f64)),
+                    text,
+                    height: h * k,
+                    anchor: Anchor::Center,
+                    angle: 0.0,
+                },
+                None,
+                None,
+                Some(e.id),
+            );
+        }
+    }
+    for e in doc.elements_of(Category::RoomSeparation) {
+        let ElementData::RoomSeparation(l) = &e.data else { continue };
+        if l.level == level {
+            dl.line(l.start, l.end, THIN, Some(e.id));
+        }
+    }
+
     // Walls (and door/window frames): projection below the cut, then cut.
     let mut cut_edges: Vec<(DVec2, DVec2, ElementId)> = Vec::new();
     for e in doc.elements_of(Category::Walls) {
@@ -95,7 +140,29 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    // Structural columns: cut ones filled with a heavy outline, columns
+    // ending below the cut plane in projection.
+    for e in doc.elements_of(Category::StructuralColumns) {
+        let ElementData::Column(c) = &e.data else { continue };
+        let (z0, z1) = column_extent(doc, c);
+        let Some(outline) = column_outline(doc, e.id) else { continue };
+        if z0 <= cut_z && cut_z < z1 {
+            dl.push(Prim::Polygon(outline), Some(HEAVY), Some(COLUMN_FILL), Some(e.id));
+        } else if z1 <= cut_z && z1 > elev - 1.0 {
+            dl.push(
+                Prim::Polyline {
+                    pts: outline,
+                    closed: true,
+                },
+                Some(THIN),
+                None,
+                Some(e.id),
+            );
+        }
+    }
+
     // Doors and windows hosted by walls on this level.
+    let mut tags: Vec<(Vec<DVec2>, String, DVec2, ElementId)> = Vec::new();
     for e in doc.elements() {
         let is_door = match e.category() {
             Category::Doors => true,
@@ -179,6 +246,39 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             dl.line(a + n * half_t, a - n * half_t, MEDIUM, Some(e.id));
             dl.line(b + n * half_t, b - n * half_t, MEDIUM, Some(e.id));
         }
+        // Tags: doors show their Mark, windows their Type Mark.
+        let h = TAG_TEXT * scale;
+        let (label, at) = if is_door {
+            let facing = if o.flip_facing { n } else { -n };
+            (e.mark.clone(), f.center + facing * (half_t + h * 2.2))
+        } else {
+            let tm = doc.type_of(e.id).and_then(|t| match t.params.get("Type Mark") {
+                Some(ParamValue::Text(s)) => Some(s.clone()),
+                _ => None,
+            });
+            (tm.unwrap_or_default(), f.center + n * (half_t + h * 2.2))
+        };
+        if !label.is_empty() {
+            let (hw, hh) = (h * (0.5 + 0.35 * label.chars().count() as f64), h * 0.75);
+            let shape = if is_door {
+                vec![
+                    at + DVec2::new(-hw, -hh),
+                    at + DVec2::new(hw, -hh),
+                    at + DVec2::new(hw, hh),
+                    at + DVec2::new(-hw, hh),
+                ]
+            } else {
+                vec![
+                    at + DVec2::new(-hw - hh * 0.6, 0.0),
+                    at + DVec2::new(-hw, -hh),
+                    at + DVec2::new(hw, -hh),
+                    at + DVec2::new(hw + hh * 0.6, 0.0),
+                    at + DVec2::new(hw, hh),
+                    at + DVec2::new(-hw, hh),
+                ]
+            };
+            tags.push((shape, label, at, e.id));
+        }
         // Cut frame pieces (jambs) drawn as part of the opening.
         if let Some(g) = element_geometry(doc, e.id) {
             for part in &g.parts {
@@ -196,6 +296,33 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    for (shape, label, at, id) in tags {
+        dl.push(Prim::Polygon(shape), Some(THIN), Some([255, 255, 255, 255]), Some(id));
+        dl.push(
+            Prim::Text {
+                pos: at,
+                text: label,
+                height: TAG_TEXT * scale,
+                anchor: Anchor::Center,
+                angle: 0.0,
+            },
+            None,
+            None,
+            Some(id),
+        );
+    }
+
+    // Dimensions placed in this view.
+    for e in doc.elements_of(Category::Dimensions) {
+        let ElementData::Dimension(d) = &e.data else { continue };
+        if d.view != view.id {
+            continue;
+        }
+        if let Some(l) = hausit_model::dimensions::layout(doc, d) {
+            crate::draw_dimension(&mut dl, &l, scale, doc.length_unit, Some(e.id));
+        }
+    }
+
     // Grids.
     for e in doc.elements_of(Category::Grids) {
         let ElementData::Grid(g) = &e.data else { continue };
@@ -205,6 +332,17 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     view_marks(doc, view, &mut dl);
     dl
 }
+
+/// Areas as Revit's default tag shows them.
+fn format_area(mm2: f64, unit: LengthUnit) -> String {
+    match unit {
+        LengthUnit::FeetInches => format!("{:.0} SF", mm2 / (304.8 * 304.8)),
+        _ => format!("{:.2} m²", mm2 / 1e6),
+    }
+}
+
+/// Concrete columns cut in plan.
+const COLUMN_FILL: Rgba = [150, 150, 150, 255];
 
 /// Generic walls have no cut pattern in Revit: white inside heavy outlines.
 const CUT_FILL_LIGHT: Rgba = [255, 255, 255, 255];

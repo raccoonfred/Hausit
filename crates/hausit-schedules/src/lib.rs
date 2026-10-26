@@ -84,9 +84,18 @@ fn cell(doc: &Document, id: ElementId, field: ScheduleField, unit: LengthUnit) -
             number: Some(1.0),
         },
         F::Level => from_param(match e.data {
-            ElementData::Roof(_) => "Base Level",
+            ElementData::Roof(_) | ElementData::Column(_) => "Base Level",
             _ => "Level",
         }),
+        F::Name => from_param("Name"),
+        F::Number => {
+            let c = from_param("Number");
+            Cell {
+                number: c.text.parse().ok(),
+                ..c
+            }
+        }
+        F::UnboundedHeight => from_param("Unbounded Height"),
         F::Length => from_param("Length"),
         F::Area => from_param("Area"),
         F::Volume => from_param("Volume"),
