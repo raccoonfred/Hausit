@@ -309,8 +309,15 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
         );
     });
     panel(ui, "Circulation", |ui| {
-        planned(ui, Icon::Planned, "Stair", "Stair");
-        planned(ui, Icon::Planned, "Railing", "Railing");
+        tool_button(app, ui, Icon::Stair, "Stair", "Stair: Run", Tool::Stair { pts: vec![] });
+        tool_button(
+            app,
+            ui,
+            Icon::Railing,
+            "Railing",
+            "Railing: Sketch Path",
+            Tool::Railing { pts: vec![] },
+        );
     });
     panel(ui, "Room & Area", |ui| {
         tool_button(app, ui, Icon::Room, "Room", "Room (RM)", Tool::Room);

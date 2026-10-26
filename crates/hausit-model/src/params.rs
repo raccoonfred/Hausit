@@ -223,6 +223,32 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Rotation", G::Constraints, V::Angle(f.rotation)));
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(foundation_volume(doc, id))).ro());
         }
+        ElementData::Stair(s) => {
+            p.push(Parameter::new("Base Level", G::Constraints, V::Element(s.base_level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Base Offset", G::Constraints, V::Length(s.base_offset)));
+            p.push(Parameter::new("Top Level", G::Constraints, V::Element(s.top_level)).kind(ParamKind::LevelOrNone));
+            p.push(Parameter::new("Top Offset", G::Constraints, V::Length(s.top_offset)));
+            p.push(Parameter::new("Actual Run Width", G::Dimensions, V::Length(s.width)));
+            if let Some(l) = crate::stairs::stair_layout(doc, id) {
+                let (z0, z1) = (l.z0, l.z1);
+                let treads = l.pieces.iter().filter(|p| !p.landing).count() as i64;
+                p.push(Parameter::new("Desired Stair Height", G::Dimensions, V::Length(z1 - z0)).ro());
+                p.push(Parameter::new("Actual Number of Risers", G::Dimensions, V::Integer(l.risers as i64)).ro());
+                p.push(Parameter::new("Actual Riser Height", G::Dimensions, V::Length(l.riser)).ro());
+                p.push(Parameter::new("Actual Number of Treads", G::Dimensions, V::Integer(treads)).ro());
+                let g = crate::stairs::StairRules::of(doc.type_of(id)).tread;
+                p.push(Parameter::new("Actual Tread Depth", G::Dimensions, V::Length(g)).ro());
+            }
+        }
+        ElementData::Railing(r) => {
+            p.push(Parameter::new("Base Level", G::Constraints, V::Element(r.level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Base Offset", G::Constraints, V::Length(r.base_offset)));
+            if r.host.is_valid() {
+                p.push(Parameter::new("Host", G::Other, V::Text(doc.describe(r.host))).ro());
+            }
+            let len: f64 = r.path.windows(2).map(|w| w[0].distance(w[1])).sum();
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(len)).ro());
+        }
         ElementData::WallFooting(f) => {
             p.push(Parameter::new("Host", G::Other, V::Text(doc.describe(f.wall))).ro());
             let len = doc.element(f.wall).and_then(|w| w.as_wall()).map(|w| w.length()).unwrap_or(0.0);
@@ -358,6 +384,19 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 _ => return Err(bad()),
             },
             ElementData::WallFooting(_) => return Err(bad()),
+            ElementData::Stair(s) => match (name, value) {
+                ("Base Level", V::Element(l)) if l.is_valid() => s.base_level = l,
+                ("Base Offset", V::Length(v)) => s.base_offset = v,
+                ("Top Level", V::Element(l)) => s.top_level = l,
+                ("Top Offset", V::Length(v)) => s.top_offset = v,
+                ("Actual Run Width", V::Length(v)) if v > 0.0 => s.width = v,
+                _ => return Err(bad()),
+            },
+            ElementData::Railing(r) => match (name, value) {
+                ("Base Level", V::Element(l)) if l.is_valid() => r.level = l,
+                ("Base Offset", V::Length(v)) => r.base_offset = v,
+                _ => return Err(bad()),
+            },
             ElementData::Room(r) => match (name, value) {
                 ("Upper Limit", V::Element(l)) => r.upper_limit = l,
                 ("Limit Offset", V::Length(v)) => r.limit_offset = v,

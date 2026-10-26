@@ -110,6 +110,19 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::Beam { .. } => {
                         ui.label(RichText::new("Braces run from this level to the level above.").color(Color32::DARK_GRAY));
                     }
+                    Tool::Stair { pts } => {
+                        let pts = pts.clone();
+                        let msg = match crate::tools::stair_preview(app, &pts) {
+                            Some(l) => format!("{} risers created, {} remaining", l.placed, l.risers - l.placed),
+                            None if app.active_level().and_then(|l| app.doc.level_above(l)).is_none() => {
+                                "A stair needs a level above this one.".to_string()
+                            }
+                            None => "Runs go from the first riser to the last.".to_string(),
+                        };
+                        ui.label(RichText::new(msg).color(Color32::DARK_GRAY));
+                        path_finish(app, ui);
+                    }
+                    Tool::Railing { .. } => path_finish(app, ui),
                     Tool::Footing => {
                         if ui.button("At Columns").on_hover_text("Place a foundation under every column on this level").clicked() {
                             crate::tools::footings_at_columns(app);
@@ -136,6 +149,17 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 }
             });
         });
+}
+
+fn path_finish(app: &mut HausitApp, ui: &mut Ui) {
+    ui.separator();
+    if ui.button(RichText::new("✔ Finish").color(Color32::from_rgb(30, 130, 50))).clicked() {
+        crate::tools::finish_path_tool(app);
+    }
+    if ui.button(RichText::new("✖ Cancel").color(Color32::from_rgb(190, 40, 40))).clicked() {
+        app.tool.cancel_keep_kind();
+        app.status = app.tool.prompt().into();
+    }
 }
 
 fn finish_cancel(app: &mut HausitApp, ui: &mut Ui) {

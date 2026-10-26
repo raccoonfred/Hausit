@@ -59,8 +59,8 @@ needed for full parity, **P3** is long-tail.
 | Roofs by footprint | Have | — | |
 | Roof by extrusion, soffits, fascia, gutters, dormers, join/unjoin roof | Missing | P1 | |
 | Ceilings (automatic and sketch, ceiling grids, reflected ceiling plans) | Missing | P0 | |
-| Stairs by component and by sketch, landings, supports | Missing | P0 | Stairs are hard. Plan for a full milestone |
-| Railings (path, host to stairs, balusters, top rails) | Missing | P0 | Ships with stairs |
+| Stairs by component and by sketch, landings, supports | Partial | P0 | Runs with landings at turns, risers from the level heights, plan cut line and UP arrow; sketch-based stairs, winders and supports still to do |
+| Railings (path, host to stairs, balusters, top rails) | Partial | P0 | Sketched or hosted on stairs (created with them), balusters, top and intermediate rails |
 | Ramps | Missing | P1 | |
 | Shafts, vertical and face openings, dormer openings | Missing | P1 | |
 | Rooms, areas, area plans (gross, rentable), color fill schemes | Partial | P1 | Rooms done; areas and color schemes missing |

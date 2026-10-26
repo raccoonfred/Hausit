@@ -45,6 +45,14 @@ pub enum Tool {
         start: Option<DVec2>,
         brace: bool,
     },
+    /// Stair by runs: the points clicked so far along its path.
+    Stair {
+        pts: Vec<DVec2>,
+    },
+    /// Railing path being sketched.
+    Railing {
+        pts: Vec<DVec2>,
+    },
     /// Isolated (pad) foundation.
     Footing,
     /// Wall foundation: pick walls.
@@ -107,6 +115,8 @@ impl Tool {
             Tool::Beam { brace: false, .. } => "Modify | Place Beam",
             Tool::Beam { .. } => "Modify | Place Brace",
             Tool::Footing => "Modify | Place Isolated Foundation",
+            Tool::Stair { .. } => "Modify | Create Stair",
+            Tool::Railing { .. } => "Modify | Create Railing Path",
             Tool::WallFoundation => "Modify | Place Wall Foundation",
             Tool::Room => "Modify | Place Room",
             Tool::RoomSeparation { .. } => "Modify | Place Room Separation",
@@ -145,6 +155,10 @@ impl Tool {
             Tool::Beam { .. } => "Click to enter brace end point (on the level above).",
             Tool::Footing => "Click to place an isolated foundation. Space rotates it 90°. At Columns places one under every column.",
             Tool::WallFoundation => "Click walls to add a wall foundation under them.",
+            Tool::Stair { pts } if pts.is_empty() => "Click to start the run at the first riser.",
+            Tool::Stair { .. } => "Click the end of the run, or a point to turn at a landing. Finish (Enter) completes the last run.",
+            Tool::Railing { pts } if pts.is_empty() => "Click to start the railing path.",
+            Tool::Railing { .. } => "Click the next point. Finish (Enter) creates the railing.",
             Tool::Room => "Click inside an area enclosed by walls or room separation lines to place a room.",
             Tool::RoomSeparation { start: None } => "Click to enter room separation line start point.",
             Tool::RoomSeparation { .. } => "Click to enter line end point. Esc ends the chain.",
@@ -172,6 +186,8 @@ impl Tool {
             Tool::Column => Some(Category::StructuralColumns),
             Tool::Beam { .. } => Some(Category::StructuralFraming),
             Tool::Footing | Tool::WallFoundation => Some(Category::StructuralFoundations),
+            Tool::Stair { .. } => Some(Category::Stairs),
+            Tool::Railing { .. } => Some(Category::Railings),
             _ => None,
         }
     }
@@ -200,6 +216,7 @@ impl Tool {
             Tool::Move { base } | Tool::Copy { base } => *base,
             Tool::Rotate { center, .. } => Some(*center),
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start,
+            Tool::Stair { pts } | Tool::Railing { pts } => pts.last().copied(),
             _ => None,
         }
     }
@@ -231,6 +248,7 @@ impl Tool {
             | Tool::RoomSeparation { start }
             | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start = None,
+            Tool::Stair { pts } | Tool::Railing { pts } => pts.clear(),
             Tool::Move { base } | Tool::Copy { base } => *base = None,
             Tool::Rotate { from, .. } => *from = None,
             Tool::Dimension { refs } => refs.clear(),
@@ -417,6 +435,8 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Beam { .. }
             | Tool::Footing
             | Tool::WallFoundation
+            | Tool::Stair { .. }
+            | Tool::Railing { .. }
             | Tool::Room
             | Tool::RoomSeparation { .. }
             | Tool::Dimension { .. }
@@ -975,6 +995,29 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
             }
             _ => {}
         },
+        Tool::Stair { pts } => {
+            if pts.last().is_some_and(|q| q.distance(p) < 10.0) {
+                app.tool = tool;
+                return;
+            }
+            pts.push(p);
+            // Done once the runs hold every riser.
+            if pts.len() >= 2 {
+                if let Some(l) = stair_preview(app, pts) {
+                    if l.placed >= l.risers {
+                        let path = std::mem::take(pts);
+                        app.tool = tool;
+                        create_stair(app, path);
+                        return;
+                    }
+                }
+            }
+        }
+        Tool::Railing { pts } => {
+            if !pts.last().is_some_and(|q| q.distance(p) < 10.0) {
+                pts.push(p);
+            }
+        }
         Tool::Footing => {
             let Some(level) = app.active_level() else { return };
             let Some(type_id) = app.type_for(Category::StructuralFoundations) else {
@@ -1146,6 +1189,90 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
     app.tool = tool;
     app.options.typed.clear();
     app.status = app.tool.prompt().into();
+}
+
+/// The stair the Stair tool would create along `path`.
+pub fn stair_preview(app: &mut HausitApp, path: &[DVec2]) -> Option<hausit_model::stairs::StairLayout> {
+    use hausit_model::stairs::{layout, StairRules};
+    let level = app.active_level()?;
+    let top = app.doc.level_above(level)?;
+    let type_id = app.type_for(Category::Stairs)?;
+    let t = app.doc.family_type(type_id);
+    let width = t.map(|t| t.length_or("Minimum Run Width", 1000.0)).unwrap_or(1000.0);
+    if path.len() < 2 {
+        return None;
+    }
+    let (z0, z1) = (app.doc.level_elevation(level), app.doc.level_elevation(top));
+    Some(layout(StairRules::of(t), z0, z1, width, path))
+}
+
+/// Creates a stair along `path` with a railing on each side, as Revit's
+/// Stair tool does by default.
+fn create_stair(app: &mut HausitApp, path: Vec<DVec2>) {
+    let Some(level) = app.active_level() else { return };
+    let Some(top) = app.doc.level_above(level) else {
+        app.status = "A stair needs a level above this one.".into();
+        return;
+    };
+    let Some(type_id) = app.type_for(Category::Stairs) else { return };
+    let rail_type = app.type_for(Category::Railings);
+    let width = app
+        .doc
+        .family_type(type_id)
+        .map(|t| t.length_or("Minimum Run Width", 1000.0))
+        .unwrap_or(1000.0);
+    let Some(l) = stair_preview(app, &path) else { return };
+    let stair = Stair {
+        type_id,
+        base_level: level,
+        base_offset: 0.0,
+        top_level: top,
+        top_offset: 0.0,
+        path: l.path.clone(),
+        width,
+    };
+    let risers = l.risers;
+    app.transact("Create Stair", |doc| {
+        let id = doc.add_element(ElementData::Stair(stair));
+        if let Some(rt) = rail_type {
+            for path in hausit_model::stairs::stair_railing_paths(&l, width, 50.0) {
+                doc.add_element(ElementData::Railing(Railing {
+                    type_id: rt,
+                    level,
+                    base_offset: 0.0,
+                    path,
+                    host: id,
+                }));
+            }
+        }
+        Ok(id)
+    });
+    app.status = format!("Created a stair with {risers} risers and its railings.");
+}
+
+/// Finish for the Stair and Railing tools.
+pub fn finish_path_tool(app: &mut HausitApp) {
+    match &mut app.tool {
+        Tool::Stair { pts } if pts.len() >= 2 => {
+            let path = std::mem::take(pts);
+            create_stair(app, path);
+        }
+        Tool::Railing { pts } if pts.len() >= 2 => {
+            let path = std::mem::take(pts);
+            let Some(level) = app.active_level() else { return };
+            let Some(type_id) = app.type_for(Category::Railings) else { return };
+            app.transact("Create Railing", |doc| {
+                Ok(doc.add_element(ElementData::Railing(Railing {
+                    type_id,
+                    level,
+                    base_offset: 0.0,
+                    path,
+                    host: ElementId::INVALID,
+                })))
+            });
+        }
+        _ => app.status = "Click at least two points first.".into(),
+    }
 }
 
 fn new_footing(app: &HausitApp, type_id: ElementId, level: ElementId, p: DVec2) -> Footing {
@@ -1345,6 +1472,8 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::Column(c) => pts.push(c.point),
             ElementData::Framing(f) => pts.extend([f.start, f.end]),
             ElementData::Footing(f) => pts.push(f.point),
+            ElementData::Stair(s) => pts.extend(&s.path),
+            ElementData::Railing(r) => pts.extend(&r.path),
             ElementData::WallFooting(f) => {
                 if let Some(w) = app.doc.element(f.wall).and_then(|h| h.as_wall()) {
                     pts.extend([w.start, w.end]);
@@ -1703,6 +1832,9 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
     }
     if enter && app.tool.is_sketch() && app.options.typed.is_empty() {
         finish_sketch(app);
+    }
+    if enter && matches!(app.tool, Tool::Stair { .. } | Tool::Railing { .. }) && app.options.typed.is_empty() {
+        finish_path_tool(app);
     }
 
     // While drawing, digits go to the typed-length box.

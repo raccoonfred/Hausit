@@ -184,7 +184,8 @@ fn type_properties(app: &mut HausitApp, ctx: &Context) {
                             length_edit(ui, &format!("tp-{}-{name}", ft.id), v, unit);
                         }
                         ParamValue::Integer(i) => {
-                            ui.add(egui::DragValue::new(i).range(1..=2));
+                            let range = if name == "Leaves" { 1..=2 } else { 0..=20 };
+                            ui.add(egui::DragValue::new(i).range(range));
                         }
                         ParamValue::Text(s) => {
                             ui.text_edit_singleline(s);

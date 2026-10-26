@@ -22,6 +22,7 @@ pub mod materials;
 pub mod params;
 pub mod rooms;
 pub mod schedule;
+pub mod stairs;
 pub mod styles;
 pub mod template;
 pub mod view;

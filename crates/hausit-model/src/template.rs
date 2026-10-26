@@ -269,6 +269,65 @@ pub fn load_default_types(doc: &mut Document) {
         p.shift_remove("Length");
         p
     };
+    let stair = |riser: f64, tread: f64, width: f64, depth: f64, landing: f64, monolithic: bool, material: &str| {
+        let mut p = with(
+            Stairs,
+            &[
+                ("Maximum Riser Height", len(riser)),
+                ("Minimum Tread Depth", len(tread)),
+                ("Minimum Run Width", len(width)),
+                ("Structural Depth", len(depth)),
+                ("Landing Thickness", len(landing)),
+            ],
+        );
+        p.insert("Monolithic".into(), ParamValue::Bool(monolithic));
+        p.insert("Material".into(), text(material));
+        p
+    };
+    doc.add_type(
+        Stairs,
+        "Cast-In-Place Stair",
+        "Concrete - 180 max riser 280 tread",
+        stair(180.0, 280.0, 1000.0, 150.0, 200.0, true, "Concrete, Cast-in-Place"),
+    );
+    doc.add_type(
+        Stairs,
+        "Assembled Stair",
+        "Timber - 220 max riser 220 tread",
+        stair(220.0, 220.0, 900.0, 32.0, 50.0, false, "Timber - Softwood"),
+    );
+    doc.add_type(
+        Stairs,
+        "Assembled Stair",
+        "Steel - 190 max riser 250 tread",
+        stair(190.0, 250.0, 1000.0, 40.0, 60.0, false, "Steel"),
+    );
+    let railing = |height: f64, spacing: f64, baluster: f64, rail: f64, mid: i64| {
+        let mut p = with(
+            Railings,
+            &[
+                ("Railing Height", len(height)),
+                ("Baluster Spacing", len(spacing)),
+                ("Baluster Size", len(baluster)),
+                ("Rail Size", len(rail)),
+            ],
+        );
+        p.insert("Intermediate Rails".into(), ParamValue::Integer(mid));
+        p
+    };
+    doc.add_type(
+        Railings,
+        "Railing",
+        "Handrail - 900mm Balusters",
+        railing(900.0, 120.0, 25.0, 50.0, 0),
+    );
+    doc.add_type(
+        Railings,
+        "Railing",
+        "Guardrail - 1100mm Industrial",
+        railing(1100.0, 1500.0, 50.0, 48.0, 2),
+    );
+
     let wf = crate::family::WALL_FOUNDATION;
     doc.add_type(StructuralFoundations, wf, "Bearing Footing - 600 x 300", strip(600.0, 300.0));
     doc.add_type(StructuralFoundations, wf, "Bearing Footing - 900 x 400", strip(900.0, 400.0));
@@ -656,6 +715,86 @@ pub fn industrial_sample() -> Document {
             w.attached_top = vec![roof];
         }
     }
+    // A mezzanine in the last bay, on light columns and beams, reached by a
+    // steel stair with guardrails along its open edges.
+    let mezz = add_level_with_plan(&mut doc, "Mezzanine", 3000.0);
+    let light = t(&doc, Category::StructuralColumns, "IS 203x203");
+    let x0 = (bays - 1) as f64 * bay;
+    let (mx1, my0, my1) = (hi - 75.0, 9000.0, yhi - 75.0);
+    for x in [x0, bays as f64 * bay] {
+        doc.add_element(ElementData::Column(Column {
+            type_id: light,
+            point: DVec2::new(x, my0),
+            rotation: 0.0,
+            base_level: l1,
+            base_offset: 0.0,
+            top_level: mezz,
+            top_offset: 0.0,
+        }));
+    }
+    for (a, b) in [
+        (DVec2::new(x0, my0), DVec2::new(bays as f64 * bay, my0)),
+        (DVec2::new(x0, my0), DVec2::new(x0, span)),
+        (DVec2::new(bays as f64 * bay, my0), DVec2::new(bays as f64 * bay, span)),
+    ] {
+        doc.add_element(beam(eaves_beam, FramingKind::Beam, mezz, a, b, -150.0, -150.0));
+    }
+    let deck = t(&doc, Category::Floors, "Generic 150mm");
+    doc.add_element(ElementData::Floor(Floor {
+        type_id: deck,
+        level: mezz,
+        boundary: vec![
+            DVec2::new(x0 - 100.0, my0 - 100.0),
+            DVec2::new(mx1, my0 - 100.0),
+            DVec2::new(mx1, my1),
+            DVec2::new(x0 - 100.0, my1),
+        ],
+        height_offset: 0.0,
+        room_bounding: true,
+        structural: true,
+    }));
+    let steel_stair = t(&doc, Category::Stairs, "Steel - 190 max riser 250 tread");
+    let guard = t(&doc, Category::Railings, "Guardrail - 1100mm Industrial");
+    let stair_y = my0 + 600.0;
+    let run = 15.0 * 250.0;
+    let stair_id = doc.add_element(ElementData::Stair(Stair {
+        type_id: steel_stair,
+        base_level: l1,
+        base_offset: 0.0,
+        top_level: mezz,
+        top_offset: 0.0,
+        path: vec![DVec2::new(x0 - 100.0 - run, stair_y), DVec2::new(x0 - 100.0, stair_y)],
+        width: 1000.0,
+    }));
+    if let Some(l) = crate::stairs::stair_layout(&doc, stair_id) {
+        for path in crate::stairs::stair_railing_paths(&l, 1000.0, 50.0) {
+            doc.add_element(ElementData::Railing(Railing {
+                type_id: guard,
+                level: l1,
+                base_offset: 0.0,
+                path,
+                host: stair_id,
+            }));
+        }
+    }
+    let edge = x0 - 50.0;
+    for path in [
+        vec![
+            DVec2::new(mx1 - 50.0, my0 - 50.0),
+            DVec2::new(edge, my0 - 50.0),
+            DVec2::new(edge, stair_y - 500.0),
+        ],
+        vec![DVec2::new(edge, stair_y + 500.0), DVec2::new(edge, my1 - 50.0)],
+    ] {
+        doc.add_element(ElementData::Railing(Railing {
+            type_id: guard,
+            level: mezz,
+            base_offset: 0.0,
+            path,
+            host: ElementId::INVALID,
+        }));
+    }
+
     let door = t(&doc, Category::Doors, "0915 x 2134mm");
     doc.add_element(ElementData::Door(HostedOpening {
         type_id: door,
@@ -672,6 +811,15 @@ pub fn industrial_sample() -> Document {
             start: DVec2::new(bay * 1.5, -3000.0),
             end: DVec2::new(bay * 1.5, span + 3000.0),
             far_clip: 20000.0,
+        },
+    );
+    // Along the stair, looking at the mezzanine.
+    doc.add_view(
+        &doc.unique_view_name("Section"),
+        ViewKind::Section {
+            start: DVec2::new(x0 - 6000.0, stair_y),
+            end: DVec2::new(hi + 2000.0, stair_y),
+            far_clip: 8000.0,
         },
     );
     doc.add_view(

@@ -124,6 +124,23 @@ pub fn default_type_params(category: Category) -> TypeParams {
             p.insert("Thickness".into(), len(500.0));
             p.insert("Structural Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
         }
+        Category::Stairs => {
+            p.insert("Maximum Riser Height".into(), len(180.0));
+            p.insert("Minimum Tread Depth".into(), len(280.0));
+            p.insert("Minimum Run Width".into(), len(1000.0));
+            p.insert("Structural Depth".into(), len(150.0));
+            p.insert("Landing Thickness".into(), len(200.0));
+            p.insert("Monolithic".into(), ParamValue::Bool(true));
+            p.insert("Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
+        }
+        Category::Railings => {
+            p.insert("Railing Height".into(), len(1000.0));
+            p.insert("Baluster Spacing".into(), len(120.0));
+            p.insert("Baluster Size".into(), len(25.0));
+            p.insert("Rail Size".into(), len(50.0));
+            p.insert("Intermediate Rails".into(), ParamValue::Integer(0));
+            p.insert("Material".into(), ParamValue::Text("Steel".into()));
+        }
         Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => {}
     }
     p.insert("Type Mark".into(), ParamValue::Text(String::new()));

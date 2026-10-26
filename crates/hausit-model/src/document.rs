@@ -183,6 +183,8 @@ impl Document {
                     ElementData::Framing(f) => f.level == id,
                     ElementData::Footing(f) => f.level == id,
                     ElementData::WallFooting(f) => f.wall == id,
+                    ElementData::Stair(s) => s.base_level == id,
+                    ElementData::Railing(r) => r.level == id || r.host == id,
                     ElementData::Room(r) => r.level == id,
                     ElementData::RoomSeparation(l) => l.level == id,
                     // Dimensions go with their view or any element they measure.
@@ -245,6 +247,15 @@ impl Document {
         Ok(all)
     }
 
+    /// Railings hosted by stairs among `ids` that are not in `ids` themselves.
+    fn stair_railings(&self, ids: &[ElementId]) -> Vec<ElementId> {
+        self.elements
+            .values()
+            .filter(|e| matches!(&e.data, ElementData::Railing(r) if ids.contains(&r.host)) && !ids.contains(&e.id))
+            .map(|e| e.id)
+            .collect()
+    }
+
     /// Moves elements by `delta` in plan. Hosted openings move with walls.
     pub fn translate(&mut self, ids: &[ElementId], delta: DVec2) {
         for id in ids {
@@ -266,6 +277,8 @@ impl Document {
                     f.end += delta;
                 }
                 ElementData::Footing(f) => f.point += delta,
+                ElementData::Stair(s) => s.path.iter_mut().for_each(|p| *p += delta),
+                ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
                 ElementData::Room(r) => r.point += delta,
                 ElementData::RoomSeparation(l) => {
                     l.start += delta;
@@ -280,6 +293,13 @@ impl Document {
                     }
                 }
                 ElementData::Door(_) | ElementData::Window(_) | ElementData::WallFooting(_) | ElementData::Level(_) => {}
+            }
+        }
+        // Railings on a stair move with it.
+        let riders = self.stair_railings(ids);
+        for id in riders {
+            if let Some(ElementData::Railing(r)) = self.elements.get_mut(&id).map(|e| &mut e.data) {
+                r.path.iter_mut().for_each(|p| *p += delta);
             }
         }
         // Openings selected without their host slide along it.
@@ -305,7 +325,7 @@ impl Document {
         let mut map = std::collections::HashMap::new();
         let mut new_ids = Vec::new();
         // Hosts first so openings and wall foundations can be re-hosted.
-        let hosted = |e: &Element| e.category().is_hosted() || matches!(e.data, ElementData::WallFooting(_));
+        let hosted = |e: &Element| e.category().is_hosted() || matches!(e.data, ElementData::WallFooting(_) | ElementData::Railing(_));
         let mut order: Vec<ElementId> = ids
             .iter()
             .copied()
@@ -326,6 +346,8 @@ impl Document {
                     Some(w) => f.wall = *w,
                     None => continue,
                 },
+                // A railing copied without its stair becomes free-standing.
+                ElementData::Railing(r) if r.host.is_valid() => r.host = map.get(&r.host).copied().unwrap_or_default(),
                 ElementData::Room(r) => r.number = self.next_room_number(),
                 // Dimensions stay with the elements they measure.
                 ElementData::Dimension(_) => continue,
@@ -421,6 +443,10 @@ impl Document {
                     ft.point = f(ft.point);
                     ft.rotation = if mirror { 2.0 * angle - ft.rotation } else { ft.rotation + angle };
                 }
+                ElementData::Stair(s) => {
+                    s.path.iter_mut().for_each(|p| *p = f(*p));
+                }
+                ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p = f(*p)),
                 ElementData::Room(r) => r.point = f(r.point),
                 ElementData::RoomSeparation(l) => {
                     l.start = f(l.start);
@@ -437,6 +463,11 @@ impl Document {
                     }
                 }
                 ElementData::Door(_) | ElementData::Window(_) | ElementData::WallFooting(_) | ElementData::Level(_) => {}
+            }
+        }
+        for id in self.stair_railings(ids) {
+            if let Some(ElementData::Railing(r)) = self.elements.get_mut(&id).map(|e| &mut e.data) {
+                r.path.iter_mut().for_each(|p| *p = f(*p));
             }
         }
         for e in self.elements.values_mut() {

@@ -31,6 +31,8 @@ impl Element {
             ElementData::Framing(f) => Some(f.type_id),
             ElementData::Footing(f) => Some(f.type_id),
             ElementData::WallFooting(f) => Some(f.type_id),
+            ElementData::Stair(s) => Some(s.type_id),
+            ElementData::Railing(r) => Some(r.type_id),
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -49,6 +51,8 @@ impl Element {
             ElementData::Framing(f) => f.type_id = t,
             ElementData::Footing(f) => f.type_id = t,
             ElementData::WallFooting(f) => f.type_id = t,
+            ElementData::Stair(s) => s.type_id = t,
+            ElementData::Railing(r) => r.type_id = t,
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -92,6 +96,8 @@ pub enum ElementData {
     Framing(Framing),
     Footing(Footing),
     WallFooting(WallFooting),
+    Stair(Stair),
+    Railing(Railing),
     Room(Room),
     RoomSeparation(SketchedLine),
     Dimension(Dimension),
@@ -110,6 +116,8 @@ impl ElementData {
             ElementData::Column(_) => Category::StructuralColumns,
             ElementData::Framing(_) => Category::StructuralFraming,
             ElementData::Footing(_) | ElementData::WallFooting(_) => Category::StructuralFoundations,
+            ElementData::Stair(_) => Category::Stairs,
+            ElementData::Railing(_) => Category::Railings,
             ElementData::Room(_) => Category::Rooms,
             ElementData::RoomSeparation(_) => Category::RoomSeparation,
             ElementData::Dimension(_) => Category::Dimensions,
@@ -371,6 +379,36 @@ pub struct Footing {
 pub struct WallFooting {
     pub type_id: ElementId,
     pub wall: ElementId,
+}
+
+/// A stair between two levels, along a run path: straight runs joined by
+/// landings at each turn. Risers are spread evenly over the height.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Stair {
+    pub type_id: ElementId,
+    pub base_level: ElementId,
+    #[serde(default)]
+    pub base_offset: f64,
+    pub top_level: ElementId,
+    #[serde(default)]
+    pub top_offset: f64,
+    /// Centreline of the runs, from the first riser.
+    pub path: Vec<DVec2>,
+    /// Actual Run Width, mm.
+    pub width: f64,
+}
+
+/// A railing along a path. Railings hosted by a stair follow its slope.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Railing {
+    pub type_id: ElementId,
+    pub level: ElementId,
+    #[serde(default)]
+    pub base_offset: f64,
+    pub path: Vec<DVec2>,
+    /// The stair it sits on (`INVALID` when free-standing).
+    #[serde(default)]
+    pub host: ElementId,
 }
 
 /// A room, placed at a point; its boundary comes from the room-bounding

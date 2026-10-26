@@ -889,6 +889,28 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                 None => label_at(painter, xf.to_screen(p) + vec2(0.0, -18.0), "Not enclosed"),
             }
         }
+        Tool::Stair { pts } if !pts.is_empty() => {
+            let mut path = pts.clone();
+            path.push(p);
+            if let Some(l) = tools::stair_preview(app, &path) {
+                for piece in &l.pieces {
+                    let r: Vec<Pos2> = piece.outline.iter().map(|q| xf.to_screen(*q)).collect();
+                    painter.add(Shape::closed_line(r, Stroke::new(1.0, PREVIEW)));
+                }
+                let line: Vec<Pos2> = l.path.iter().map(|q| xf.to_screen(*q)).collect();
+                painter.add(Shape::line(line, Stroke::new(1.5, PREVIEW)));
+                label_at(
+                    painter,
+                    xf.to_screen(p) + vec2(0.0, -18.0),
+                    &format!("{} risers created, {} remaining", l.placed, l.risers - l.placed),
+                );
+            }
+        }
+        Tool::Railing { pts } if !pts.is_empty() => {
+            let mut line: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
+            line.push(xf.to_screen(p));
+            painter.add(Shape::line(line, Stroke::new(1.5, PREVIEW)));
+        }
         Tool::Column | Tool::Footing => {
             let cat = app.tool.category().unwrap_or(Category::StructuralColumns);
             let Some(t) = app.type_for(cat).and_then(|t| app.doc.family_type(t)) else {

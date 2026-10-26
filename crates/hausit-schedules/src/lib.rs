@@ -84,7 +84,8 @@ fn cell(doc: &Document, id: ElementId, field: ScheduleField, unit: LengthUnit) -
             number: Some(1.0),
         },
         F::Level => from_param(match e.data {
-            ElementData::Roof(_) | ElementData::Column(_) => "Base Level",
+            ElementData::Roof(_) | ElementData::Column(_) | ElementData::Stair(_) | ElementData::Railing(_) => "Base Level",
+            ElementData::Framing(_) => "Reference Level",
             _ => "Level",
         }),
         F::Name => from_param("Name"),

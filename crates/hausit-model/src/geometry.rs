@@ -214,6 +214,8 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             let (outline, z0, z1) = foundation_extent(doc, id)?;
             vec![Part::prism(Material::Default, Prism::new(outline, z0, z1))]
         }
+        ElementData::Stair(_) => stair_parts(doc, id)?,
+        ElementData::Railing(r) => railing_parts(doc, id, r),
         ElementData::Level(_)
         | ElementData::Grid(_)
         | ElementData::Room(_)
@@ -707,6 +709,99 @@ pub fn sweep(profile: &[DVec2], a: DVec3, b: DVec3) -> Vec<Face> {
     faces
 }
 
+// ----- stairs and railings --------------------------------------------------
+
+fn stair_parts(doc: &Document, id: ElementId) -> Option<Vec<Part>> {
+    let l = crate::stairs::stair_layout(doc, id)?;
+    let rules = crate::stairs::StairRules::of(doc.type_of(id));
+    Some(
+        l.pieces
+            .iter()
+            .map(|p| {
+                let depth = if p.landing {
+                    rules.landing_thickness
+                } else if rules.monolithic {
+                    rules.structural_depth + l.riser
+                } else {
+                    rules.structural_depth
+                };
+                let z0 = (p.z_top - depth.max(1.0)).max(l.z0.min(p.z_top - 1.0));
+                Part::prism(Material::Default, Prism::new(p.outline.clone(), z0, p.z_top))
+            })
+            .collect(),
+    )
+}
+
+fn railing_parts(doc: &Document, id: ElementId, r: &Railing) -> Vec<Part> {
+    use crate::stairs::{RailingBase, RailingRules};
+    let rules = RailingRules::of(doc.type_of(id));
+    let base = RailingBase::of(doc, r);
+    let mut parts = Vec::new();
+    // Sample the path so rails follow the stair's pitch through turns.
+    let mut pts: Vec<DVec2> = Vec::new();
+    for w in r.path.windows(2) {
+        let n = (w[0].distance(w[1]) / 250.0).ceil().max(1.0) as usize;
+        for k in 0..n {
+            pts.push(w[0].lerp(w[1], k as f64 / n as f64));
+        }
+    }
+    pts.extend(r.path.last());
+    let rail = |size: f64, frac: f64, parts: &mut Vec<Part>| {
+        let h = size / 2.0;
+        let profile = [DVec2::new(-h, -h), DVec2::new(h, -h), DVec2::new(h, h), DVec2::new(-h, h)];
+        for w in pts.windows(2) {
+            let z = |p: DVec2| base.pitch(p) + rules.height * frac - h;
+            let (a, b) = (DVec3::new(w[0].x, w[0].y, z(w[0])), DVec3::new(w[1].x, w[1].y, z(w[1])));
+            if a.distance(b) > EPS {
+                parts.push(Part {
+                    material: Material::Default,
+                    shape: Shape::Faces(sweep(&profile, a, b)),
+                });
+            }
+        }
+    };
+    rail(rules.rail, 1.0, &mut parts);
+    for k in 1..=rules.mid_rails {
+        rail(rules.rail * 0.6, k as f64 / (rules.mid_rails + 1) as f64, &mut parts);
+    }
+    // Balusters (posts at the ends), standing on the walking surface.
+    let total: f64 = r.path.windows(2).map(|w| w[0].distance(w[1])).sum();
+    let count = (total / rules.spacing).floor() as usize;
+    let mut stations: Vec<f64> = (0..=count).map(|k| k as f64 * total / count.max(1) as f64).collect();
+    stations.dedup_by(|a, b| (*a - *b).abs() < 1.0);
+    for s in stations {
+        let Some(p) = point_along(&r.path, s) else { continue };
+        let b = rules.baluster / 2.0;
+        let sq = vec![
+            p + DVec2::new(-b, -b),
+            p + DVec2::new(b, -b),
+            p + DVec2::new(b, b),
+            p + DVec2::new(-b, b),
+        ];
+        let (z0, z1) = (base.surface(p), base.pitch(p) + rules.height - rules.rail);
+        if z1 - z0 > EPS {
+            parts.push(Part::prism(Material::Default, Prism::new(sq, z0, z1)));
+        }
+    }
+    parts
+}
+
+/// The point `s` along a polyline.
+pub fn point_along(path: &[DVec2], mut s: f64) -> Option<DVec2> {
+    for w in path.windows(2) {
+        let len = w[0].distance(w[1]);
+        if s <= len + 1e-6 {
+            return Some(if len > 0.0 {
+                w[0].lerp(w[1], (s / len).clamp(0.0, 1.0))
+            } else {
+                w[0]
+            });
+        }
+        s -= len;
+    }
+    path.last().copied()
+}
+
 /// Plan outline and height range of an isolated or wall foundation. Both
 /// hang below their reference: a pad below its level (plus offset), a
 /// strip below the bottom of its wall.
@@ -1089,5 +1184,32 @@ mod tests {
         // half its width past each end of the wall.
         assert_eq!((z0, z1), (-725.0, -425.0));
         assert!((polygon_area(&outline).abs() - 600.0 * (w.length() + 600.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn stair_and_railings() {
+        let doc = crate::template::industrial_sample();
+        let stair = doc.elements_of(Category::Stairs).next().unwrap().id;
+        let g = element_geometry(&doc, stair).unwrap();
+        // 3000 mm at 190 max: 16 risers, so 15 treads, the last one at
+        // the mezzanine less one riser.
+        assert_eq!(g.parts.len(), 15);
+        let tops: Vec<f64> = g.parts.iter().map(|p| p.vertical_extent().unwrap().2).collect();
+        assert!((tops[14] - 3000.0 * 15.0 / 16.0).abs() < 1e-6, "{tops:?}");
+        // Its railings rise with it: the top rail is 1100 above the pitch
+        // line at both ends.
+        let rail = doc
+            .elements_of(Category::Railings)
+            .find(|e| matches!(&e.data, ElementData::Railing(r) if r.host == stair))
+            .unwrap();
+        let g = element_geometry(&doc, rail.id).unwrap();
+        let zmax = g
+            .parts
+            .iter()
+            .flat_map(|p| p.faces())
+            .flat_map(|f| f.pts)
+            .map(|p| p.z)
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!(zmax > 3000.0 + 1000.0 && zmax < 3000.0 + 1200.0, "top rail reaches {zmax}");
     }
 }

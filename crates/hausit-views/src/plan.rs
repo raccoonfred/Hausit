@@ -12,6 +12,7 @@ use hausit_model::geometry::{
     section_profile, Material, Shape,
 };
 use hausit_model::rooms::room_info;
+use hausit_model::stairs::{stair_layout, RailingBase, StairPiece};
 use hausit_model::{Category, DetailLevel, Document, ElementData, FramingKind, ParamValue, View};
 
 /// Paper height of tag text, mm.
@@ -287,6 +288,131 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    // Stairs: on the base level, treads up to the cut plane, a break line
+    // and the UP arrow; on the top level, the rest of the stair.
+    for e in doc.elements_of(Category::Stairs) {
+        let ElementData::Stair(st) = &e.data else { continue };
+        let Some(l) = stair_layout(doc, e.id) else { continue };
+        let base_cut = doc.level_elevation(st.base_level) + view.cut_height;
+        let lower = st.base_level == level;
+        let upper = st.top_level == level && !lower;
+        if !lower && !upper {
+            continue;
+        }
+        let stroke = pen(doc, Category::Stairs, false, view.scale);
+        let shown = |z: f64| if lower { z <= base_cut } else { z > base_cut };
+        let mut break_at: Option<&StairPiece> = None;
+        for (i, piece) in l.pieces.iter().enumerate() {
+            if shown(piece.z_top) {
+                dl.push(
+                    Prim::Polyline {
+                        pts: piece.outline.clone(),
+                        closed: true,
+                    },
+                    Some(stroke),
+                    None,
+                    Some(e.id),
+                );
+            }
+            let next_shown = l.pieces.get(i + 1).map(|p| shown(p.z_top));
+            if lower && shown(piece.z_top) && next_shown == Some(false) && break_at.is_none() {
+                break_at = l.pieces.get(i + 1);
+            }
+            if upper && !shown(piece.z_top) && next_shown == Some(true) && break_at.is_none() {
+                break_at = l.pieces.get(i + 1);
+            }
+        }
+        // Break line: a slanted line across the run where the plan cuts it.
+        if let Some(p) = break_at {
+            let along = (p.outline[1] - p.outline[0]).normalize_or_zero();
+            let (a, b) = p.front;
+            dl.line(
+                a - along * 150.0,
+                b + along * 350.0,
+                pen(doc, Category::Stairs, true, view.scale),
+                Some(e.id),
+            );
+        }
+        // Walking line with arrow, from the first riser up to the break.
+        let total: f64 = l.path.windows(2).map(|w| w[0].distance(w[1])).sum();
+        let stop = break_at.map(|p| l.station((p.front.0 + p.front.1) * 0.5)).unwrap_or(total);
+        if lower {
+            let mut pts = vec![l.path[0]];
+            let mut s = 0.0;
+            for w in l.path.windows(2) {
+                let len = w[0].distance(w[1]);
+                if s + len >= stop {
+                    pts.push(w[0].lerp(w[1], ((stop - s) / len.max(1e-9)).clamp(0.0, 1.0)));
+                    break;
+                }
+                pts.push(w[1]);
+                s += len;
+            }
+            arrow(&mut dl, &pts, scale, stroke, e.id);
+            dl.push(
+                Prim::Text {
+                    pos: l.path[0] - path_dir(&l.path, true) * 2.5 * scale,
+                    text: "UP".into(),
+                    height: 2.0 * scale,
+                    anchor: Anchor::Center,
+                    angle: 0.0,
+                },
+                None,
+                None,
+                Some(e.id),
+            );
+        } else {
+            let end = *l.path.last().unwrap();
+            dl.push(
+                Prim::Text {
+                    pos: end + path_dir(&l.path, false) * 2.5 * scale,
+                    text: "DN".into(),
+                    height: 2.0 * scale,
+                    anchor: Anchor::Center,
+                    angle: 0.0,
+                },
+                None,
+                None,
+                Some(e.id),
+            );
+        }
+    }
+
+    // Railings: free-standing ones on their level; stair railings where
+    // their stair is shown.
+    for e in doc.elements_of(Category::Railings) {
+        let ElementData::Railing(r) = &e.data else { continue };
+        let base = RailingBase::of(doc, r);
+        let stroke = pen(doc, Category::Railings, false, view.scale);
+        let host = doc.element(r.host).and_then(|h| match &h.data {
+            ElementData::Stair(s) => Some(s),
+            _ => None,
+        });
+        let show: Box<dyn Fn(DVec2) -> bool> = match host {
+            Some(s) => {
+                let base_cut = doc.level_elevation(s.base_level) + view.cut_height;
+                if s.base_level == level {
+                    Box::new(move |p| base.surface(p) <= base_cut)
+                } else if s.top_level == level {
+                    Box::new(move |p| base.surface(p) > base_cut)
+                } else {
+                    continue;
+                }
+            }
+            None if r.level == level => Box::new(|_| true),
+            None => continue,
+        };
+        for w in r.path.windows(2) {
+            let n = (w[0].distance(w[1]) / 100.0).ceil().max(1.0) as usize;
+            for k in 0..n {
+                let (a, b) = (w[0].lerp(w[1], k as f64 / n as f64), w[0].lerp(w[1], (k + 1) as f64 / n as f64));
+                if show((a + b) * 0.5) {
+                    dl.line(a, b, stroke, Some(e.id));
+                }
+            }
+        }
+    }
+
     // Doors and windows hosted by walls on this level.
     let mut tags: Vec<(Vec<DVec2>, String, DVec2, ElementId)> = Vec::new();
     for e in doc.elements() {
@@ -490,4 +616,33 @@ fn foundation_level(doc: &Document, id: ElementId) -> Option<ElementId> {
         ElementData::WallFooting(f) => doc.element(f.wall)?.as_wall().map(|w| w.base_level),
         _ => None,
     }
+}
+
+/// Direction of a path at its start (or end).
+fn path_dir(path: &[DVec2], start: bool) -> DVec2 {
+    let n = path.len();
+    let (a, b) = if start { (path[0], path[1]) } else { (path[n - 2], path[n - 1]) };
+    (b - a).normalize_or_zero()
+}
+
+/// A polyline with an open arrowhead at its end, sized on paper.
+fn arrow(dl: &mut DisplayList, pts: &[DVec2], scale: f64, stroke: Stroke, id: ElementId) {
+    if pts.len() < 2 {
+        return;
+    }
+    dl.push(
+        Prim::Polyline {
+            pts: pts.to_vec(),
+            closed: false,
+        },
+        Some(stroke),
+        None,
+        Some(id),
+    );
+    let tip = pts[pts.len() - 1];
+    let d = path_dir(pts, false);
+    let (len, half) = (2.5 * scale, 1.0 * scale);
+    let n = perp(d);
+    dl.line(tip, tip - d * len + n * half, stroke, Some(id));
+    dl.line(tip, tip - d * len - n * half, stroke, Some(id));
 }
