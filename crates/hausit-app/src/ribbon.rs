@@ -3,7 +3,7 @@
 use crate::app::{HausitApp, RibbonTab};
 use crate::icons::{self, Icon};
 use crate::theme::{CONTEXT_TAB, FILE_TAB, RIBBON_BG, TAB_BAR_BG};
-use crate::tools::{self, Tool};
+use crate::tools::{self, DrawShape, Tool};
 use egui::{vec2, Color32, RichText, Sense, Stroke, Ui};
 use hausit_model::{Category, ViewKind};
 
@@ -282,7 +282,16 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
         tool_button(app, ui, Icon::Window, "Window", "Window (WN)", Tool::Window);
         planned(ui, Icon::Planned, "Component", "Place a Component");
         planned(ui, Icon::Column, "Column", "Column: Architectural");
-        tool_button(app, ui, Icon::Roof, "Roof", "Roof by Footprint (RF)", Tool::Roof { pts: vec![] });
+        tool_button(
+            app,
+            ui,
+            Icon::Roof,
+            "Roof",
+            "Roof by Footprint (RF)",
+            Tool::Roof {
+                sketch: Default::default(),
+            },
+        );
         planned(ui, Icon::Planned, "Ceiling", "Ceiling");
         tool_button(
             app,
@@ -291,7 +300,7 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
             "Floor",
             "Floor: Architectural (FL)",
             Tool::Floor {
-                pts: vec![],
+                sketch: Default::default(),
                 structural: false,
             },
         );
@@ -338,7 +347,7 @@ fn structure(app: &mut HausitApp, ui: &mut Ui) {
             "Floor",
             "Floor: Structural",
             Tool::Floor {
-                pts: vec![],
+                sketch: Default::default(),
                 structural: true,
             },
         );
@@ -506,7 +515,37 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
             app.delete_selection();
         }
     });
+    draw_panel(app, ui);
     mode_panel(app, ui);
+}
+
+/// "Draw" panel of the contextual tab: how walls and sketch lines are
+/// entered.
+fn draw_panel(app: &mut HausitApp, ui: &mut Ui) {
+    let sketch = app.tool.is_sketch();
+    if !sketch && !matches!(app.tool, Tool::Wall { .. }) {
+        return;
+    }
+    panel(ui, "Draw", |ui| {
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 1.0;
+            let mode = if sketch {
+                &mut app.options.sketch_mode
+            } else {
+                &mut app.options.shape
+            };
+            let mut item = |ui: &mut Ui, m: DrawShape, label: &str| {
+                if ui.selectable_label(*mode == m, label).clicked() {
+                    *mode = m;
+                }
+            };
+            if sketch {
+                item(ui, DrawShape::PickWalls, "▣ Pick Walls");
+            }
+            item(ui, DrawShape::Line, "╱ Line");
+            item(ui, DrawShape::Rectangle, "▭ Rectangle");
+        });
+    });
 }
 
 /// "Mode" panel with Finish/Cancel while sketching, as in Revit.

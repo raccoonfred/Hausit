@@ -6,6 +6,7 @@
 
 pub mod geom;
 pub mod id;
+pub mod skeleton;
 pub mod units;
 
 pub use geom::{Aabb, Plane};

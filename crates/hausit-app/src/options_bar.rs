@@ -4,7 +4,7 @@ use crate::app::HausitApp;
 use crate::tools::{DrawShape, Tool};
 use egui::{Color32, RichText, Ui};
 use hausit_core::{format_length, parse_length, ElementId};
-use hausit_model::{LocationLine, RoofShape};
+use hausit_model::LocationLine;
 
 pub fn length_edit(ui: &mut Ui, id: &str, value: &mut f64, unit: hausit_core::LengthUnit) -> bool {
     let key = egui::Id::unique(("len_edit", id));
@@ -58,27 +58,29 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                             }
                         });
                         ui.checkbox(&mut app.options.chain, "Chain");
-                        draw_shape(app, ui);
+                        ui.separator();
+                        ui.label(RichText::new("Space flips the exterior side").color(Color32::DARK_GRAY));
                     }
                     Tool::Floor { .. } => {
-                        draw_shape(app, ui);
+                        if app.options.sketch_mode == DrawShape::Line {
+                            ui.checkbox(&mut app.options.chain, "Chain");
+                        }
                         finish_cancel(app, ui);
                     }
                     Tool::Roof { .. } => {
+                        ui.checkbox(&mut app.options.defines_slope, "Defines slope");
                         ui.label("Slope:");
                         ui.add(egui::DragValue::new(&mut app.options.roof_slope).range(0.0..=75.0).suffix("°").speed(0.5));
-                        ui.label("Overhang:");
-                        length_edit(ui, "roof_ov", &mut app.options.roof_overhang, unit);
-                        egui::ComboBox::from_id_salt("roof_shape").selected_text(app.options.roof_shape.label()).width(200.0).show_ui(ui, |ui| {
-                            for s in RoofShape::ALL {
-                                ui.selectable_value(&mut app.options.roof_shape, s, s.label());
-                            }
-                        });
-                        draw_shape(app, ui);
+                        if app.options.sketch_mode == DrawShape::PickWalls {
+                            ui.label("Overhang:");
+                            length_edit(ui, "roof_ov", &mut app.options.roof_overhang, unit);
+                        } else if app.options.sketch_mode == DrawShape::Line {
+                            ui.checkbox(&mut app.options.chain, "Chain");
+                        }
                         finish_cancel(app, ui);
                     }
                     Tool::Door | Tool::Window => {
-                        ui.label(RichText::new("Hover over a wall in plan. The side of the wall you click sets the swing side.").color(Color32::DARK_GRAY));
+                        ui.label(RichText::new("Hover over a wall in plan. The side you click sets the swing side; Space flips the hand.").color(Color32::DARK_GRAY));
                     }
                     Tool::Move { .. } | Tool::Copy { .. } => {
                         ui.label(RichText::new("Hold Shift to constrain to horizontal/vertical.").color(Color32::DARK_GRAY));
@@ -98,13 +100,6 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 }
             });
         });
-}
-
-fn draw_shape(app: &mut HausitApp, ui: &mut Ui) {
-    ui.separator();
-    ui.label("Draw:");
-    ui.selectable_value(&mut app.options.shape, DrawShape::Line, "╱ Line");
-    ui.selectable_value(&mut app.options.shape, DrawShape::Rectangle, "▭ Rectangle");
 }
 
 fn finish_cancel(app: &mut HausitApp, ui: &mut Ui) {

@@ -43,6 +43,8 @@ pub struct Dialogs {
     pub confirm_close: bool,
     pub confirm_home: bool,
     pub allow_close: bool,
+    /// Lowest Level Notice for a new roof: (current level, level above).
+    pub roof_level: Option<(ElementId, ElementId)>,
 }
 
 impl Dialogs {
@@ -71,6 +73,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     units(app, ctx);
     revit_file(app, ctx);
     confirm(app, ctx);
+    roof_level(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;
@@ -465,6 +468,32 @@ fn confirm(app: &mut HausitApp, ctx: &Context) {
         } else {
             app.show_home = true;
         }
+    }
+}
+
+/// Revit asks to move a roof sketched in a lower level up to the next one.
+fn roof_level(app: &mut HausitApp, ctx: &Context) {
+    let Some((here, above)) = app.dialogs.roof_level else { return };
+    let mut choice = None;
+    window("Lowest Level Notice").show(ctx, |ui| {
+        ui.label(format!(
+            "The roof will be created on {}. Would you like to move it to {}?",
+            app.doc.level_name(here),
+            app.doc.level_name(above)
+        ));
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button("   Yes   ").clicked() {
+                choice = Some(above);
+            }
+            if ui.button("   No   ").clicked() {
+                choice = Some(here);
+            }
+        });
+    });
+    if let Some(level) = choice {
+        app.options.roof_level = level;
+        app.dialogs.roof_level = None;
     }
 }
 

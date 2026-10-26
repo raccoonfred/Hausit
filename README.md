@@ -36,10 +36,10 @@ and status bar.
 | Model | Levels, grids, walls (with automatic corner and T joins), floors, footprint roofs (flat, hip, gable), doors and windows hosted in walls |
 | Families and types | Wall, floor and roof types; door and window families with types. Type Properties dialog with Duplicate, Rename and editable type parameters |
 | Properties | Revit-style instance parameters (Base Constraint, Top Constraint, Unconnected Height, Sill Height, Mark, Comments…) with live Length/Area/Volume |
-| Views | Floor plans (cut plane, poché, door swings, window symbols, grid bubbles), elevations and sections (with level heads and cut elements), orthographic 3D with orbit and view presets. Wireframe, Hidden Line, Shaded and Consistent Colors styles |
-| Tools | Wall (line or rectangle, chain, location line, typed lengths), Door, Window, Floor and Roof sketches with Finish/Cancel, Level, Grid, Section, Move, Copy, Delete, Undo/Redo |
+| Views | Floor plans (cut plane, poché, door swings, window symbols, grid bubbles), elevations and sections (with level heads and cut elements), orthographic 3D with a Revit ViewCube (faces, edges, corners, compass, Home, roll arrows, drag to orbit). Wireframe, Hidden Line, Shaded and Consistent Colors styles |
+| Tools | Wall (line or rectangle, chain, location line, typed lengths, Space to flip), Door, Window (Space flips the hand), Floor and Roof by Footprint in sketch mode (Pick Walls, Line, Rectangle, Defines Slope, overhang, Lowest Level Notice; hips, valleys and gables on any footprint shape), Level, Grid, Section, Move, Copy, Delete, Undo/Redo. In plan, selected walls show end grips, and selected elements can be dragged |
 | Selection | Click, Ctrl/Shift to add/remove, window (left→right) and crossing (right→left) selection, pre-highlight on hover |
-| Snapping | Endpoints, midpoints, intersections, nearest, and horizontal/vertical alignment |
+| Snapping | Endpoints, midpoints, intersections, perpendicular, nearest, dashed alignment lines, 15° angle and zoom-based length increments, with Revit's snap glyphs and tooltips. Temporary dimensions show length and angle |
 | Schedules | Door, window, wall, floor and roof schedules with field selection, sorting, grouping, grand totals and CSV export |
 | Files | Native `.hausit` project format (versioned JSON) |
 | Revit files | `.rvt/.rfa/.rte/.rft` files can be opened to show the Revit version, build and preview image. See below |

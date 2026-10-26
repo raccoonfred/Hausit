@@ -207,8 +207,9 @@ impl RoofShape {
     }
 }
 
-/// A footprint roof. Sloped shapes currently require a rectangular
-/// footprint; other footprints are built flat.
+/// A footprint roof (Revit's Roof by Footprint). Each footprint edge can
+/// define slope; the roof faces come from the straight skeleton, so any
+/// simple footprint gets proper hips, valleys and gables.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Roof {
     pub type_id: ElementId,
@@ -220,6 +221,34 @@ pub struct Roof {
     pub slope: f64,
     #[serde(default)]
     pub shape: RoofShape,
+    /// "Defines Slope" per footprint edge (edge i runs from point i to
+    /// i + 1). Empty: derived from `shape`.
+    #[serde(default)]
+    pub defines_slope: Vec<bool>,
+}
+
+impl Roof {
+    /// Which footprint edges define slope.
+    pub fn edge_slopes(&self) -> Vec<bool> {
+        let n = self.footprint.len();
+        if self.defines_slope.len() == n {
+            return self.defines_slope.clone();
+        }
+        match self.shape {
+            RoofShape::Flat => vec![false; n],
+            RoofShape::Hip => vec![true; n],
+            RoofShape::Gable if n == 4 => {
+                let len = |i: usize| self.footprint[i].distance(self.footprint[(i + 1) % 4]);
+                let even_long = len(0) + len(2) >= len(1) + len(3);
+                (0..4).map(|i| (i % 2 == 0) == even_long).collect()
+            }
+            RoofShape::Gable => vec![true; n],
+        }
+    }
+
+    pub fn is_sloped(&self) -> bool {
+        self.slope > 0.0 && self.edge_slopes().iter().any(|b| *b)
+    }
 }
 
 /// A door or window hosted by a wall.

@@ -10,6 +10,8 @@ pub const CONTEXT_TAB: Color32 = Color32::from_rgb(96, 168, 74);
 pub const SELECT: Color32 = Color32::from_rgb(0, 90, 255);
 pub const HOVER: Color32 = Color32::from_rgb(40, 140, 255);
 pub const PREVIEW: Color32 = Color32::from_rgb(0, 120, 230);
+/// Revit draws sketch lines in magenta.
+pub const SKETCH: Color32 = Color32::from_rgb(200, 0, 200);
 pub const SNAP: Color32 = Color32::from_rgb(220, 120, 0);
 pub const CANVAS_BG: Color32 = Color32::WHITE;
 pub const HEADER_BG: Color32 = Color32::from_rgb(222, 226, 231);

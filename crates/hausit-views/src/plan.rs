@@ -3,13 +3,14 @@
 //! symbols, grids, and section/elevation marks.
 
 use crate::annotate::{grid_bubble, view_marks};
-use crate::{DisplayList, Prim, Rgba, Stroke, CUT_FILL, HEAVY, MEDIUM, THIN};
+use crate::{DisplayList, Prim, Rgba, Stroke, HEAVY, MEDIUM, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, ElementId};
 use hausit_model::geometry::{element_geometry, opening_frame, roof_plan_lines, Material, Shape};
 use hausit_model::{Category, Document, ElementData, View};
 
-const GLASS: Rgba = [80, 150, 220, 255];
+/// Revit draws glazing in plan as thin black lines.
+const GLASS: Rgba = [0, 0, 0, 255];
 
 pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList {
     let mut dl = DisplayList::default();
@@ -173,7 +174,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 dl.line(a + n * off, b + n * off, THIN, Some(e.id));
             }
             for off in [25.0, -25.0] {
-                dl.line(a + n * off, b + n * off, Stroke::new(1.4, GLASS), Some(e.id));
+                dl.line(a + n * off, b + n * off, Stroke::new(1.0, GLASS), Some(e.id));
             }
             dl.line(a + n * half_t, a - n * half_t, MEDIUM, Some(e.id));
             dl.line(b + n * half_t, b - n * half_t, MEDIUM, Some(e.id));
@@ -205,4 +206,5 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     dl
 }
 
-const CUT_FILL_LIGHT: Rgba = [CUT_FILL[0] + 104, CUT_FILL[1] + 104, CUT_FILL[2] + 104, 255];
+/// Generic walls have no cut pattern in Revit: white inside heavy outlines.
+const CUT_FILL_LIGHT: Rgba = [255, 255, 255, 255];

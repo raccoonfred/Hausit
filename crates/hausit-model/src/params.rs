@@ -258,7 +258,10 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
             ElementData::Roof(r) => match (name, value) {
                 ("Base Level", V::Element(l)) if l.is_valid() => r.level = l,
                 ("Base Offset From Level", V::Length(v)) => r.base_offset = v,
-                ("Roof Shape", V::Choice(i)) if i < RoofShape::ALL.len() => r.shape = RoofShape::ALL[i],
+                ("Roof Shape", V::Choice(i)) if i < RoofShape::ALL.len() => {
+                    r.shape = RoofShape::ALL[i];
+                    r.defines_slope.clear();
+                }
                 ("Slope", V::Angle(a)) if (0.0..80.0).contains(&a) => r.slope = a,
                 _ => return Err(bad()),
             },

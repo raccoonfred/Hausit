@@ -19,7 +19,8 @@ use hausit_model::{Document, View, ViewKind};
 pub type Rgba = [u8; 4];
 
 pub const BLACK: Rgba = [0, 0, 0, 255];
-pub const CUT_FILL: Rgba = [96, 96, 96, 255];
+/// Section cut caps: a light grey, close to Revit's unpatterned cuts.
+pub const CUT_FILL: Rgba = [214, 214, 214, 255];
 pub const GRID_COLOR: Rgba = [40, 40, 40, 255];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

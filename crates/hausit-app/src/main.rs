@@ -15,6 +15,7 @@ mod ribbon;
 mod schedule_view;
 mod theme;
 mod tools;
+mod viewcube;
 
 #[derive(Clone, Default)]
 struct Args {

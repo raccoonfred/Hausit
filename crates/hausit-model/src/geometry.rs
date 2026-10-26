@@ -7,7 +7,8 @@
 use crate::category::Category;
 use crate::document::Document;
 use crate::element::*;
-use hausit_core::geom::{clip_polygon_2d, cross2, line_intersection, perp, polygon_area, polygon_normal};
+use hausit_core::geom::{clip_polygon_2d, cross2, distance_to_segment, line_intersection, perp, polygon_area, polygon_normal};
+use hausit_core::skeleton::{straight_skeleton, Skeleton};
 use hausit_core::{Aabb, DVec2, DVec3, ElementId, EPS, JOIN_TOLERANCE};
 
 /// A plan polygon extruded from `z0` to `z1`. Footprint is counter-clockwise.
@@ -443,45 +444,39 @@ fn opening_parts(doc: &Document, id: ElementId, _o: &HostedOpening, door: bool) 
 
 // ----- roofs ----------------------------------------------------------------
 
-/// Local frame of a rectangular footprint: origin corner, long axis, short
-/// axis, length, width. `None` if the footprint is not a rectangle.
-fn rectangle_frame(fp: &[DVec2]) -> Option<(DVec2, DVec2, DVec2, f64, f64)> {
-    if fp.len() != 4 {
+fn roof_skeleton(r: &Roof) -> Option<Skeleton> {
+    if !r.is_sloped() || r.footprint.len() < 3 {
         return None;
     }
-    let e: Vec<DVec2> = (0..4).map(|i| fp[(i + 1) % 4] - fp[i]).collect();
-    for i in 0..4 {
-        let (a, b) = (e[i].normalize_or_zero(), e[(i + 1) % 4].normalize_or_zero());
-        if a.dot(b).abs() > 1e-6 || e[i].length() < EPS {
-            return None;
-        }
-    }
-    let (l0, l1) = (e[0].length(), e[1].length());
-    if l0 >= l1 {
-        Some((fp[0], e[0] / l0, e[1] / l1, l0, l1))
-    } else {
-        Some((fp[1], e[1] / l1, -e[0] / l0, l1, l0))
-    }
+    let w: Vec<f64> = r.edge_slopes().iter().map(|s| if *s { 1.0 } else { 0.0 }).collect();
+    straight_skeleton(&r.footprint, &w)
 }
 
-/// Lines drawn in plan for a roof: hips and ridge (eaves are the outline).
+/// Lines drawn in plan for a roof: hips, valleys and ridges (eaves are
+/// the outline).
 pub fn roof_plan_lines(r: &Roof) -> Vec<(DVec2, DVec2)> {
-    let Some((o, ux, uy, l, w)) = rectangle_frame(&r.footprint) else {
-        return vec![];
+    let Some(sk) = roof_skeleton(r) else { return vec![] };
+    let n = r.footprint.len();
+    let on_outline = |a: DVec2, b: DVec2| {
+        (0..n).any(|i| {
+            let (p, q) = (r.footprint[i], r.footprint[(i + 1) % n]);
+            distance_to_segment(a, p, q) < 1.0 && distance_to_segment(b, p, q) < 1.0
+        })
     };
-    if r.slope <= 0.0 {
-        return vec![];
-    }
-    let p = |x: f64, y: f64| o + ux * x + uy * y;
-    match r.shape {
-        RoofShape::Flat => vec![],
-        RoofShape::Gable => vec![(p(0.0, w / 2.0), p(l, w / 2.0))],
-        RoofShape::Hip => {
-            let h = w / 2.0;
-            let (r0, r1) = (p(h, h), p(l - h, h));
-            vec![(p(0.0, 0.0), r0), (p(0.0, w), r0), (p(l, 0.0), r1), (p(l, w), r1), (r0, r1)]
+    let mut out: Vec<(DVec2, DVec2)> = Vec::new();
+    for (a, b, _, _) in &sk.arcs {
+        let (a, b) = (a.truncate(), b.truncate());
+        if a.distance(b) < 1.0 || on_outline(a, b) {
+            continue;
+        }
+        let dup = out
+            .iter()
+            .any(|(p, q)| (p.distance(a) < 1.0 && q.distance(b) < 1.0) || (p.distance(b) < 1.0 && q.distance(a) < 1.0));
+        if !dup {
+            out.push((a, b));
         }
     }
+    out
 }
 
 fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {
@@ -490,74 +485,54 @@ fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {
     }
     let t = doc.type_of(id).map(|t| t.thickness()).unwrap_or(200.0);
     let zb = doc.level_elevation(r.level) + r.base_offset;
-    let frame = rectangle_frame(&r.footprint);
-    let (Some((o, ux, uy, l, w)), true) = (frame, r.shape != RoofShape::Flat && r.slope > 0.0) else {
+    let Some(sk) = roof_skeleton(r) else {
         return vec![Part::prism(Material::Default, Prism::new(r.footprint.clone(), zb, zb + t))];
     };
     let tan = r.slope.to_radians().tan();
+    // Plumb rafter cut: the vertical thickness of a sloped slab.
     let hv = t / r.slope.to_radians().cos();
-    let rise = w / 2.0 * tan;
-    let p = |x: f64, y: f64, z: f64| {
-        let q = o + ux * x + uy * y;
-        DVec3::new(q.x, q.y, z)
-    };
-    let up = DVec3::Z;
+    let at = |p: DVec3, dz: f64| DVec3::new(p.x, p.y, zb + p.z * tan + dz);
+    let slopes = r.edge_slopes();
+    let n = r.footprint.len();
+    let ccw = polygon_area(&r.footprint) > 0.0;
     let mut faces = Vec::new();
-    let ridge_x = if r.shape == RoofShape::Hip { w / 2.0 } else { 0.0 };
-    let (zr, ze) = (zb + rise, zb);
-    for (dz, dir) in [(hv, up), (0.0, -up)] {
-        let e = [p(0.0, 0.0, ze + dz), p(l, 0.0, ze + dz), p(l, w, ze + dz), p(0.0, w, ze + dz)];
-        let r0 = p(ridge_x, w / 2.0, zr + dz);
-        let r1 = p(l - ridge_x, w / 2.0, zr + dz);
-        faces.push(
-            Face {
-                pts: vec![e[0], e[1], r1, r0],
-            }
-            .oriented(dir),
-        );
-        faces.push(
-            Face {
-                pts: vec![e[2], e[3], r0, r1],
-            }
-            .oriented(dir),
-        );
-        if r.shape == RoofShape::Hip {
-            faces.push(Face { pts: vec![e[1], e[2], r1] }.oriented(dir));
-            faces.push(Face { pts: vec![e[3], e[0], r0] }.oriented(dir));
-        }
-    }
-    let center = p(l / 2.0, w / 2.0, zb);
-    // Fascia along sloped eaves.
-    let eave_edges: Vec<((f64, f64), (f64, f64))> = match r.shape {
-        RoofShape::Hip => vec![
-            ((0.0, 0.0), (l, 0.0)),
-            ((l, 0.0), (l, w)),
-            ((l, w), (0.0, w)),
-            ((0.0, w), (0.0, 0.0)),
-        ],
-        _ => vec![((0.0, 0.0), (l, 0.0)), ((l, w), (0.0, w))],
-    };
-    for (a, b) in eave_edges {
-        let f = Face {
-            pts: vec![p(a.0, a.1, zb), p(b.0, b.1, zb), p(b.0, b.1, zb + hv), p(a.0, a.1, zb + hv)],
+    for f in &sk.faces {
+        let i = f.edge;
+        let (a, b) = (r.footprint[i], r.footprint[(i + 1) % n]);
+        let d = (b - a).normalize_or_zero();
+        let out = if ccw {
+            DVec3::new(d.y, -d.x, 0.0)
+        } else {
+            DVec3::new(-d.y, d.x, 0.0)
         };
-        let mid = (f.pts[0] + f.pts[1]) * 0.5;
-        faces.push(f.oriented(mid - center));
-    }
-    if r.shape == RoofShape::Gable {
-        for x in [0.0, l] {
-            let f = Face {
-                pts: vec![
-                    p(x, 0.0, zb),
-                    p(x, w / 2.0, zb + rise),
-                    p(x, w, zb),
-                    p(x, w, zb + hv),
-                    p(x, w / 2.0, zb + rise + hv),
-                    p(x, 0.0, zb + hv),
-                ],
-            };
-            let out = p(x, w / 2.0, zb) - center;
-            faces.push(f.oriented(out));
+        if slopes[i] {
+            faces.push(
+                Face {
+                    pts: f.pts.iter().map(|p| at(*p, 0.0)).collect(),
+                }
+                .oriented(-DVec3::Z),
+            );
+            faces.push(
+                Face {
+                    pts: f.pts.iter().map(|p| at(*p, hv)).collect(),
+                }
+                .oriented(DVec3::Z),
+            );
+            let (a3, b3) = (f.pts[0], f.pts[1]);
+            faces.push(
+                Face {
+                    pts: vec![at(a3, 0.0), at(b3, 0.0), at(b3, hv), at(a3, hv)],
+                }
+                .oriented(out),
+            );
+        } else {
+            // Gable end: the band between the underside and the top,
+            // following the roof profile from the edge's end back to its
+            // start.
+            let profile: Vec<DVec3> = f.pts[1..].iter().chain(std::iter::once(&f.pts[0])).copied().collect();
+            let mut pts: Vec<DVec3> = profile.iter().map(|p| at(*p, 0.0)).collect();
+            pts.extend(profile.iter().rev().map(|p| at(*p, hv)));
+            faces.push(Face { pts }.oriented(out));
         }
     }
     vec![Part {
@@ -606,9 +581,10 @@ mod tests {
         let roof = doc.elements_of(Category::Roofs).next().unwrap().id;
         let g = element_geometry(&doc, roof).unwrap();
         let faces = g.parts[0].faces();
+        // Top, underside and fascia for each of the four sloped edges.
         assert_eq!(faces.len(), 4 + 4 + 4);
-        for f in &faces[..4] {
-            assert!(f.normal().z > 0.0);
-        }
+        assert_eq!(faces.iter().filter(|f| f.normal().z > 0.3).count(), 4);
+        assert_eq!(faces.iter().filter(|f| f.normal().z < -0.3).count(), 4);
+        assert_eq!(faces.iter().filter(|f| f.normal().z.abs() < 1e-9).count(), 4);
     }
 }

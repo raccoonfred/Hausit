@@ -205,6 +205,7 @@ pub fn sample_project() -> Document {
         base_offset: 0.0,
         slope: 30.0,
         shape: RoofShape::Hip,
+        defines_slope: vec![],
     }));
 
     doc.add_view(

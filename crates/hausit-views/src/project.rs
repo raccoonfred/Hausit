@@ -13,14 +13,15 @@ use hausit_model::{Category, Document, View, VisualStyle};
 /// Base colour of each category in shaded views.
 pub fn category_color(cat: Category, material: Material) -> Rgba {
     match material {
-        Material::Glass => return [150, 200, 235, 150],
-        Material::Panel => return [168, 128, 88, 255],
+        Material::Glass => return [150, 196, 214, 140],
+        Material::Panel => return [186, 152, 112, 255],
         Material::Default => {}
     }
     match cat {
-        Category::Walls => [226, 222, 214, 255],
-        Category::Floors => [190, 190, 186, 255],
-        Category::Roofs => [176, 92, 72, 255],
+        // Revit's default materials shade to light neutral greys.
+        Category::Walls => [236, 236, 234, 255],
+        Category::Floors => [214, 214, 212, 255],
+        Category::Roofs => [196, 192, 186, 255],
         Category::Doors => [205, 205, 205, 255],
         Category::Windows => [235, 235, 235, 255],
         _ => [200, 200, 200, 255],
@@ -35,7 +36,7 @@ struct FaceData {
 
 pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
     let style = view.visual_style;
-    let light = (frame.up * 0.6 - frame.forward * 0.6 + frame.right * 0.3).normalize();
+    let light = (frame.up * 0.5 - frame.forward * 0.6 - frame.right * 0.45).normalize();
     let near = frame
         .depth_clip
         .map(|(near, _)| Plane::from_point_normal(frame.origin + frame.forward * near, frame.forward));
@@ -85,7 +86,7 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
                     }),
                     VisualStyle::ConsistentColors => Some(base),
                     VisualStyle::Shaded => {
-                        let k = 0.55 + 0.45 * n.dot(light).max(0.0);
+                        let k = 0.74 + 0.26 * n.dot(light).max(0.0);
                         Some([
                             (base[0] as f64 * k) as u8,
                             (base[1] as f64 * k) as u8,

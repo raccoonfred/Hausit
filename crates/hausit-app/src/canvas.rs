@@ -2,7 +2,7 @@
 //! selection, tool input and previews, and the view control bar.
 
 use crate::app::{Camera2D, HausitApp};
-use crate::theme::{c32, CANVAS_BG, HOVER, PREVIEW, SELECT, SNAP};
+use crate::theme::{c32, CANVAS_BG, HOVER, PREVIEW, SELECT, SKETCH, SNAP};
 use crate::tools::{self, DrawShape, SnapKind, Tool};
 use egui::{pos2, vec2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Ui};
 use hausit_core::geom::{distance_to_segment, perp, point_in_polygon, triangulate};
@@ -84,7 +84,13 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     app.hover = None;
     if let (Some(p), Tool::Modify) = (pointer, &app.tool) {
         // Tab cycles through overlapping elements, as in Revit.
-        let candidates = hit_candidates(&dl, &xf, p);
+        let mut candidates = hit_candidates(&dl, &xf, p);
+        // Model elements win over datums and view marks drawn over them.
+        candidates.sort_by_key(|id| match app.doc.element(*id).map(|e| e.category()) {
+            Some(Category::Grids | Category::Levels) => 1,
+            None => 2,
+            _ => 0,
+        });
         if candidates != app.pick_candidates {
             app.pick_candidates = candidates;
             app.pick_cycle = 0;
@@ -110,19 +116,27 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     let ctrl = ui.input(|i| i.modifiers.command);
     let raw = pointer.map(|p| xf.to_view(p));
     let mut snapped = raw;
-    let mut snap_kind = None;
+    let mut snap: Option<tools::Snap> = None;
     if let Some(p) = raw {
-        if is_plan && !matches!(app.tool, Tool::Modify | Tool::Door | Tool::Window) {
-            if let Some((q, k)) = tools::snap(app, p, xf.px(10.0)) {
-                snapped = Some(q);
-                snap_kind = Some(k);
-            }
-            if let (Some(anchor), None | Some(SnapKind::Nearest)) = (app.tool.anchor(), snap_kind) {
-                let rect_mode = app.options.shape == DrawShape::Rectangle;
-                if !rect_mode || !matches!(app.tool, Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. }) {
-                    snapped = Some(tools::align(anchor, snapped.unwrap(), xf.px(8.0), shift));
+        let mode = if app.tool.is_sketch() {
+            app.options.sketch_mode
+        } else {
+            app.options.shape
+        };
+        let drawing = !matches!(app.tool, Tool::Modify | Tool::Door | Tool::Window);
+        if is_plan && drawing && !(app.tool.is_sketch() && mode == DrawShape::PickWalls) {
+            snap = tools::snap(app, p, xf.px(10.0));
+            let weak = snap
+                .as_ref()
+                .map(|s| matches!(s.kind, SnapKind::Nearest | SnapKind::Alignment))
+                .unwrap_or(true);
+            let free_angle = mode == DrawShape::Rectangle && matches!(app.tool, Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. });
+            if let (Some(anchor), true, false) = (app.tool.anchor(), weak, free_angle) {
+                if let Some(c) = tools::constrain(anchor, p, xf.px(1.0), shift) {
+                    snap = Some(c);
                 }
             }
+            snapped = snap.as_ref().map(|s| s.point).or(raw);
         }
     }
 
@@ -148,14 +162,18 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         }
     }
 
-    // Window / crossing selection.
+    // Dragging selected elements and wall end grips, then window /
+    // crossing selection.
+    if is_plan {
+        direct_drag(app, ui, &response, &painter, &dl, &xf);
+    }
     box_select(app, ui, &response, &painter, &dl, &xf);
 
     // Previews.
     if let Some(p) = snapped {
         preview(app, &painter, &xf, p);
-        if let Some(k) = snap_kind {
-            paint_snap(&painter, xf.to_screen(p), k);
+        if let Some(s) = &snap {
+            paint_snap(&painter, &xf, s);
         }
     }
     if let Some(p) = pointer {
@@ -166,9 +184,12 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         }
     }
 
+    if is_plan {
+        paint_sketch(app, &painter, &xf);
+    }
     context_menu(app, &response);
     if is_3d {
-        view_cube(app, ui, rect, view_id);
+        crate::viewcube::show(app, ui, rect, view_id);
     }
     view_control_bar(app, ui, Rect::from_min_max(pos2(full.min.x, rect.max.y), full.max), view_id);
 }
@@ -441,6 +462,12 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
         return;
     }
     let id = egui::Id::unique("box_select_start");
+    if ui
+        .ctx()
+        .data(|d| d.get_temp::<DirectDrag>(egui::Id::unique("direct_drag")).is_some())
+    {
+        return;
+    }
     if response.drag_started_by(egui::PointerButton::Primary) {
         if let Some(p) = response.interact_pointer_pos() {
             ui.ctx().data_mut(|d| d.insert_temp(id, p));
@@ -498,12 +525,128 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
     }
 }
 
+/// A drag on the model in Modify: moving the selection, or a wall end.
+#[derive(Clone, Copy)]
+enum DirectDrag {
+    Move { from: DVec2 },
+    WallEnd { wall: ElementId, end: bool },
+}
+
+/// Revit-style direct editing in plan: selected walls show blue end
+/// grips that drag their ends; dragging a selected (or hovered) element
+/// moves it, with snapping.
+fn direct_drag(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: &egui::Painter, dl: &DisplayList, xf: &Xform) {
+    if app.tool != Tool::Modify {
+        return;
+    }
+    let id = egui::Id::unique("direct_drag");
+    let grip_fill = Color32::from_rgb(40, 110, 230);
+    let grips: Vec<(ElementId, bool, DVec2)> = app
+        .selection
+        .iter()
+        .filter_map(|s| app.doc.element(*s).and_then(|e| e.as_wall()).map(|w| (*s, w.start, w.end)))
+        .flat_map(|(s, a, b)| [(s, false, a), (s, true, b)])
+        .collect();
+    for (_, _, p) in &grips {
+        let c = xf.to_screen(*p);
+        painter.circle(c, 4.5, grip_fill, Stroke::new(1.0, Color32::WHITE));
+    }
+
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        // Where the button went down, not where the drag threshold was crossed.
+        if let Some(sp) = ui.input(|i| i.pointer.press_origin()) {
+            let grip = grips.iter().find(|g| xf.to_screen(g.2).distance(sp) < 8.0);
+            let op = match (grip, app.hover) {
+                (Some(g), _) => Some(DirectDrag::WallEnd { wall: g.0, end: g.1 }),
+                (None, Some(h)) if app.doc.element(h).is_some() => {
+                    if !app.selection.contains(&h) {
+                        app.selection = vec![h];
+                    }
+                    Some(DirectDrag::Move { from: xf.to_view(sp) })
+                }
+                _ => None,
+            };
+            if let Some(op) = op {
+                ui.ctx().data_mut(|d| d.insert_temp(id, op));
+            }
+        }
+    }
+    let Some(op) = ui.ctx().data(|d| d.get_temp::<DirectDrag>(id)) else {
+        return;
+    };
+    let Some(cur) = ui.input(|i| i.pointer.latest_pos()).map(|p| xf.to_view(p)) else {
+        return;
+    };
+    let snap = tools::snap(app, cur, xf.px(10.0));
+    let target = snap.as_ref().map(|s| s.point).unwrap_or(cur);
+    if let Some(s) = &snap {
+        paint_snap(painter, xf, s);
+    }
+    match op {
+        DirectDrag::Move { from } => {
+            let moved = Xform {
+                rect: xf.rect,
+                cam: Camera2D {
+                    center: xf.cam.center - (target - from),
+                    ..xf.cam
+                },
+            };
+            paint_list(painter, &moved, dl, Some((&app.selection, PREVIEW)));
+        }
+        DirectDrag::WallEnd { wall, end } => {
+            if let Some(w) = app.doc.element(wall).and_then(|e| e.as_wall()) {
+                let fixed = if end { w.start } else { w.end };
+                painter.line_segment([xf.to_screen(fixed), xf.to_screen(target)], Stroke::new(2.0, PREVIEW));
+                label_at(
+                    painter,
+                    xf.to_screen((fixed + target) * 0.5) + vec2(0.0, -14.0),
+                    &hausit_core::format_length(fixed.distance(target), app.doc.length_unit),
+                );
+            }
+        }
+    }
+    if response.drag_stopped() {
+        ui.ctx().data_mut(|d| d.remove::<DirectDrag>(id));
+        match op {
+            DirectDrag::Move { from } if target.distance(from) > xf.px(2.0) => {
+                let ids = app.selection.clone();
+                app.transact("Drag", |doc| {
+                    doc.translate(&ids, target - from);
+                    Ok(())
+                });
+            }
+            DirectDrag::WallEnd { wall, end } => {
+                app.transact("Drag Wall End", |doc| {
+                    if let Some(hausit_model::ElementData::Wall(w)) = doc.element_mut(wall).map(|e| &mut e.data) {
+                        let fixed = if end { w.start } else { w.end };
+                        if fixed.distance(target) > 10.0 {
+                            if end {
+                                w.end = target;
+                            } else {
+                                w.start = target;
+                            }
+                        }
+                    }
+                    doc.touch();
+                    Ok(())
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
 // ----- previews -------------------------------------------------------------
 
-fn paint_snap(painter: &egui::Painter, p: Pos2, kind: SnapKind) {
-    let s = Stroke::new(1.5, SNAP);
+fn paint_snap(painter: &egui::Painter, xf: &Xform, snap: &tools::Snap) {
+    let guide = Stroke::new(1.0, Color32::from_rgb(70, 130, 220));
+    for (a, b) in &snap.guides {
+        painter.extend(Shape::dashed_line(&[xf.to_screen(*a), xf.to_screen(*b)], guide, 6.0, 4.0));
+    }
+    let p = xf.to_screen(snap.point);
+    let s = Stroke::new(1.6, SNAP);
     let r = 5.0;
-    match kind {
+    match snap.kind {
         SnapKind::Endpoint => {
             painter.rect_stroke(Rect::from_center_size(p, vec2(2.0 * r, 2.0 * r)), 0.0, s, egui::StrokeKind::Middle);
         }
@@ -514,11 +657,67 @@ fn paint_snap(painter: &egui::Painter, p: Pos2, kind: SnapKind) {
             painter.line_segment([p + vec2(-r, -r), p + vec2(r, r)], s);
             painter.line_segment([p + vec2(-r, r), p + vec2(r, -r)], s);
         }
+        SnapKind::Perpendicular => {
+            painter.line_segment([p + vec2(-r, r), p + vec2(r, r)], s);
+            painter.line_segment([p + vec2(0.0, r), p + vec2(0.0, -r)], s);
+        }
         SnapKind::Nearest => {
             painter.add(Shape::closed_line(
                 vec![p + vec2(-r, -r), p + vec2(r, r), p + vec2(-r, r), p + vec2(r, -r)],
                 s,
             ));
+        }
+        SnapKind::Alignment | SnapKind::Increment => {}
+    }
+    // Revit names the snap in a tooltip by the cursor.
+    let label = snap.kind.label();
+    if !label.is_empty() {
+        let galley = painter.layout_no_wrap(label.to_string(), FontId::proportional(11.5), Color32::from_gray(30));
+        let r = Rect::from_min_size(p + vec2(14.0, 12.0), galley.size() + vec2(8.0, 4.0));
+        painter.rect(
+            r,
+            1.0,
+            Color32::from_rgb(255, 255, 225),
+            Stroke::new(1.0, Color32::from_gray(120)),
+            egui::StrokeKind::Inside,
+        );
+        painter.galley(r.min + vec2(4.0, 2.0), galley, Color32::from_gray(30));
+    }
+}
+
+/// Sketch lines in magenta, like Revit's sketch mode, with the slope
+/// symbol on roof lines that define slope.
+fn paint_sketch(app: &HausitApp, painter: &egui::Painter, xf: &Xform) {
+    let Some(sk) = app.tool.sketch() else { return };
+    let roof = matches!(app.tool, Tool::Roof { .. });
+    let magenta = Stroke::new(2.0, SKETCH);
+    // Picked walls show at their overhang, trimmed at the corners once the
+    // loop closes.
+    let shown: Vec<(DVec2, DVec2, bool)> = match sk.closed_loop() {
+        Ok(c) if c.iter().any(|l| l.1.overhang != 0.0) => {
+            let pts: Vec<DVec2> = c.iter().map(|l| l.0).collect();
+            let off = tools::offset_outwards(&pts, &c.iter().map(|l| l.1.overhang).collect::<Vec<_>>());
+            (0..off.len()).map(|i| (off[i], off[(i + 1) % off.len()], c[i].1.slope)).collect()
+        }
+        _ => sk
+            .lines
+            .iter()
+            .map(|l| {
+                let d = (l.b - l.a).normalize_or_zero();
+                let n = DVec2::new(-d.y, d.x) * l.overhang;
+                (l.a + n, l.b + n, l.slope)
+            })
+            .collect(),
+    };
+    for (a, b, slope) in shown {
+        let (a, b) = (xf.to_screen(a), xf.to_screen(b));
+        painter.line_segment([a, b], magenta);
+        if roof && slope && a.distance(b) > 30.0 {
+            let d = (b - a).normalized();
+            let n = vec2(d.y, -d.x);
+            let m = a + (b - a) * 0.5 + n * 10.0;
+            let tri = vec![m - d * 7.0, m + d * 7.0, m + d * 7.0 + n * 7.0];
+            painter.add(Shape::closed_line(tri, Stroke::new(1.2, SKETCH)));
         }
     }
 }
@@ -555,6 +754,13 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             format!("{typed}▏")
         };
         label_at(painter, mid, &text);
+        // Angle from horizontal, as Revit's listening dimensions show.
+        let d = b - a;
+        if d.length() > xf.px(40.0) {
+            let ang = d.y.atan2(d.x).to_degrees();
+            let at = xf.to_screen(a) + vec2(36.0, if d.y > 0.0 { 16.0 } else { -16.0 });
+            label_at(painter, at, &format!("{:.2}°", ang.abs()));
+        }
     };
     let rect_pts = |a: DVec2, b: DVec2| {
         let (min, max) = (a.min(b), a.max(b));
@@ -610,25 +816,21 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             };
             paint_list(painter, &moved, &dl, Some((&app.selection, PREVIEW)));
         }
-        Tool::Floor { pts, .. } | Tool::Roof { pts } => {
-            if app.options.shape == DrawShape::Rectangle {
-                if let Some(a) = pts.first() {
-                    let r = rect_pts(*a, p);
-                    let sp: Vec<Pos2> = r.iter().map(|q| xf.to_screen(*q)).collect();
-                    painter.add(Shape::closed_line(sp, Stroke::new(2.0, Color32::from_rgb(200, 0, 160))));
-                }
-            } else {
-                let mut sp: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
-                if !sp.is_empty() {
-                    painter.add(Shape::line(sp.clone(), Stroke::new(2.0, Color32::from_rgb(200, 0, 160))));
-                    sp.push(xf.to_screen(p));
-                    let n = sp.len();
-                    painter.line_segment([sp[n - 2], sp[n - 1]], s);
-                    if pts.len() >= 2 {
-                        painter.add(Shape::dashed_line(&[sp[n - 1], sp[0]], Stroke::new(1.0, PREVIEW), 4.0, 4.0));
+        Tool::Floor { sketch, .. } | Tool::Roof { sketch } => {
+            let roof = matches!(app.tool, Tool::Roof { .. });
+            match (app.options.sketch_mode, sketch.start) {
+                (DrawShape::PickWalls, _) => {
+                    if let Some(l) = tools::pick_wall_face(app, p, roof) {
+                        painter.line_segment([xf.to_screen(l.a), xf.to_screen(l.b)], Stroke::new(3.0, PREVIEW));
                     }
-                    seg(*pts.last().unwrap(), p);
                 }
+                (DrawShape::Rectangle, Some(a)) => {
+                    let r = rect_pts(a, p);
+                    let sp: Vec<Pos2> = r.iter().map(|q| xf.to_screen(*q)).collect();
+                    painter.add(Shape::closed_line(sp, Stroke::new(1.5, SKETCH)));
+                }
+                (DrawShape::Line, Some(a)) => seg(a, p),
+                _ => {}
             }
         }
         Tool::Door | Tool::Window => {
@@ -736,47 +938,6 @@ fn context_menu(app: &mut HausitApp, response: &egui::Response) {
 }
 
 /// Simplified ViewCube: preset orientations for the 3D view.
-fn view_cube(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: ElementId) {
-    let area = Rect::from_min_size(pos2(rect.right() - 168.0, rect.top() + 8.0), vec2(160.0, 84.0));
-    let mut set = None;
-    ui.scope_builder(egui::UiBuilder::new().max_rect(area), |ui| {
-        egui::Frame::new()
-            .fill(Color32::from_rgba_unmultiplied(240, 242, 245, 230))
-            .stroke(Stroke::new(1.0, Color32::from_gray(180)))
-            .inner_margin(4)
-            .corner_radius(4)
-            .show(ui, |ui| {
-                egui::Grid::new("viewcube").spacing(vec2(2.0, 2.0)).show(ui, |ui| {
-                    let mut b = |ui: &mut Ui, label: &str, yaw: f64, pitch: f64| {
-                        if ui
-                            .add(egui::Button::new(egui::RichText::new(label).size(11.0)).min_size(vec2(44.0, 18.0)))
-                            .clicked()
-                        {
-                            set = Some((yaw, pitch));
-                        }
-                    };
-                    b(ui, "Top", 0.0, 89.0);
-                    b(ui, "Front", 0.0, 0.0);
-                    b(ui, "Right", -90.0, 0.0);
-                    ui.end_row();
-                    b(ui, "Back", 180.0, 0.0);
-                    b(ui, "Left", 90.0, 0.0);
-                    b(ui, "⌂ Home", -45.0, 30.0);
-                    ui.end_row();
-                });
-            });
-    });
-    if let Some((yaw, pitch)) = set {
-        if let Some(v) = app.doc.view_mut(view_id) {
-            v.camera.yaw = yaw;
-            v.camera.pitch = pitch;
-        }
-        if let Some(c) = app.cameras.get_mut(&view_id) {
-            c.fitted = false;
-        }
-    }
-}
-
 fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: ElementId) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         egui::Frame::new()
