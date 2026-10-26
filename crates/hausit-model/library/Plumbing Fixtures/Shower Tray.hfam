@@ -1,0 +1,138 @@
+{
+  "name": "Shower Tray",
+  "category": "PlumbingFixtures",
+  "description": "Shower tray with an optional glass screen. Insertion point at the back corner centre.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Screen",
+      "type": "Yes/No",
+      "default": true
+    },
+    {
+      "name": "Screen Height",
+      "type": "Length",
+      "default": 2000
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Porcelain"
+    }
+  ],
+  "types": [
+    {
+      "name": "800 x 800mm",
+      "values": {
+        "Width": 800,
+        "Depth": 800
+      }
+    },
+    {
+      "name": "900 x 900mm",
+      "values": {}
+    },
+    {
+      "name": "1200 x 900mm",
+      "values": {
+        "Width": 1200
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        40
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        40
+      ],
+      "max": [
+        "Width / 2",
+        "-Depth + 8",
+        "Screen Height"
+      ],
+      "material": "Glass",
+      "visible": "Screen"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        -150
+      ],
+      "radius": 12,
+      "z": [
+        1200,
+        2000
+      ],
+      "material": "Stainless Steel"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "to": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "Width / 2",
+        "-Depth"
+      ],
+      "to": [
+        "-Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        "-Depth / 2"
+      ],
+      "radius": 40
+    }
+  ]
+}

@@ -148,17 +148,23 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
     let geometry = model_geometry(doc);
     let mut polys = Vec::new();
     for g in &geometry {
-        let faces: Vec<(Material, hausit_model::geometry::Face)> = g
-            .parts
-            .iter()
-            .flat_map(|p| p.faces().into_iter().map(move |f| (p.material, f)))
-            .collect();
+        let mut faces: Vec<(Material, hausit_model::geometry::Face)> = Vec::new();
+        let mut names: Vec<Option<&str>> = Vec::new();
+        for p in &g.parts {
+            for f in p.faces() {
+                faces.push((p.material, f));
+                names.push(p.material_name.as_deref());
+            }
+        }
         let inside = internal_faces(&faces);
         for (fi, (material, face)) in faces.iter().enumerate() {
             if inside[fi] {
                 continue;
             }
-            let part = Part { material: *material };
+            let part = Part {
+                material: *material,
+                material_name: names[fi],
+            };
             {
                 let n = face.normal();
                 let facing = n.dot(frame.forward);
@@ -181,7 +187,10 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
                 if pts.len() < 3 {
                     continue;
                 }
-                let material = (part.material == Material::Default).then(|| face_material(doc, g.id, n)).flatten();
+                let material = match part.material_name {
+                    Some(name) => doc.material(name),
+                    None => (part.material == Material::Default).then(|| face_material(doc, g.id, n)).flatten(),
+                };
                 let base = match material {
                     Some(m) => [m.color[0], m.color[1], m.color[2], 255],
                     None => category_color(g.category, part.material),
@@ -347,8 +356,9 @@ fn box_caps(
 }
 
 /// Stand-in for the geometry part a face came from.
-struct Part {
+struct Part<'a> {
     material: Material,
+    material_name: Option<&'a str>,
 }
 
 /// Faces inside an element's solid: where two pieces of one element touch

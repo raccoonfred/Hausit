@@ -186,6 +186,32 @@ fn class_of(doc: &Document, id: ElementId) -> Option<Class> {
             c("IFCRAILING", "IFCRAILINGTYPE", kind, kind, "Pset_RailingCommon")
         }
         ElementData::Ceiling(_) => c("IFCCOVERING", "IFCCOVERINGTYPE", "CEILING", "CEILING", "Pset_CoveringCommon"),
+        ElementData::Component(comp) => match comp.category {
+            Category::Furniture | Category::Casework => c("IFCFURNITURE", "IFCFURNITURETYPE", "NOTDEFINED", "NOTDEFINED", ""),
+            Category::PlumbingFixtures => {
+                let family = doc.type_of(id).map(|t| t.family.to_ascii_lowercase()).unwrap_or_default();
+                let kind = [
+                    ("wc", "TOILETPAN"),
+                    ("toilet", "TOILETPAN"),
+                    ("basin", "WASHHANDBASIN"),
+                    ("bath", "BATH"),
+                    ("shower", "SHOWER"),
+                    ("sink", "SINK"),
+                ]
+                .iter()
+                .find(|(k, _)| family.contains(k))
+                .map(|(_, v)| *v)
+                .unwrap_or("NOTDEFINED");
+                c("IFCSANITARYTERMINAL", "IFCSANITARYTERMINALTYPE", kind, kind, "")
+            }
+            _ => c(
+                "IFCBUILDINGELEMENTPROXY",
+                "IFCBUILDINGELEMENTPROXYTYPE",
+                "NOTDEFINED",
+                "NOTDEFINED",
+                "Pset_BuildingElementProxyCommon",
+            ),
+        },
         _ => return None,
     })
 }
@@ -207,6 +233,7 @@ fn element_level(doc: &Document, id: ElementId) -> ElementId {
         ElementData::Stair(s) => s.base_level,
         ElementData::Railing(r) => r.level,
         ElementData::Ceiling(c) => c.level,
+        ElementData::Component(c) => c.level,
         ElementData::Room(r) => r.level,
         _ => ElementId::INVALID,
     }
@@ -506,6 +533,10 @@ impl<'a> Exporter<'a> {
                 },
                 None => Frame::WORLD,
             },
+            Some(ElementData::Component(c)) => Frame {
+                origin: c.point.extend(doc.level_elevation(c.level) + c.offset),
+                x: DVec2::from_angle(c.rotation.to_radians()),
+            },
             _ => Frame {
                 origin: DVec3::new(0.0, 0.0, storey_elev),
                 x: DVec2::X,
@@ -781,6 +812,8 @@ impl<'a> Exporter<'a> {
         let args = match class.type_entity {
             "IFCDOORTYPE" => format!("{head},.DOOR.,.NOTDEFINED.,$,$"),
             "IFCWINDOWTYPE" => format!("{head},.WINDOW.,.NOTDEFINED.,$,$"),
+            // AssemblyPlace, then the predefined type.
+            "IFCFURNITURETYPE" => format!("{head},.NOTDEFINED.,.{}.", class.type_predefined),
             _ => format!("{head},.{}.", class.type_predefined),
         };
         let type_ref = self.add(class.type_entity, args);
@@ -886,8 +919,10 @@ impl<'a> Exporter<'a> {
         if let Some(ext) = external {
             common.push(("IsExternal".to_string(), format!("IFCBOOLEAN({})", b(ext))));
         }
-        let pset = self.property_set("common", id.0, class.pset, &common);
-        self.relate_properties("common", id.0, obj, pset);
+        if !class.pset.is_empty() {
+            let pset = self.property_set("common", id.0, class.pset, &common);
+            self.relate_properties("common", id.0, obj, pset);
+        }
 
         let params: Vec<(String, String)> = element_parameters(doc, id)
             .into_iter()
@@ -1148,6 +1183,8 @@ mod tests {
             "IFCSPACE(",
             "IFCWALLTYPE(",
             "IFCRELDEFINESBYTYPE(",
+            "IFCFURNITURE(",
+            "IFCFURNITURETYPE(",
         ] {
             assert!(text.contains(entity), "missing {entity}");
         }

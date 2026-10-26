@@ -141,6 +141,19 @@ pub fn default_materials() -> Vec<MaterialDef> {
         m("Timber - Softwood", [214, 178, 128], Parallel),
         m("Membrane", [60, 60, 60], Solid),
         surface(m("Roof Tile - Clay", [168, 84, 58], Diagonal), SurfacePattern::Tiles),
+        // Finishes used by the family library.
+        m("Wood - Oak", [190, 146, 98], Parallel),
+        m("Laminate - White", [240, 240, 238], None),
+        m("Fabric - Grey", [132, 138, 146], None),
+        m("Fabric - White", [246, 246, 244], None),
+        m("Porcelain", [250, 250, 248], None),
+        m("Stainless Steel", [196, 200, 204], Solid),
+        m("Glass", [180, 210, 225], None),
+        m("Rubber", [46, 46, 46], Solid),
+        m("Cardboard", [200, 164, 112], None),
+        m("Steel - Painted Blue", [38, 88, 160], Solid),
+        m("Steel - Painted Orange", [232, 118, 32], Solid),
+        m("Steel - Painted Yellow", [240, 196, 30], Solid),
     ]
 }
 

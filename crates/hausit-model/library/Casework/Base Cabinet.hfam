@@ -1,0 +1,148 @@
+{
+  "name": "Base Cabinet",
+  "category": "Casework",
+  "description": "Kitchen base cabinet with worktop. Insertion point at the centre of the back, against the wall.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 600
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 600
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Worktop Thickness",
+      "type": "Length",
+      "default": 40
+    },
+    {
+      "name": "Plinth Height",
+      "type": "Length",
+      "default": 100
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Laminate - White"
+    },
+    {
+      "name": "Worktop Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    }
+  ],
+  "types": [
+    {
+      "name": "400mm",
+      "values": {
+        "Width": 400
+      }
+    },
+    {
+      "name": "600mm",
+      "values": {}
+    },
+    {
+      "name": "800mm",
+      "values": {
+        "Width": 800
+      }
+    },
+    {
+      "name": "1000mm",
+      "values": {
+        "Width": 1000
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth + 50",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Plinth Height"
+      ],
+      "material": "Rubber"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth + 20",
+        "Plinth Height"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height - Worktop Thickness"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 2",
+        "-Depth",
+        "Plinth Height"
+      ],
+      "max": [
+        "Width / 2 - 2",
+        "-Depth + 20",
+        "Height - Worktop Thickness - 3"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth - 20",
+        "Height - Worktop Thickness"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height"
+      ],
+      "material": "Worktop Material"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth - 20"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "to": [
+        "Width / 2",
+        "-Depth"
+      ]
+    }
+  ]
+}

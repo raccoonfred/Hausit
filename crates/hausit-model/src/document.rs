@@ -44,6 +44,9 @@ pub struct Document {
     pub line_weights: crate::styles::LineWeights,
     #[serde(default = "crate::materials::default_materials")]
     pub materials: Vec<crate::materials::MaterialDef>,
+    /// Loadable families in the project.
+    #[serde(default)]
+    pub families: Vec<crate::component::FamilyDef>,
     elements: IndexMap<ElementId, Element>,
     types: IndexMap<ElementId, FamilyType>,
     views: IndexMap<ElementId, View>,
@@ -74,6 +77,7 @@ impl Document {
             object_styles: Default::default(),
             line_weights: Default::default(),
             materials: crate::materials::default_materials(),
+            families: Vec::new(),
             elements: IndexMap::new(),
             types: IndexMap::new(),
             views: IndexMap::new(),
@@ -185,6 +189,7 @@ impl Document {
                     ElementData::WallFooting(f) => f.wall == id,
                     ElementData::Stair(s) => s.base_level == id,
                     ElementData::Ceiling(c) => c.level == id,
+                    ElementData::Component(c) => c.level == id,
                     ElementData::Railing(r) => r.level == id || r.host == id,
                     ElementData::Room(r) => r.level == id,
                     ElementData::RoomSeparation(l) => l.level == id,
@@ -278,6 +283,7 @@ impl Document {
                     f.end += delta;
                 }
                 ElementData::Footing(f) => f.point += delta,
+                ElementData::Component(c) => c.point += delta,
                 ElementData::Stair(s) => s.path.iter_mut().for_each(|p| *p += delta),
                 ElementData::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
                 ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
@@ -444,6 +450,10 @@ impl Document {
                 ElementData::Footing(ft) => {
                     ft.point = f(ft.point);
                     ft.rotation = if mirror { 2.0 * angle - ft.rotation } else { ft.rotation + angle };
+                }
+                ElementData::Component(c) => {
+                    c.point = f(c.point);
+                    c.rotation = if mirror { 2.0 * angle - c.rotation } else { c.rotation + angle };
                 }
                 ElementData::Stair(s) => {
                     s.path.iter_mut().for_each(|p| *p = f(*p));

@@ -1,0 +1,131 @@
+{
+  "name": "Workbench",
+  "category": "SpecialtyEquipment",
+  "description": "Steel-framed workbench with a timber top and lower shelf. Insertion point at the centre of the back.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 2000
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 750
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Top Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    },
+    {
+      "name": "Frame Material",
+      "type": "Material",
+      "default": "Steel - Painted Blue"
+    }
+  ],
+  "types": [
+    {
+      "name": "1500mm",
+      "values": {
+        "Width": 1500
+      }
+    },
+    {
+      "name": "2000mm",
+      "values": {}
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        "Height - 40"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height"
+      ],
+      "material": "Top Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 30",
+        "-Depth + 30",
+        0
+      ],
+      "max": [
+        "-Width / 2 + 80",
+        "-Depth + 80",
+        "Height - 40"
+      ],
+      "material": "Frame Material",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 110",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 30",
+        -80,
+        0
+      ],
+      "max": [
+        "-Width / 2 + 80",
+        -30,
+        "Height - 40"
+      ],
+      "material": "Frame Material",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 110",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 30",
+        "-Depth + 30",
+        150
+      ],
+      "max": [
+        "Width / 2 - 30",
+        -30,
+        170
+      ],
+      "material": "Frame Material"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    }
+  ]
+}

@@ -1,0 +1,300 @@
+{
+  "name": "Sink Unit",
+  "category": "Casework",
+  "description": "Kitchen base cabinet with an inset stainless steel sink. Insertion point at the centre of the back.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 600
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 600
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Worktop Thickness",
+      "type": "Length",
+      "default": 40
+    },
+    {
+      "name": "Plinth Height",
+      "type": "Length",
+      "default": 100
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Laminate - White"
+    },
+    {
+      "name": "Worktop Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    },
+    {
+      "name": "Bowl Width",
+      "type": "Length",
+      "default": 450
+    },
+    {
+      "name": "Bowl Depth",
+      "type": "Length",
+      "default": 400
+    }
+  ],
+  "types": [
+    {
+      "name": "800mm",
+      "values": {
+        "Width": 800
+      }
+    },
+    {
+      "name": "1000mm",
+      "values": {
+        "Width": 1000
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth + 50",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Plinth Height"
+      ],
+      "material": "Rubber"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth + 20",
+        "Plinth Height"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height - Worktop Thickness"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 2",
+        "-Depth",
+        "Plinth Height"
+      ],
+      "max": [
+        "Width / 2 - 2",
+        "-Depth + 20",
+        "Height - Worktop Thickness - 3"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth - 20",
+        "Height - Worktop Thickness"
+      ],
+      "max": [
+        "Width / 2",
+        "-Depth / 2 - Bowl Depth / 2 - 30",
+        "Height"
+      ],
+      "material": "Worktop Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2 + Bowl Depth / 2 + 30",
+        "Height - Worktop Thickness"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height"
+      ],
+      "material": "Worktop Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2 - Bowl Depth / 2 - 30",
+        "Height - Worktop Thickness"
+      ],
+      "max": [
+        "-Bowl Width / 2 - 30",
+        "-Depth / 2 + Bowl Depth / 2 + 30",
+        "Height"
+      ],
+      "material": "Worktop Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Bowl Width / 2 + 30",
+        "-Depth / 2 - Bowl Depth / 2 - 30",
+        "Height - Worktop Thickness"
+      ],
+      "max": [
+        "Width / 2",
+        "-Depth / 2 + Bowl Depth / 2 + 30",
+        "Height"
+      ],
+      "material": "Worktop Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bowl Width / 2 - 30",
+        "-Depth / 2 - Bowl Depth / 2 - 30",
+        "Height - 180"
+      ],
+      "max": [
+        "Bowl Width / 2 + 30",
+        "-Depth / 2 + Bowl Depth / 2 + 30",
+        "Height - 175"
+      ],
+      "material": "Stainless Steel"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bowl Width / 2 - 30",
+        "-Depth / 2 - Bowl Depth / 2 - 30",
+        "Height - 175"
+      ],
+      "max": [
+        "Bowl Width / 2 + 30",
+        "-Depth / 2 - Bowl Depth / 2",
+        "Height + 2"
+      ],
+      "material": "Stainless Steel"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bowl Width / 2 - 30",
+        "-Depth / 2 + Bowl Depth / 2",
+        "Height - 175"
+      ],
+      "max": [
+        "Bowl Width / 2 + 30",
+        "-Depth / 2 + Bowl Depth / 2 + 30",
+        "Height + 2"
+      ],
+      "material": "Stainless Steel"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bowl Width / 2 - 30",
+        "-Depth / 2 - Bowl Depth / 2",
+        "Height - 175"
+      ],
+      "max": [
+        "-Bowl Width / 2",
+        "-Depth / 2 + Bowl Depth / 2",
+        "Height + 2"
+      ],
+      "material": "Stainless Steel"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Bowl Width / 2",
+        "-Depth / 2 - Bowl Depth / 2",
+        "Height - 175"
+      ],
+      "max": [
+        "Bowl Width / 2 + 30",
+        "-Depth / 2 + Bowl Depth / 2",
+        "Height + 2"
+      ],
+      "material": "Stainless Steel"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        -60
+      ],
+      "radius": 15,
+      "z": [
+        "Height",
+        "Height + 250"
+      ],
+      "material": "Stainless Steel"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth - 20"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "to": [
+        "Width / 2",
+        "-Depth"
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Bowl Width / 2",
+        "-Depth / 2 - Bowl Depth / 2"
+      ],
+      "max": [
+        "Bowl Width / 2",
+        "-Depth / 2 + Bowl Depth / 2"
+      ]
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        "-Depth / 2"
+      ],
+      "radius": 25
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        -60
+      ],
+      "radius": 20
+    }
+  ]
+}

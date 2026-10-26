@@ -1,0 +1,236 @@
+{
+  "name": "Pallet Racking",
+  "category": "SpecialtyEquipment",
+  "description": "Adjustable pallet racking run: upright frames, beam levels and bays. Insertion point at the centre of the back.",
+  "parameters": [
+    {
+      "name": "Bays",
+      "type": "Integer",
+      "default": 3
+    },
+    {
+      "name": "Bay Width",
+      "type": "Length",
+      "default": 2700
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 1100
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 5000
+    },
+    {
+      "name": "Beam Levels",
+      "type": "Integer",
+      "default": 3
+    },
+    {
+      "name": "Upright Size",
+      "type": "Length",
+      "default": 90
+    },
+    {
+      "name": "Beam Depth",
+      "type": "Length",
+      "default": 120
+    },
+    {
+      "name": "Upright Material",
+      "type": "Material",
+      "default": "Steel - Painted Blue"
+    },
+    {
+      "name": "Beam Material",
+      "type": "Material",
+      "default": "Steel - Painted Orange"
+    }
+  ],
+  "types": [
+    {
+      "name": "2 Bay 2700mm",
+      "values": {
+        "Bays": 2
+      }
+    },
+    {
+      "name": "3 Bay 2700mm",
+      "values": {}
+    },
+    {
+      "name": "5 Bay 2700mm",
+      "values": {
+        "Bays": 5
+      }
+    },
+    {
+      "name": "3 Bay 3300mm High Bay",
+      "values": {
+        "Bay Width": 3300,
+        "Height": 8000,
+        "Beam Levels": 5
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Bays * Bay Width / 2",
+        "-Upright Size",
+        0
+      ],
+      "max": [
+        "-Bays * Bay Width / 2 + Upright Size",
+        0,
+        "Height"
+      ],
+      "material": "Upright Material",
+      "repeat": {
+        "count": "Bays + 1",
+        "step": [
+          "(Bays * Bay Width - Upright Size) / Bays",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bays * Bay Width / 2",
+        "-Depth",
+        0
+      ],
+      "max": [
+        "-Bays * Bay Width / 2 + Upright Size",
+        "-Depth + Upright Size",
+        "Height"
+      ],
+      "material": "Upright Material",
+      "repeat": {
+        "count": "Bays + 1",
+        "step": [
+          "(Bays * Bay Width - Upright Size) / Bays",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bays * Bay Width / 2 + Upright Size / 2 - 15",
+        "-Depth + Upright Size",
+        150
+      ],
+      "max": [
+        "-Bays * Bay Width / 2 + Upright Size / 2 + 15",
+        "-Upright Size",
+        190
+      ],
+      "material": "Upright Material",
+      "repeat": {
+        "count": "Bays + 1",
+        "step": [
+          "(Bays * Bay Width - Upright Size) / Bays",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bays * Bay Width / 2 + Upright Size / 2 - 15",
+        "-Depth + Upright Size",
+        "Height - 190"
+      ],
+      "max": [
+        "-Bays * Bay Width / 2 + Upright Size / 2 + 15",
+        "-Upright Size",
+        "Height - 150"
+      ],
+      "material": "Upright Material",
+      "repeat": {
+        "count": "Bays + 1",
+        "step": [
+          "(Bays * Bay Width - Upright Size) / Bays",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bays * Bay Width / 2",
+        "-Depth - 50",
+        "Height / (Beam Levels + 1) - Beam Depth / 2"
+      ],
+      "max": [
+        "Bays * Bay Width / 2",
+        "-Depth",
+        "Height / (Beam Levels + 1) + Beam Depth / 2"
+      ],
+      "material": "Beam Material",
+      "repeat": {
+        "count": "Beam Levels",
+        "step": [
+          0,
+          0,
+          "Height / (Beam Levels + 1)"
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Bays * Bay Width / 2",
+        0,
+        "Height / (Beam Levels + 1) - Beam Depth / 2"
+      ],
+      "max": [
+        "Bays * Bay Width / 2",
+        50,
+        "Height / (Beam Levels + 1) + Beam Depth / 2"
+      ],
+      "material": "Beam Material",
+      "repeat": {
+        "count": "Beam Levels",
+        "step": [
+          0,
+          0,
+          "Height / (Beam Levels + 1)"
+        ]
+      }
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Bays * Bay Width / 2",
+        "-Depth - 50"
+      ],
+      "max": [
+        "Bays * Bay Width / 2",
+        50
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Bays * Bay Width / 2",
+        "-Depth - 50"
+      ],
+      "to": [
+        "Bays * Bay Width / 2",
+        50
+      ]
+    }
+  ]
+}

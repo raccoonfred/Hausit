@@ -1,0 +1,132 @@
+{
+  "name": "Washbasin - Pedestal",
+  "category": "PlumbingFixtures",
+  "description": "Pedestal washbasin with a pillar tap. Insertion point at the centre of the back.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 550
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 450
+    },
+    {
+      "name": "Rim Height",
+      "type": "Length",
+      "default": 850
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Porcelain"
+    }
+  ],
+  "types": [
+    {
+      "name": "500mm",
+      "values": {
+        "Width": 500,
+        "Depth": 400
+      }
+    },
+    {
+      "name": "550mm",
+      "values": {}
+    },
+    {
+      "name": "650mm",
+      "values": {
+        "Width": 650,
+        "Depth": 480
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        "Rim Height - 160"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Rim Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        -150
+      ],
+      "radius": 90,
+      "z": [
+        0,
+        "Rim Height - 160"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        -60
+      ],
+      "radius": 15,
+      "z": [
+        "Rim Height",
+        "Rim Height + 160"
+      ],
+      "material": "Stainless Steel"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Polyline",
+      "points": [
+        [
+          "-Width / 2 + 60",
+          "-Depth + 60"
+        ],
+        [
+          "Width / 2 - 60",
+          "-Depth + 60"
+        ],
+        [
+          "Width / 2 - 60",
+          -110
+        ],
+        [
+          "-Width / 2 + 60",
+          -110
+        ]
+      ],
+      "closed": true
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        -60
+      ],
+      "radius": 20
+    }
+  ]
+}

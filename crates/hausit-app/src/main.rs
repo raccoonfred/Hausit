@@ -12,6 +12,7 @@ mod app;
 mod browser;
 mod canvas;
 mod dialogs;
+mod families;
 mod icons;
 mod options_bar;
 mod properties;

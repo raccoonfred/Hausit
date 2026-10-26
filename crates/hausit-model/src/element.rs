@@ -34,6 +34,7 @@ impl Element {
             ElementData::Stair(s) => Some(s.type_id),
             ElementData::Railing(r) => Some(r.type_id),
             ElementData::Ceiling(c) => Some(c.type_id),
+            ElementData::Component(c) => Some(c.type_id),
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -55,6 +56,7 @@ impl Element {
             ElementData::Stair(s) => s.type_id = t,
             ElementData::Railing(r) => r.type_id = t,
             ElementData::Ceiling(c) => c.type_id = t,
+            ElementData::Component(c) => c.type_id = t,
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -101,6 +103,7 @@ pub enum ElementData {
     Stair(Stair),
     Railing(Railing),
     Ceiling(Ceiling),
+    Component(Component),
     Room(Room),
     RoomSeparation(SketchedLine),
     Dimension(Dimension),
@@ -122,6 +125,7 @@ impl ElementData {
             ElementData::Stair(_) => Category::Stairs,
             ElementData::Railing(_) => Category::Railings,
             ElementData::Ceiling(_) => Category::Ceilings,
+            ElementData::Component(c) => c.category,
             ElementData::Room(_) => Category::Rooms,
             ElementData::RoomSeparation(_) => Category::RoomSeparation,
             ElementData::Dimension(_) => Category::Dimensions,
@@ -423,6 +427,23 @@ pub struct Railing {
     /// The stair it sits on (`INVALID` when free-standing).
     #[serde(default)]
     pub host: ElementId,
+}
+
+/// A loadable component (furniture, casework, fixtures, equipment): an
+/// instance of a family type at a point on a level.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Component {
+    pub type_id: ElementId,
+    /// The type's category, one of [`Category::COMPONENTS`].
+    pub category: Category,
+    pub level: ElementId,
+    pub point: DVec2,
+    /// Rotation in plan, degrees.
+    #[serde(default)]
+    pub rotation: f64,
+    /// Offset of its base above the level, mm.
+    #[serde(default)]
+    pub offset: f64,
 }
 
 /// A room, placed at a point; its boundary comes from the room-bounding

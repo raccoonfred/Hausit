@@ -1,0 +1,143 @@
+{
+  "name": "Shelving Unit",
+  "category": "Furniture",
+  "description": "Open shelving. Insertion point at the centre of the back, against the wall.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 350
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 1800
+    },
+    {
+      "name": "Shelves",
+      "type": "Integer",
+      "default": 4
+    },
+    {
+      "name": "Thickness",
+      "type": "Length",
+      "default": 20
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    }
+  ],
+  "types": [
+    {
+      "name": "900 x 1800mm",
+      "values": {}
+    },
+    {
+      "name": "900 x 2100mm",
+      "values": {
+        "Height": 2100,
+        "Shelves": 5
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        0
+      ],
+      "max": [
+        "-Width / 2 + Thickness",
+        0,
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Thickness",
+        "-Depth",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Thickness",
+        "-Depth",
+        60
+      ],
+      "max": [
+        "Width / 2 - Thickness",
+        0,
+        "60 + Thickness"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Thickness",
+        "-Depth",
+        "Height - Thickness"
+      ],
+      "max": [
+        "Width / 2 - Thickness",
+        0,
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Thickness",
+        "-Depth",
+        "60 + (Height - 60) / (Shelves + 1)"
+      ],
+      "max": [
+        "Width / 2 - Thickness",
+        0,
+        "60 + (Height - 60) / (Shelves + 1) + Thickness"
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": "Shelves",
+        "step": [
+          0,
+          0,
+          "(Height - 60) / (Shelves + 1)"
+        ]
+      }
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    }
+  ]
+}

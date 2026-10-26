@@ -615,7 +615,62 @@ pub fn sample_project() -> Document {
     doc.add_view("Door Schedule", ViewKind::Schedule(crate::ScheduleDef::new(Category::Doors)));
     doc.add_view("Wall Schedule", ViewKind::Schedule(crate::ScheduleDef::new(Category::Walls)));
     doc.add_view("Room Schedule", ViewKind::Schedule(crate::ScheduleDef::new(Category::Rooms)));
+
+    // Kitchen, living and bedroom furniture from the family library.
+    place_components(
+        &mut doc,
+        l1,
+        &[
+            ("Base Cabinet", "600mm", 475.0, 7825.0, 0.0),
+            ("Sink Unit", "1000mm", 1275.0, 7825.0, 0.0),
+            ("Base Cabinet", "600mm", 2075.0, 7825.0, 0.0),
+            ("Wall Cabinet", "600mm", 475.0, 7825.0, 0.0),
+            ("Wall Cabinet", "600mm", 2075.0, 7825.0, 0.0),
+            ("Table - Rectangular", "1600 x 900mm", 3500.0, 5600.0, 0.0),
+            ("Chair", "Standard", 3100.0, 6300.0, 0.0),
+            ("Chair", "Standard", 3900.0, 6300.0, 0.0),
+            ("Chair", "Standard", 3100.0, 4900.0, 180.0),
+            ("Chair", "Standard", 3900.0, 4900.0, 180.0),
+            ("Sofa", "3 Seat 2000mm", 175.0, 2400.0, 90.0),
+            ("Shelving Unit", "900 x 1800mm", 5932.0, 2000.0, 270.0),
+            ("Bed", "King 1600 x 2000mm", 6068.0, 2600.0, 90.0),
+            ("Wardrobe", "1200mm 2 Door", 11825.0, 6800.0, 270.0),
+            ("Desk", "1400 x 700mm", 10400.0, 7825.0, 0.0),
+            ("Chair", "Standard", 10400.0, 6950.0, 180.0),
+        ],
+    );
+    doc.add_view(
+        "Furniture Schedule",
+        ViewKind::Schedule(crate::ScheduleDef::new(Category::Furniture)),
+    );
     doc
+}
+
+/// Places library components on a level, loading their families first:
+/// (family, type, x, y, rotation in degrees).
+pub fn place_components(doc: &mut Document, level: ElementId, items: &[(&str, &str, f64, f64, f64)]) {
+    for (family, type_name, x, y, rotation) in items {
+        let Some(def) = crate::library::family(family) else { continue };
+        let category = def.category;
+        if doc.family_def(category, family).is_none() && doc.load_family(def).is_err() {
+            continue;
+        }
+        let Some(type_id) = doc
+            .types_of(category)
+            .find(|t| t.family == *family && t.name == *type_name)
+            .map(|t| t.id)
+        else {
+            continue;
+        };
+        doc.add_element(ElementData::Component(Component {
+            type_id,
+            category,
+            level,
+            point: DVec2::new(*x, *y),
+            rotation: *rotation,
+            offset: 0.0,
+        }));
+    }
 }
 
 /// A small steel portal-frame shed: five 6 m bays spanning 15 m, with pad
@@ -896,6 +951,26 @@ pub fn industrial_sample() -> Document {
     doc.add_view(
         "Foundation Schedule",
         ViewKind::Schedule(crate::ScheduleDef::new(Category::StructuralFoundations)),
+    );
+
+    // Back-to-back pallet racking with a 3.1 m aisle, loaded pallets by
+    // the door, a workbench under the mezzanine and bollards outside.
+    place_components(
+        &mut doc,
+        l1,
+        &[
+            ("Pallet Racking", "5 Bay 2700mm", 10000.0, 3700.0, 0.0),
+            ("Pallet Racking", "5 Bay 2700mm", 10000.0, 3800.0, 180.0),
+            ("Pallet Racking", "5 Bay 2700mm", 10000.0, 9100.0, 0.0),
+            ("Pallet Racking", "5 Bay 2700mm", 10000.0, 9200.0, 180.0),
+            ("Pallet", "EUR 1200 x 800mm Loaded", 21500.0, 2500.0, 0.0),
+            ("Pallet", "EUR 1200 x 800mm Loaded", 21500.0, 3600.0, 0.0),
+            ("Pallet", "EUR 1200 x 800mm", 23000.0, 2500.0, 90.0),
+            ("Workbench", "2000mm", 27000.0, 14800.0, 0.0),
+            ("Equipment Plinth", "1500 x 2500mm", 27500.0, 5000.0, 0.0),
+            ("Bollard", "168mm", 26500.0, -700.0, 0.0),
+            ("Bollard", "168mm", 28000.0, -700.0, 0.0),
+        ],
     );
     doc
 }

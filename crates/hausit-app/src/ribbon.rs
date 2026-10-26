@@ -293,7 +293,16 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
         );
         tool_button(app, ui, Icon::Door, "Door", "Door (DR)", Tool::Door);
         tool_button(app, ui, Icon::Window, "Window", "Window (WN)", Tool::Window);
-        planned(ui, Icon::Planned, "Component", "Place a Component");
+        tool_button(
+            app,
+            ui,
+            Icon::Component,
+            "Component",
+            "Place a Component (CM)",
+            Tool::Component {
+                category: Category::Furniture,
+            },
+        );
         tool_button(app, ui, Icon::Column, "Column", "Structural Column (CL)", Tool::Column);
         tool_button(
             app,
@@ -416,7 +425,26 @@ fn insert(app: &mut HausitApp, ui: &mut Ui) {
         planned(ui, Icon::Import, "Link CAD", "Link CAD");
     });
     panel(ui, "Load from Library", |ui| {
-        planned(ui, Icon::Import, "Load Family", "Load Family (.rfa)")
+        if big(
+            ui,
+            Icon::LoadFamily,
+            "Load Family",
+            "Load families from Hausit family files (.hfam)",
+            false,
+            true,
+        ) {
+            crate::families::load_from_file(app);
+        }
+        if big(
+            ui,
+            Icon::LoadFamily,
+            "Library",
+            "Load families from Hausit's starter library: furniture, casework, plumbing fixtures and equipment",
+            false,
+            true,
+        ) {
+            crate::families::open_library(app);
+        }
     });
 }
 

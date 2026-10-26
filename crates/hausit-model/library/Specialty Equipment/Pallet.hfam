@@ -1,0 +1,144 @@
+{
+  "name": "Pallet",
+  "category": "SpecialtyEquipment",
+  "description": "Timber pallet. Insertion point at the centre.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 1200
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 800
+    },
+    {
+      "name": "Load Height",
+      "type": "Length",
+      "default": 0
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Timber - Softwood"
+    }
+  ],
+  "types": [
+    {
+      "name": "EUR 1200 x 800mm",
+      "values": {}
+    },
+    {
+      "name": "Standard 1200 x 1000mm",
+      "values": {
+        "Depth": 1000
+      }
+    },
+    {
+      "name": "EUR 1200 x 800mm Loaded",
+      "values": {
+        "Load Height": 1200
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2",
+        0
+      ],
+      "max": [
+        "-Width / 2 + 145",
+        "Depth / 2",
+        78
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": 3,
+        "step": [
+          "(Width - 145) / 2",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2",
+        78
+      ],
+      "max": [
+        "Width / 2",
+        "Depth / 2",
+        100
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2",
+        100
+      ],
+      "max": [
+        "Width / 2",
+        "-Depth / 2 + 100",
+        144
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": 5,
+        "step": [
+          0,
+          "(Depth - 100) / 4",
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 20",
+        "-Depth / 2 + 20",
+        144
+      ],
+      "max": [
+        "Width / 2 - 20",
+        "Depth / 2 - 20",
+        "144 + Load Height"
+      ],
+      "material": "Cardboard",
+      "visible": "Load Height > 0"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2"
+      ],
+      "max": [
+        "Width / 2",
+        "Depth / 2"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Depth / 2"
+      ],
+      "to": [
+        "Width / 2",
+        "Depth / 2"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "name": "Equipment Plinth",
+  "category": "GenericModels",
+  "description": "Concrete plinth for plant or machinery. Insertion point at the centre.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 1500
+    },
+    {
+      "name": "Length",
+      "type": "Length",
+      "default": 2500
+    },
+    {
+      "name": "Thickness",
+      "type": "Length",
+      "default": 150
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Concrete, Cast-in-Place"
+    }
+  ],
+  "types": [
+    {
+      "name": "1500 x 2500mm",
+      "values": {}
+    },
+    {
+      "name": "3000 x 4000mm",
+      "values": {
+        "Width": 3000,
+        "Length": 4000,
+        "Thickness": 200
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Length / 2",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        "Length / 2",
+        "Thickness"
+      ],
+      "material": "Material"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Length / 2"
+      ],
+      "max": [
+        "Width / 2",
+        "Length / 2"
+      ]
+    }
+  ]
+}

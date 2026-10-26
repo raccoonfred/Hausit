@@ -1,0 +1,88 @@
+{
+  "name": "Bollard",
+  "category": "GenericModels",
+  "description": "Steel protection bollard. Insertion point at the centre.",
+  "parameters": [
+    {
+      "name": "Diameter",
+      "type": "Length",
+      "default": 168
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 1100
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Steel - Painted Yellow"
+    }
+  ],
+  "types": [
+    {
+      "name": "114mm",
+      "values": {
+        "Diameter": 114,
+        "Height": 1000
+      }
+    },
+    {
+      "name": "168mm",
+      "values": {}
+    },
+    {
+      "name": "219mm",
+      "values": {
+        "Diameter": 219,
+        "Height": 1200
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2",
+      "z": [
+        0,
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2 + 2",
+      "z": [
+        "Height - 250",
+        "Height - 150"
+      ],
+      "material": "Membrane"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2"
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2 - 10"
+    }
+  ]
+}

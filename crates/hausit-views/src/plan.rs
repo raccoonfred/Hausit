@@ -7,6 +7,7 @@ use crate::hatch::{draw_band, layer_bands, structural_material, Band};
 use crate::{pen, Anchor, Dash, DisplayList, Prim, Rgba, Stroke, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, ElementId, LengthUnit};
+use hausit_model::component::component_plan;
 use hausit_model::geometry::{
     column_extent, column_outline, element_geometry, foundation_extent, framing_axis, opening_frame, roof_plan_lines, section_depth,
     section_profile, Material, Shape,
@@ -266,6 +267,44 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 None,
                 Some(e.id),
             );
+        }
+    }
+
+    // Components (furniture, casework, fixtures, equipment) on this level:
+    // their family's plan symbol, or the outlines of their solids. Those
+    // entirely above the cut plane, such as wall cabinets, are dashed.
+    for cat in Category::COMPONENTS.iter().filter(|_| !reflected) {
+        for e in doc.elements_of(*cat) {
+            let ElementData::Component(c) = &e.data else { continue };
+            if c.level != level {
+                continue;
+            }
+            let Some(g) = element_geometry(doc, e.id) else { continue };
+            let mut stroke = pen(doc, *cat, false, view.scale);
+            let above = g.parts.iter().filter_map(|p| p.vertical_extent()).all(|(_, z0, _)| z0 > cut_z);
+            if above {
+                stroke.dash = Dash::Dashed;
+            }
+            match component_plan(doc, c) {
+                Some(lines) => {
+                    for (a, b) in lines {
+                        dl.line(a, b, stroke, Some(e.id));
+                    }
+                }
+                None => {
+                    for (outline, _, _) in g.parts.iter().filter_map(|p| p.vertical_extent()) {
+                        dl.push(
+                            Prim::Polyline {
+                                pts: outline,
+                                closed: true,
+                            },
+                            Some(stroke),
+                            None,
+                            Some(e.id),
+                        );
+                    }
+                }
+            }
         }
     }
 

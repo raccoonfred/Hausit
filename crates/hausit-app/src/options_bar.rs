@@ -92,6 +92,23 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         };
                         ui.label(RichText::new(tip).color(Color32::DARK_GRAY));
                     }
+                    Tool::Component { .. } => {
+                        ui.label("Rotation");
+                        ui.add(
+                            egui::DragValue::new(&mut app.options.component_rotation)
+                                .range(-360.0..=360.0)
+                                .suffix("°"),
+                        );
+                        ui.separator();
+                        if ui.button("Load Family…").clicked() {
+                            crate::families::load_from_file(app);
+                        }
+                        if ui.button("Library…").clicked() {
+                            crate::families::open_library(app);
+                        }
+                        ui.separator();
+                        ui.label(RichText::new("Space rotates 90°.").color(Color32::DARK_GRAY));
+                    }
                     Tool::Column => {
                         if ui.button("At Grids").on_hover_text("Place a column at every grid intersection").clicked() {
                             crate::tools::columns_at_grids(app);

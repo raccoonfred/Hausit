@@ -223,6 +223,11 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Rotation", G::Constraints, V::Angle(f.rotation)));
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(foundation_volume(doc, id))).ro());
         }
+        ElementData::Component(c) => {
+            p.push(Parameter::new("Level", G::Constraints, V::Element(c.level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Offset", G::Constraints, V::Length(c.offset)));
+            p.push(Parameter::new("Rotation", G::Constraints, V::Angle(c.rotation)));
+        }
         ElementData::Stair(s) => {
             p.push(Parameter::new("Base Level", G::Constraints, V::Element(s.base_level)).kind(ParamKind::Level));
             p.push(Parameter::new("Base Offset", G::Constraints, V::Length(s.base_offset)));
@@ -403,6 +408,12 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 _ => return Err(bad()),
             },
             ElementData::WallFooting(_) => return Err(bad()),
+            ElementData::Component(c) => match (name, value) {
+                ("Level", V::Element(l)) if l.is_valid() => c.level = l,
+                ("Offset", V::Length(v)) => c.offset = v,
+                ("Rotation", V::Angle(a)) => c.rotation = a,
+                _ => return Err(bad()),
+            },
             ElementData::Stair(s) => match (name, value) {
                 ("Base Level", V::Element(l)) if l.is_valid() => s.base_level = l,
                 ("Base Offset", V::Length(v)) => s.base_offset = v,

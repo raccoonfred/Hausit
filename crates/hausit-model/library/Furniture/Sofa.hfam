@@ -1,0 +1,197 @@
+{
+  "name": "Sofa",
+  "category": "Furniture",
+  "description": "Upholstered sofa with arms. Insertion point at the centre of the back, against the wall.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 2000
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Seat Height",
+      "type": "Length",
+      "default": 420
+    },
+    {
+      "name": "Back Height",
+      "type": "Length",
+      "default": 800
+    },
+    {
+      "name": "Arm Width",
+      "type": "Length",
+      "default": 200
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Fabric - Grey"
+    }
+  ],
+  "types": [
+    {
+      "name": "2 Seat 1500mm",
+      "values": {
+        "Width": 1500
+      }
+    },
+    {
+      "name": "3 Seat 2000mm",
+      "values": {}
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        100
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Seat Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        0
+      ],
+      "max": [
+        "-Width / 2 + 60",
+        "-Depth + 60",
+        100
+      ],
+      "material": "Wood - Oak",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 60",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        -260,
+        0
+      ],
+      "max": [
+        "-Width / 2 + 60",
+        -200,
+        100
+      ],
+      "material": "Wood - Oak",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 60",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        -220,
+        "Seat Height"
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Back Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        "Seat Height"
+      ],
+      "max": [
+        "-Width / 2 + Arm Width",
+        -220,
+        "Seat Height + 200"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Arm Width",
+        "-Depth",
+        "Seat Height"
+      ],
+      "max": [
+        "Width / 2",
+        -220,
+        "Seat Height + 200"
+      ],
+      "material": "Material"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2 + Arm Width",
+        -220
+      ],
+      "to": [
+        "Width / 2 - Arm Width",
+        -220
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2 + Arm Width",
+        "-Depth"
+      ],
+      "to": [
+        "-Width / 2 + Arm Width",
+        -220
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "Width / 2 - Arm Width",
+        "-Depth"
+      ],
+      "to": [
+        "Width / 2 - Arm Width",
+        -220
+      ]
+    }
+  ]
+}

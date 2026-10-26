@@ -1112,6 +1112,32 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             line.push(xf.to_screen(p));
             painter.add(Shape::line(line, Stroke::new(1.5, PREVIEW)));
         }
+        Tool::Component { category } => {
+            let category = *category;
+            let Some(type_id) = app.type_for(category) else { return };
+            let c = hausit_model::Component {
+                type_id,
+                category,
+                level: app.active_level().unwrap_or(ElementId::INVALID),
+                point: p,
+                rotation: app.options.component_rotation,
+                offset: 0.0,
+            };
+            let lines: Vec<(DVec2, DVec2)> = match hausit_model::component::component_plan(&app.doc, &c) {
+                Some(lines) => lines,
+                None => hausit_model::component::component_parts(&app.doc, &c)
+                    .iter()
+                    .filter_map(|part| part.vertical_extent())
+                    .flat_map(|(o, _, _)| {
+                        let n = o.len();
+                        (0..n).map(move |i| (o[i], o[(i + 1) % n])).collect::<Vec<_>>()
+                    })
+                    .collect(),
+            };
+            for (a, b) in lines {
+                painter.line_segment([xf.to_screen(a), xf.to_screen(b)], Stroke::new(1.5, PREVIEW));
+            }
+        }
         Tool::Column | Tool::Footing => {
             let cat = app.tool.category().unwrap_or(Category::StructuralColumns);
             let Some(t) = app.type_for(cat).and_then(|t| app.doc.family_type(t)) else {

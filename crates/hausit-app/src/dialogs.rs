@@ -63,6 +63,8 @@ pub struct Dialogs {
     /// Place View: the sheet, and the view picked so far.
     pub place_view: Option<(ElementId, Option<ElementId>)>,
     pub export_pdf: Option<crate::sheets::ExportPdf>,
+    /// Load from Library: each library family, and whether it is ticked.
+    pub library: Option<Vec<bool>>,
 }
 
 impl Dialogs {
@@ -101,6 +103,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     object_styles(app, ctx);
     materials(app, ctx);
     crate::sheets::show(app, ctx);
+    crate::families::show(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;

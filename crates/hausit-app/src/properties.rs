@@ -78,9 +78,17 @@ fn type_selector(app: &mut HausitApp, ui: &mut Ui, cat: Category, elements: &[El
         Some(hausit_model::ElementData::Footing(_)) => Some(false),
         _ => app.tool.wall_foundation(),
     };
-    let types: Vec<(ElementId, String, String)> = app
-        .doc
-        .types_of(cat)
+    // Placing a component: any loaded component type, as Revit's
+    // Component tool lists every loadable family.
+    let placing_component = elements.is_empty() && matches!(app.tool, crate::tools::Tool::Component { .. });
+    let cats: Vec<Category> = if placing_component {
+        Category::COMPONENTS.to_vec()
+    } else {
+        vec![cat]
+    };
+    let types: Vec<(ElementId, String, String)> = cats
+        .iter()
+        .flat_map(|c| app.doc.types_of(*c))
         .filter(|t| cat != Category::StructuralFoundations || wall_foundation.is_none_or(|w| t.is_wall_foundation() == w))
         .map(|t| (t.id, t.family.clone(), t.name.clone()))
         .collect();
@@ -111,7 +119,13 @@ fn type_selector(app: &mut HausitApp, ui: &mut Ui, cat: Category, elements: &[El
                     }
                 });
             if let Some(t) = picked {
-                if elements.is_empty() {
+                if placing_component {
+                    if let Some(c) = app.doc.family_type(t).map(|t| t.category) {
+                        app.current_type.insert(c, t);
+                        app.options.last_component = Some(c);
+                        app.tool = crate::tools::Tool::Component { category: c };
+                    }
+                } else if elements.is_empty() {
                     app.current_type.insert(cat, t);
                 } else {
                     let ids = elements.to_vec();

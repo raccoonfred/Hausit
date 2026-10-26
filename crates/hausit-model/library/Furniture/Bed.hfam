@@ -1,0 +1,191 @@
+{
+  "name": "Bed",
+  "category": "Furniture",
+  "description": "Bed with headboard and mattress. Insertion point at the centre of the headboard, against the wall.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 1400
+    },
+    {
+      "name": "Length",
+      "type": "Length",
+      "default": 2000
+    },
+    {
+      "name": "Mattress Height",
+      "type": "Length",
+      "default": 500
+    },
+    {
+      "name": "Headboard Height",
+      "type": "Length",
+      "default": 1000
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    }
+  ],
+  "types": [
+    {
+      "name": "Single 900 x 2000mm",
+      "values": {
+        "Width": 900
+      }
+    },
+    {
+      "name": "Double 1400 x 2000mm",
+      "values": {}
+    },
+    {
+      "name": "King 1600 x 2000mm",
+      "values": {
+        "Width": 1600
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 - 25",
+        "-Length - 50",
+        150
+      ],
+      "max": [
+        "Width / 2 + 25",
+        -60,
+        "Mattress Height - 200"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 - 25",
+        "-Length - 50",
+        0
+      ],
+      "max": [
+        "-Width / 2 + 35",
+        "-Length + 10",
+        150
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 10",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Length - 30",
+        "Mattress Height - 200"
+      ],
+      "max": [
+        "Width / 2",
+        -70,
+        "Mattress Height"
+      ],
+      "material": "Fabric - White"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 - 25",
+        -60,
+        0
+      ],
+      "max": [
+        "Width / 2 + 25",
+        0,
+        "Headboard Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 60",
+        -500,
+        "Mattress Height"
+      ],
+      "max": [
+        "if(Width > 1000, -40, Width / 2 - 60)",
+        -120,
+        "Mattress Height + 120"
+      ],
+      "material": "Fabric - White"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        40,
+        -500,
+        "Mattress Height"
+      ],
+      "max": [
+        "Width / 2 - 60",
+        -120,
+        "Mattress Height + 120"
+      ],
+      "material": "Fabric - White",
+      "visible": "Width > 1000"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2 - 25",
+        "-Length - 50"
+      ],
+      "max": [
+        "Width / 2 + 25",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2 - 25",
+        -60
+      ],
+      "to": [
+        "Width / 2 + 25",
+        -60
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2 + 60",
+        -500
+      ],
+      "max": [
+        "if(Width > 1000, -40, Width / 2 - 60)",
+        -120
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Length * 0.35"
+      ],
+      "to": [
+        "Width / 2",
+        "-Length * 0.35"
+      ]
+    }
+  ]
+}

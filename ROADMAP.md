@@ -106,7 +106,7 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
 | System families (walls, floors, roofs) with types | Have | — | |
-| Loadable families with types | Partial | P0 | Doors/windows are hard-coded today |
+| Loadable families with types | Partial | P0 | Components (furniture, casework, plumbing, equipment, generic models) load from `.hfam` files: parametric solids with formulas, repeats, visibility and plan symbols. See docs/families.md. Doors and windows are still built in |
 | Family editor: reference planes, dimensions, labels, parameters, formulas | Missing | P0 | |
 | Extrusion, blend, revolve, sweep, swept blend, voids | Missing | P0 | Needs a solid modeller (see 3.2) |
 | Constraints solver (locks, EQ, alignment) | Missing | P0 | |
@@ -117,7 +117,7 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Shared parameters, project parameters, global parameters | Missing | P1 | |
 | Detail components, profiles, annotation families (tags, symbols, title blocks) | Missing | P1 | |
 | Adaptive and conceptual mass families | Missing | P3 | |
-| A starter family library (doors, windows, furniture, fixtures, title blocks) | Missing | P0 | Must be authored from scratch, never copied from Autodesk content |
+| A starter family library (doors, windows, furniture, fixtures, title blocks) | Partial | P0 | 19 families authored for Hausit (Insert ▸ Library); doors, windows and title blocks to come |
 
 ### 2.5 Annotation and documentation
 

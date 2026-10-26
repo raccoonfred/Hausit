@@ -1,0 +1,134 @@
+{
+  "name": "Chair",
+  "category": "Furniture",
+  "description": "Dining chair. Insertion point at the centre of the seat; the chair faces down in plan.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 450
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 480
+    },
+    {
+      "name": "Seat Height",
+      "type": "Length",
+      "default": 450
+    },
+    {
+      "name": "Back Height",
+      "type": "Length",
+      "default": 880
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    }
+  ],
+  "types": [
+    {
+      "name": "Standard",
+      "values": {}
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2",
+        "Seat Height - 30"
+      ],
+      "max": [
+        "Width / 2",
+        "Depth / 2",
+        "Seat Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        "-Width / 2 + 30",
+        "-Depth / 2 + 30"
+      ],
+      "radius": 15,
+      "z": [
+        0,
+        "Seat Height - 30"
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 60",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        "-Width / 2 + 30",
+        "Depth / 2 - 30"
+      ],
+      "radius": 15,
+      "z": [
+        0,
+        "Seat Height - 30"
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": 2,
+        "step": [
+          "Width - 60",
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "Depth / 2 - 25",
+        "Seat Height"
+      ],
+      "max": [
+        "Width / 2",
+        "Depth / 2",
+        "Back Height"
+      ],
+      "material": "Material"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth / 2"
+      ],
+      "max": [
+        "Width / 2",
+        "Depth / 2"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "Depth / 2 - 25"
+      ],
+      "to": [
+        "Width / 2",
+        "Depth / 2 - 25"
+      ]
+    }
+  ]
+}

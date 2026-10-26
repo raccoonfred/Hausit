@@ -11,6 +11,7 @@
 //! * [`geometry`] turns elements into solids that views project and cut.
 
 pub mod category;
+pub mod component;
 pub mod dimensions;
 pub mod document;
 pub mod element;
@@ -18,6 +19,7 @@ pub mod family;
 pub mod geometry;
 pub mod history;
 pub mod index;
+pub mod library;
 pub mod materials;
 pub mod params;
 pub mod rooms;
@@ -29,6 +31,7 @@ pub mod template;
 pub mod view;
 
 pub use category::Category;
+pub use component::FamilyDef;
 pub use document::{Document, ModelError, ProjectInfo};
 pub use element::*;
 pub use family::{FamilyType, TypeParams};

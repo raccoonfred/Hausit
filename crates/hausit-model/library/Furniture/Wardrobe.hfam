@@ -1,0 +1,127 @@
+{
+  "name": "Wardrobe",
+  "category": "Furniture",
+  "description": "Wardrobe with hinged doors. Insertion point at the centre of the back, against the wall.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 1200
+    },
+    {
+      "name": "Depth",
+      "type": "Length",
+      "default": 600
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 2100
+    },
+    {
+      "name": "Doors",
+      "type": "Integer",
+      "default": 2
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Laminate - White"
+    }
+  ],
+  "types": [
+    {
+      "name": "1000mm 2 Door",
+      "values": {
+        "Width": 1000
+      }
+    },
+    {
+      "name": "1200mm 2 Door",
+      "values": {}
+    },
+    {
+      "name": "1800mm 3 Door",
+      "values": {
+        "Width": 1800,
+        "Doors": 3
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + 20",
+        "-Depth + 40",
+        0
+      ],
+      "max": [
+        "Width / 2 - 20",
+        -10,
+        80
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth + 20",
+        80
+      ],
+      "max": [
+        "Width / 2",
+        0,
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-Depth",
+        80
+      ],
+      "max": [
+        "-Width / 2 + Width / Doors - 3",
+        "-Depth + 20",
+        "Height"
+      ],
+      "material": "Material",
+      "repeat": {
+        "count": "Doors",
+        "step": [
+          "Width / Doors",
+          0,
+          0
+        ]
+      }
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Depth"
+      ],
+      "max": [
+        "Width / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2 + 40",
+        "-Depth / 2"
+      ],
+      "to": [
+        "Width / 2 - 40",
+        "-Depth / 2"
+      ]
+    }
+  ]
+}

@@ -16,13 +16,18 @@ pub enum Category {
     StructuralFoundations,
     Stairs,
     Railings,
+    Furniture,
+    Casework,
+    PlumbingFixtures,
+    SpecialtyEquipment,
+    GenericModels,
     Rooms,
     RoomSeparation,
     Dimensions,
 }
 
 impl Category {
-    pub const ALL: [Category; 16] = [
+    pub const ALL: [Category; 21] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -36,18 +41,37 @@ impl Category {
         Category::StructuralFoundations,
         Category::Stairs,
         Category::Railings,
+        Category::Furniture,
+        Category::Casework,
+        Category::PlumbingFixtures,
+        Category::SpecialtyEquipment,
+        Category::GenericModels,
         Category::Rooms,
         Category::RoomSeparation,
         Category::Dimensions,
     ];
 
+    /// Categories of loadable components, placed with the Component tool.
+    pub const COMPONENTS: [Category; 5] = [
+        Category::Furniture,
+        Category::Casework,
+        Category::PlumbingFixtures,
+        Category::SpecialtyEquipment,
+        Category::GenericModels,
+    ];
+
     /// Categories that have family types (and so appear under "Families").
-    pub const TYPED: [Category; 11] = [
+    pub const TYPED: [Category; 16] = [
+        Category::Casework,
         Category::Ceilings,
         Category::Doors,
         Category::Floors,
+        Category::Furniture,
+        Category::GenericModels,
+        Category::PlumbingFixtures,
         Category::Railings,
         Category::Roofs,
+        Category::SpecialtyEquipment,
         Category::StructuralColumns,
         Category::StructuralFoundations,
         Category::StructuralFraming,
@@ -57,13 +81,18 @@ impl Category {
     ];
 
     /// Categories that can be scheduled.
-    pub const SCHEDULABLE: [Category; 12] = [
+    pub const SCHEDULABLE: [Category; 17] = [
+        Category::Casework,
         Category::Ceilings,
         Category::Doors,
         Category::Floors,
+        Category::Furniture,
+        Category::GenericModels,
+        Category::PlumbingFixtures,
         Category::Railings,
         Category::Roofs,
         Category::Rooms,
+        Category::SpecialtyEquipment,
         Category::StructuralColumns,
         Category::StructuralFoundations,
         Category::StructuralFraming,
@@ -87,6 +116,11 @@ impl Category {
             Category::StructuralFoundations => "Structural Foundations",
             Category::Stairs => "Stairs",
             Category::Railings => "Railings",
+            Category::Furniture => "Furniture",
+            Category::Casework => "Casework",
+            Category::PlumbingFixtures => "Plumbing Fixtures",
+            Category::SpecialtyEquipment => "Specialty Equipment",
+            Category::GenericModels => "Generic Models",
             Category::Rooms => "Rooms",
             Category::RoomSeparation => "Room Separation Lines",
             Category::Dimensions => "Dimensions",
@@ -109,6 +143,11 @@ impl Category {
             Category::StructuralFoundations => "Structural Foundation",
             Category::Stairs => "Stair",
             Category::Railings => "Railing",
+            Category::Furniture => "Furniture",
+            Category::Casework => "Casework",
+            Category::PlumbingFixtures => "Plumbing Fixture",
+            Category::SpecialtyEquipment => "Specialty Equipment",
+            Category::GenericModels => "Generic Model",
             Category::Rooms => "Room",
             Category::RoomSeparation => "Room Separation Line",
             Category::Dimensions => "Dimension",

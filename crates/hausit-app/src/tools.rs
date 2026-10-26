@@ -44,6 +44,11 @@ pub enum Tool {
         base: Option<DVec2>,
     },
     Column,
+    /// A loadable component (furniture, casework, fixtures, equipment)
+    /// of the given category.
+    Component {
+        category: Category,
+    },
     /// Structural framing between two points: a beam, or a brace from
     /// this level up to the level above.
     Beam {
@@ -120,6 +125,7 @@ impl Tool {
             Tool::Move { .. } => "Modify | Move",
             Tool::Copy { .. } => "Modify | Copy",
             Tool::Column => "Modify | Place Structural Column",
+            Tool::Component { .. } => "Modify | Place Component",
             Tool::Beam { brace: false, .. } => "Modify | Place Beam",
             Tool::Beam { .. } => "Modify | Place Brace",
             Tool::Footing => "Modify | Place Isolated Foundation",
@@ -160,6 +166,7 @@ impl Tool {
             Tool::Move { base: None } | Tool::Copy { base: None } => "Click to enter move start point.",
             Tool::Move { .. } | Tool::Copy { .. } => "Click to enter move end point.",
             Tool::Column => "Click to place a structural column. Space rotates it 90°. At Grids places one at every grid intersection.",
+            Tool::Component { .. } => "Click to place the component. Space rotates it 90°. Pick another type in Properties.",
             Tool::Beam { start: None, brace: false } => "Click to enter beam start point.",
             Tool::Beam { start: None, .. } => "Click to enter brace start point (on this level).",
             Tool::Beam { brace: false, .. } => "Click to enter beam end point. Esc ends the chain.",
@@ -196,6 +203,7 @@ impl Tool {
             Tool::Floor { .. } => Some(Category::Floors),
             Tool::Roof { .. } => Some(Category::Roofs),
             Tool::Column => Some(Category::StructuralColumns),
+            Tool::Component { category } => Some(*category),
             Tool::Beam { .. } => Some(Category::StructuralFraming),
             Tool::Footing | Tool::WallFoundation => Some(Category::StructuralFoundations),
             Tool::Stair { .. } => Some(Category::Stairs),
@@ -413,6 +421,10 @@ pub struct ToolOptions {
     pub pick_tol: f64,
     /// Ceiling height above the level.
     pub ceiling_height: f64,
+    /// Rotation of the component being placed, degrees.
+    pub component_rotation: f64,
+    /// Category of the component type used last.
+    pub last_component: Option<Category>,
 }
 
 impl Default for ToolOptions {
@@ -433,6 +445,8 @@ impl Default for ToolOptions {
             copy: false,
             pick_tol: 200.0,
             ceiling_height: 2600.0,
+            component_rotation: 0.0,
+            last_component: None,
         }
     }
 }
@@ -450,6 +464,7 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Grid { .. }
             | Tool::Section { .. }
             | Tool::Column
+            | Tool::Component { .. }
             | Tool::Beam { .. }
             | Tool::Footing
             | Tool::WallFoundation
@@ -487,6 +502,24 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
         return;
     }
     match &mut tool {
+        // Components: the category of the type last used, or the first
+        // category with loaded types; with none loaded, offer the library.
+        Tool::Component { category } => {
+            let has = |app: &HausitApp, c: Category| app.doc.types_of(c).next().is_some();
+            if let Some(c) = app.options.last_component.filter(|c| has(app, *c)) {
+                *category = c;
+            }
+            if !has(app, *category) {
+                match Category::COMPONENTS.into_iter().find(|c| has(app, *c)) {
+                    Some(c) => *category = c,
+                    None => {
+                        crate::families::open_library(app);
+                        app.status = "Load a family first: pick one from the library.".into();
+                        return;
+                    }
+                }
+            }
+        }
         Tool::Rotate { center, .. } => match selection_center(app) {
             Some(c) => *center = c,
             None => return,
@@ -1004,6 +1037,21 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
             }
             _ => {}
         },
+        Tool::Component { category } => {
+            let Some(level) = app.active_level() else { return };
+            let category = *category;
+            let Some(type_id) = app.type_for(category) else { return };
+            app.options.last_component = Some(category);
+            let c = Component {
+                type_id,
+                category,
+                level,
+                point: p,
+                rotation: app.options.component_rotation,
+                offset: 0.0,
+            };
+            app.transact("Place Component", |doc| Ok(doc.add_element(ElementData::Component(c))));
+        }
         Tool::Column => {
             let Some(level) = app.active_level() else { return };
             let Some(type_id) = app.type_for(Category::StructuralColumns) else {
@@ -1541,6 +1589,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::Column(c) => pts.push(c.point),
             ElementData::Framing(f) => pts.extend([f.start, f.end]),
             ElementData::Footing(f) => pts.push(f.point),
+            ElementData::Component(c) => pts.push(c.point),
             ElementData::Stair(s) => pts.extend(&s.path),
             ElementData::Ceiling(c) => pts.extend(&c.boundary),
             ElementData::Railing(r) => pts.extend(&r.path),
@@ -1885,6 +1934,9 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         // Spacebar flips the wall's exterior side or the door's hand.
         app.options.flip = !app.options.flip;
     }
+    if space && matches!(app.tool, Tool::Component { .. }) {
+        app.options.component_rotation = (app.options.component_rotation + 90.0) % 360.0;
+    }
     if y {
         app.redo();
     }
@@ -2014,6 +2066,15 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "CL" => {
             start(app, Tool::Column);
+            true
+        }
+        "CM" => {
+            start(
+                app,
+                Tool::Component {
+                    category: Category::Furniture,
+                },
+            );
             true
         }
         "BM" => {

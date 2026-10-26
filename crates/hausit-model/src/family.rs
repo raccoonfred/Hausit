@@ -153,6 +153,8 @@ pub fn default_type_params(category: Category) -> TypeParams {
             p.insert("Intermediate Rails".into(), ParamValue::Integer(0));
             p.insert("Material".into(), ParamValue::Text("Steel".into()));
         }
+        // Loadable families bring their own parameters.
+        Category::Furniture | Category::Casework | Category::PlumbingFixtures | Category::SpecialtyEquipment | Category::GenericModels => {}
         Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => {}
     }
     p.insert("Type Mark".into(), ParamValue::Text(String::new()));

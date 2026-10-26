@@ -52,6 +52,8 @@ pub enum Icon {
     Stair,
     Railing,
     Ceiling,
+    Component,
+    LoadFamily,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -331,6 +333,28 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 ink,
                 egui::StrokeKind::Middle,
             );
+        }
+        Icon::Component => {
+            // A chair, side on.
+            let wood = k(Color32::from_rgb(196, 150, 100));
+            p.rect(rect(8.0, 16.0, 24.0, 19.0), 0.0, wood, ink, egui::StrokeKind::Middle);
+            p.rect(rect(20.0, 4.0, 23.0, 16.0), 0.0, wood, ink, egui::StrokeKind::Middle);
+            seg((9.5, 19.0), (9.5, 28.0), ink);
+            seg((22.5, 19.0), (22.5, 28.0), ink);
+        }
+        Icon::LoadFamily => {
+            // A box with an arrow into it.
+            p.rect(
+                rect(6.0, 14.0, 26.0, 28.0),
+                0.0,
+                k(Color32::from_rgb(230, 240, 255)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            let blue = line(2.0, BLUE);
+            seg((16.0, 3.0), (16.0, 20.0), blue);
+            seg((11.0, 15.0), (16.0, 20.0), blue);
+            seg((21.0, 15.0), (16.0, 20.0), blue);
         }
         Icon::Room => {
             p.rect(

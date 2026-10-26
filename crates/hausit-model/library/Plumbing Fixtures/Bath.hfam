@@ -1,0 +1,169 @@
+{
+  "name": "Bath",
+  "category": "PlumbingFixtures",
+  "description": "Rectangular bath. Insertion point at the centre of the long side against the wall.",
+  "parameters": [
+    {
+      "name": "Length",
+      "type": "Length",
+      "default": 1700
+    },
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 750
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 550
+    },
+    {
+      "name": "Rim",
+      "type": "Length",
+      "default": 60
+    },
+    {
+      "name": "Material",
+      "type": "Material",
+      "default": "Porcelain"
+    }
+  ],
+  "types": [
+    {
+      "name": "1600 x 700mm",
+      "values": {
+        "Length": 1600,
+        "Width": 700
+      }
+    },
+    {
+      "name": "1700 x 750mm",
+      "values": {}
+    },
+    {
+      "name": "1800 x 800mm",
+      "values": {
+        "Length": 1800,
+        "Width": 800
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Length / 2",
+        "-Width",
+        0
+      ],
+      "max": [
+        "Length / 2",
+        0,
+        150
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Length / 2",
+        "-Width",
+        150
+      ],
+      "max": [
+        "Length / 2",
+        "-Width + Rim",
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Length / 2",
+        "-Rim",
+        150
+      ],
+      "max": [
+        "Length / 2",
+        0,
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Length / 2",
+        "-Width + Rim",
+        150
+      ],
+      "max": [
+        "-Length / 2 + Rim",
+        "-Rim",
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Length / 2 - Rim",
+        "-Width + Rim",
+        150
+      ],
+      "max": [
+        "Length / 2",
+        "-Rim",
+        "Height"
+      ],
+      "material": "Material"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        "Length / 2 - 140",
+        "-Width / 2"
+      ],
+      "radius": 15,
+      "z": [
+        "Height",
+        "Height + 120"
+      ],
+      "material": "Stainless Steel"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Length / 2",
+        "-Width"
+      ],
+      "max": [
+        "Length / 2",
+        0
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Length / 2 + Rim",
+        "-Width + Rim"
+      ],
+      "max": [
+        "Length / 2 - Rim",
+        "-Rim"
+      ]
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        "Length / 2 - 200",
+        "-Width / 2"
+      ],
+      "radius": 25
+    }
+  ]
+}

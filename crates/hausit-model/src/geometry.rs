@@ -94,12 +94,16 @@ pub enum Shape {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Part {
     pub material: Material,
+    /// A named material for this part, overriding the element's (used
+    /// by loadable families).
+    pub material_name: Option<String>,
     pub shape: Shape,
 }
 
 impl Part {
     fn prism(material: Material, p: Prism) -> Self {
         Part {
+            material_name: None,
             material,
             shape: Shape::Prism(p),
         }
@@ -206,6 +210,7 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             }
             let profile = section_profile(doc.type_of(id));
             vec![Part {
+                material_name: None,
                 material: Material::Default,
                 shape: Shape::Faces(sweep(&profile, a, b)),
             }]
@@ -224,6 +229,7 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             vec![Part::prism(Material::Default, Prism::new(c.boundary.clone(), z, z + t))]
         }
         ElementData::Railing(r) => railing_parts(doc, id, r),
+        ElementData::Component(c) => crate::component::component_parts(doc, c),
         ElementData::Level(_)
         | ElementData::Grid(_)
         | ElementData::Room(_)
@@ -461,6 +467,7 @@ fn solid_under(poly: &[DVec2], z0: f64, tops: &[f64]) -> Part {
         }
     }
     Part {
+        material_name: None,
         material: Material::Default,
         shape: Shape::Faces(faces),
     }
@@ -773,6 +780,7 @@ fn run_parts(
     let mut add = |profile: Vec<DVec2>, a: DVec2, b: DVec2| {
         if b.distance(a) > EPS && polygon_area(&profile).abs() > EPS {
             parts.push(Part {
+                material_name: None,
                 material: Material::Default,
                 shape: Shape::Faces(sweep(&profile, DVec3::new(a.x, a.y, 0.0), DVec3::new(b.x, b.y, 0.0))),
             });
@@ -833,6 +841,7 @@ fn run_parts(
         for c in [fa + w * h, fb - w * h] {
             let (a, b) = (c + r * s0, c + r * s1);
             parts.push(Part {
+                material_name: None,
                 material: Material::Default,
                 shape: Shape::Faces(sweep(&profile, DVec3::new(a.x, a.y, nose(s0)), DVec3::new(b.x, b.y, nose(s1)))),
             });
@@ -862,6 +871,7 @@ fn railing_parts(doc: &Document, id: ElementId, r: &Railing) -> Vec<Part> {
             let (a, b) = (DVec3::new(w[0].x, w[0].y, z(w[0])), DVec3::new(w[1].x, w[1].y, z(w[1])));
             if a.distance(b) > EPS {
                 parts.push(Part {
+                    material_name: None,
                     material: Material::Default,
                     shape: Shape::Faces(sweep(&profile, a, b)),
                 });
@@ -1136,6 +1146,7 @@ fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {
         }
     }
     vec![Part {
+        material_name: None,
         material: Material::Default,
         shape: Shape::Faces(faces),
     }]
