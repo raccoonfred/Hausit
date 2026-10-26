@@ -77,6 +77,14 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         });
                     }
                 });
+            CollapsingHeader::new("Sheets (all)").default_open(true).show(ui, |ui| {
+                for (id, label) in crate::sheets::sheets_in_order(&app.doc) {
+                    view_item(app, ui, id, &label);
+                }
+                if ui.small_button("New Sheet…").clicked() {
+                    crate::sheets::start_new_sheet(app);
+                }
+            });
             CollapsingHeader::new("Families").default_open(false).show(ui, |ui| {
                 for cat in Category::TYPED {
                     CollapsingHeader::new(cat.name()).id_salt(("fam", cat.name())).show(ui, |ui| {
@@ -120,9 +128,11 @@ fn view_item(app: &mut HausitApp, ui: &mut Ui, id: ElementId, name: &str) {
             ui.close();
         }
         if ui.button("Rename…").clicked() {
+            // Sheets are listed as "A101 - Name"; rename the name.
+            let text = app.doc.view(id).map(|v| v.name.clone()).unwrap_or_else(|| name.to_string());
             app.dialogs.rename = Some(crate::dialogs::Rename {
                 target: id,
-                text: name.to_string(),
+                text,
                 is_type: false,
             });
             ui.close();
@@ -164,9 +174,11 @@ fn type_item(app: &mut HausitApp, ui: &mut Ui, cat: Category, id: ElementId, nam
             ui.close();
         }
         if ui.button("Rename…").clicked() {
+            // Sheets are listed as "A101 - Name"; rename the name.
+            let text = app.doc.view(id).map(|v| v.name.clone()).unwrap_or_else(|| name.to_string());
             app.dialogs.rename = Some(crate::dialogs::Rename {
                 target: id,
-                text: name.to_string(),
+                text,
                 is_type: true,
             });
             ui.close();

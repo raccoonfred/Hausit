@@ -22,6 +22,7 @@ pub mod materials;
 pub mod params;
 pub mod rooms;
 pub mod schedule;
+pub mod sheet;
 pub mod stairs;
 pub mod styles;
 pub mod template;
@@ -34,6 +35,7 @@ pub use family::{FamilyType, TypeParams};
 pub use history::History;
 pub use params::{ParamGroup, ParamKind, ParamValue, Parameter};
 pub use schedule::{ScheduleDef, ScheduleField};
+pub use sheet::{SheetDef, SheetSize, Viewport};
 pub use view::{CardinalDirection, DetailLevel, SectionBox, View, ViewKind, VisualStyle};
 
 pub use hausit_core::{DVec2, DVec3, ElementId};

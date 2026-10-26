@@ -59,6 +59,10 @@ pub struct Dialogs {
     /// Object Styles dialog: the settings being edited.
     pub object_styles: Option<(hausit_model::styles::ObjectStyles, hausit_model::styles::LineWeights)>,
     pub materials: Option<MaterialsDialog>,
+    pub new_sheet: Option<crate::sheets::NewSheet>,
+    /// Place View: the sheet, and the view picked so far.
+    pub place_view: Option<(ElementId, Option<ElementId>)>,
+    pub export_pdf: Option<crate::sheets::ExportPdf>,
 }
 
 impl Dialogs {
@@ -96,6 +100,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     attach_walls(app, ctx);
     object_styles(app, ctx);
     materials(app, ctx);
+    crate::sheets::show(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;
@@ -675,7 +680,7 @@ pub fn home(app: &mut HausitApp, ui: &mut Ui) {
                 "Sample House",
                 "A small house with walls, doors, windows, a floor and a roof",
             ) {
-                app.set_document(hausit_model::template::sample_project(), None);
+                app.set_document(crate::sheets::sample_house(), None);
             }
             if card(
                 ui,
@@ -683,7 +688,7 @@ pub fn home(app: &mut HausitApp, ui: &mut Ui) {
                 "Sample Warehouse",
                 "A steel portal-frame shed with bracing, pad footings and metal cladding",
             ) {
-                app.set_document(hausit_model::template::industrial_sample(), None);
+                app.set_document(crate::sheets::sample_warehouse(), None);
             }
         });
         ui.add_space(24.0);

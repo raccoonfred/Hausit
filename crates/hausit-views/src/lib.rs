@@ -10,8 +10,10 @@ mod bsp;
 mod dims;
 pub mod frame;
 mod hatch;
+pub mod pdf;
 mod plan;
 mod project;
+pub mod sheet;
 
 pub use dims::draw_dimension;
 pub use frame::ViewFrame;
@@ -57,7 +59,7 @@ impl Stroke {
 }
 
 /// Screen pixels per paper millimetre for line weights.
-const PX_PER_MM: f64 = 5.2;
+pub const PX_PER_MM: f64 = 5.2;
 
 /// The stroke a category draws with in a view at 1:`scale`, from the
 /// document's object styles and line weights.
@@ -181,6 +183,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
             dl
         }
         ViewKind::Schedule(_) => DisplayList::default(),
+        ViewKind::Sheet(def) => return sheet::build(doc, view, def),
     };
     annotate::callout_marks(doc, view, &mut dl);
     if let Some((lo, hi)) = view.crop {

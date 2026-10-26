@@ -9,5 +9,6 @@ rust-version.workspace = true
 [dependencies]
 hausit-core.workspace = true
 hausit-model.workspace = true
+hausit-schedules.workspace = true
 glam.workspace = true
 serde.workspace = true

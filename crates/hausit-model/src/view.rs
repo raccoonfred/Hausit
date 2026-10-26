@@ -2,6 +2,7 @@
 //! graphics they show are produced by the `hausit-views` crate.
 
 use crate::schedule::ScheduleDef;
+use crate::sheet::SheetDef;
 use hausit_core::{DVec2, DVec3, ElementId};
 use serde::{Deserialize, Serialize};
 
@@ -96,6 +97,8 @@ pub enum ViewKind {
         far_clip: f64,
     },
     Schedule(ScheduleDef),
+    /// A drawing sheet; the view's name is the sheet name.
+    Sheet(SheetDef),
 }
 
 impl ViewKind {
@@ -108,6 +111,7 @@ impl ViewKind {
             ViewKind::Elevation { .. } => "Elevations (Building Elevation)",
             ViewKind::Section { .. } => "Sections (Building Section)",
             ViewKind::Schedule(_) => "Schedules/Quantities",
+            ViewKind::Sheet(_) => "Sheets (all)",
         }
     }
 
@@ -230,11 +234,13 @@ impl View {
         } else {
             1200.0
         };
+        // Sheets are drawn full size, in paper millimetres.
+        let scale = if matches!(kind, ViewKind::Sheet(_)) { 1 } else { 100 };
         View {
             id,
             name: name.to_string(),
             kind,
-            scale: 100,
+            scale,
             detail_level: DetailLevel::Medium,
             visual_style,
             cut_height,

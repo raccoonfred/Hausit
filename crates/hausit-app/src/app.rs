@@ -290,6 +290,18 @@ impl HausitApp {
         }
         let (elements, views): (Vec<ElementId>, Vec<ElementId>) = self.selection.iter().partition(|id| self.doc.element(**id).is_some());
         let n = self.selection.len();
+        // On a sheet, Delete takes views off the sheet; the views stay.
+        if let Some(sheet) = crate::sheets::active_sheet(self) {
+            self.transact("Remove from Sheet", |doc| {
+                for v in &views {
+                    doc.remove_viewport(sheet, *v);
+                }
+                Ok(())
+            });
+            self.selection.clear();
+            self.status = format!("Removed {} view(s) from the sheet", views.len());
+            return;
+        }
         self.transact("Delete", |doc| {
             for v in &views {
                 doc.delete_view(*v);
@@ -369,6 +381,7 @@ impl HausitApp {
                 ViewKind::Elevation { .. } => "Elevation",
                 ViewKind::Section { .. } => "Section",
                 ViewKind::Schedule(_) => "Schedule",
+                ViewKind::Sheet(_) => "Sheet",
             };
             format!(" - {kind}: {}", v.name)
         });

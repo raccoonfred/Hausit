@@ -15,6 +15,9 @@ use hausit_views::{Anchor, Dash, DisplayList, Item, Prim};
 pub struct Xform {
     pub rect: Rect,
     pub cam: Camera2D,
+    /// Multiplies line widths. 1 in model views; on sheets, lines are
+    /// drawn at their printed width, so they thin out as you zoom out.
+    pub line_scale: f32,
 }
 
 impl Xform {
@@ -54,7 +57,9 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     let rect = Rect::from_min_max(full.min, pos2(full.max.x, full.max.y - control_h));
     let response = ui.allocate_rect(rect, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, CANVAS_BG);
+    let is_sheet = matches!(view.kind, ViewKind::Sheet(_));
+    // Sheets sit on a grey desk, so the paper's edge shows.
+    painter.rect_filled(rect, 0.0, if is_sheet { Color32::from_gray(200) } else { CANVAS_BG });
 
     let is_3d = matches!(view.kind, ViewKind::ThreeD);
     let is_plan = view.kind.plan_level().is_some();
@@ -71,9 +76,15 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         cam.fitted = true;
     }
     navigate(app, ui, &response, rect, view_id, is_3d);
+    let cam = app.cameras[&view_id];
     let xf = Xform {
         rect,
-        cam: app.cameras[&view_id],
+        cam,
+        line_scale: if is_sheet {
+            (cam.zoom as f32 / hausit_views::PX_PER_MM as f32).clamp(0.15, 4.0)
+        } else {
+            1.0
+        },
     };
     let dl = app.active_graphics().cloned().unwrap_or_default();
 
@@ -192,6 +203,9 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     if is_3d {
         section_box_grips(app, ui, &response, &painter, &xf, view_id);
     }
+    if is_sheet {
+        viewport_drag(app, ui, &response, &painter, &dl, &xf, view_id);
+    }
     box_select(app, ui, &response, &painter, &dl, &xf);
 
     // Previews.
@@ -272,10 +286,18 @@ fn navigate(app: &mut HausitApp, ui: &Ui, response: &egui::Response, rect: Rect,
     if let Some(p) = pointer {
         let factor = (scroll as f64 / 300.0).exp() * zoom_delta as f64;
         if (factor - 1.0).abs() > 1e-6 {
-            let xf = Xform { rect, cam: *cam };
+            let xf = Xform {
+                rect,
+                cam: *cam,
+                line_scale: 1.0,
+            };
             let before = xf.to_view(p);
             cam.zoom = (cam.zoom * factor).clamp(1e-4, 50.0);
-            let xf = Xform { rect, cam: *cam };
+            let xf = Xform {
+                rect,
+                cam: *cam,
+                line_scale: 1.0,
+            };
             cam.center += before - xf.to_view(p);
         }
     }
@@ -352,10 +374,15 @@ pub fn paint_list(painter: &egui::Painter, xf: &Xform, dl: &DisplayList, highlig
         }
         let (stroke, fill) = match highlight {
             Some((_, c)) => (
-                item.stroke.map(|s| Stroke::new(s.width + 1.0, c)).or(Some(Stroke::new(1.5, c))),
+                item.stroke
+                    .map(|s| Stroke::new(s.width * xf.line_scale + 1.0, c))
+                    .or(Some(Stroke::new(1.5, c))),
                 item.fill.map(|_| Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), 50)),
             ),
-            None => (item.stroke.map(|s| Stroke::new(s.width, c32(s.color))), item.fill.map(c32)),
+            None => (
+                item.stroke.map(|s| Stroke::new((s.width * xf.line_scale).max(0.5), c32(s.color))),
+                item.fill.map(c32),
+            ),
         };
         let dash = item.stroke.map(|s| s.dash).unwrap_or(Dash::Solid);
         match &item.prim {
@@ -523,6 +550,7 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
     if ui.ctx().data(|d| {
         d.get_temp::<DirectDrag>(egui::Id::unique("direct_drag")).is_some()
             || d.get_temp::<(usize, f32)>(egui::Id::unique("box_grip")).is_some()
+            || d.get_temp::<DVec2>(egui::Id::unique("viewport_drag")).is_some()
     }) {
         return;
     }
@@ -680,6 +708,63 @@ fn section_box_grips(app: &mut HausitApp, ui: &Ui, response: &egui::Response, pa
     }
 }
 
+/// On a sheet, dragging a placed view moves it on the paper.
+fn viewport_drag(
+    app: &mut HausitApp,
+    ui: &Ui,
+    response: &egui::Response,
+    painter: &egui::Painter,
+    dl: &DisplayList,
+    xf: &Xform,
+    sheet: ElementId,
+) {
+    if app.tool != Tool::Modify {
+        return;
+    }
+    let id = egui::Id::unique("viewport_drag");
+    let on_sheet = |app: &HausitApp, v: ElementId| match app.doc.view(sheet).map(|s| &s.kind) {
+        Some(ViewKind::Sheet(def)) => def.viewports.iter().any(|p| p.view == v),
+        _ => false,
+    };
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        if let (Some(sp), Some(h)) = (ui.input(|i| i.pointer.press_origin()), app.hover) {
+            if on_sheet(app, h) {
+                if !app.selection.contains(&h) {
+                    app.selection = vec![h];
+                }
+                ui.ctx().data_mut(|d| d.insert_temp(id, xf.to_view(sp)));
+            }
+        }
+    }
+    let Some(from) = ui.ctx().data(|d| d.get_temp::<DVec2>(id)) else {
+        return;
+    };
+    let Some(cur) = ui.input(|i| i.pointer.latest_pos()).map(|p| xf.to_view(p)) else {
+        return;
+    };
+    let moved = Xform {
+        rect: xf.rect,
+        line_scale: xf.line_scale,
+        cam: Camera2D {
+            center: xf.cam.center - (cur - from),
+            ..xf.cam
+        },
+    };
+    paint_list(painter, &moved, dl, Some((&app.selection, PREVIEW)));
+    if response.drag_stopped() {
+        ui.ctx().data_mut(|d| d.remove::<DVec2>(id));
+        let views: Vec<ElementId> = app.selection.iter().copied().filter(|v| on_sheet(app, *v)).collect();
+        if cur.distance(from) > xf.px(2.0) {
+            app.transact("Move Viewport", |doc| {
+                for v in &views {
+                    doc.move_viewport(sheet, *v, cur - from);
+                }
+                Ok(())
+            });
+        }
+    }
+}
+
 /// A drag on the model in Modify: moving the selection, or a wall end.
 #[derive(Clone, Copy)]
 enum DirectDrag {
@@ -741,6 +826,7 @@ fn direct_drag(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter:
         DirectDrag::Move { from } => {
             let moved = Xform {
                 rect: xf.rect,
+                line_scale: xf.line_scale,
                 cam: Camera2D {
                     center: xf.cam.center - (target - from),
                     ..xf.cam
@@ -1101,6 +1187,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             let dl = app.cache.list.clone();
             let moved = Xform {
                 rect: xf.rect,
+                line_scale: xf.line_scale,
                 cam: Camera2D {
                     center: xf.cam.center - (p - *a),
                     ..xf.cam
@@ -1240,6 +1327,27 @@ fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: Eleme
                 ui.horizontal(|ui| {
                     let Some(view) = app.doc.view(view_id).cloned() else { return };
                     let mut v = view.clone();
+                    if let ViewKind::Sheet(def) = &view.kind {
+                        let p = def.size.paper();
+                        ui.label(format!("{}  ·  {} x {} mm", def.size.title_block(), p.x, p.y));
+                        if ui.button("⛶ Zoom to Fit").on_hover_text("Zoom To Fit (ZF)").clicked() {
+                            if let Some(c) = app.cameras.get_mut(&view_id) {
+                                c.fitted = false;
+                            }
+                        }
+                        if ui.button("Place View…").clicked() {
+                            app.dialogs.place_view = Some((view_id, None));
+                        }
+                        if ui.button("Export PDF…").clicked() {
+                            crate::sheets::start_export(app);
+                        }
+                        ui.label(
+                            egui::RichText::new("Drag a view to move it · double-click to open it · Delete removes it from the sheet")
+                                .color(Color32::GRAY)
+                                .size(11.0),
+                        );
+                        return;
+                    }
                     egui::ComboBox::from_id_salt("scale")
                         .selected_text(format!("1 : {}", v.scale))
                         .width(70.0)

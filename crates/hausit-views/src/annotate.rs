@@ -73,18 +73,34 @@ pub fn view_marks(doc: &Document, plan: &View, dl: &mut DisplayList) {
                     Some([255, 255, 255, 255]),
                     Some(v.id),
                 );
-                dl.push(
-                    Prim::Text {
-                        pos: c,
-                        text: v.name.trim_start_matches("Section ").to_string(),
-                        height: TEXT_H * scale * 0.8,
-                        anchor: Anchor::Center,
-                        angle: 0.0,
-                    },
-                    None,
-                    None,
-                    Some(v.id),
-                );
+                // Once on a sheet, the head reads detail number over sheet
+                // number, as a view reference.
+                let on_sheet = doc.sheet_of(v.id).and_then(|(sv, vp)| match &sv.kind {
+                    ViewKind::Sheet(def) => Some((vp.detail_number.clone(), def.number.clone())),
+                    _ => None,
+                });
+                let label = |dl: &mut DisplayList, pos: DVec2, text: String, k: f64| {
+                    dl.push(
+                        Prim::Text {
+                            pos,
+                            text,
+                            height: TEXT_H * scale * k,
+                            anchor: Anchor::Center,
+                            angle: 0.0,
+                        },
+                        None,
+                        None,
+                        Some(v.id),
+                    )
+                };
+                match on_sheet {
+                    Some((detail, sheet)) => {
+                        dl.line(c - DVec2::new(r, 0.0), c + DVec2::new(r, 0.0), THIN, Some(v.id));
+                        label(dl, c + DVec2::new(0.0, r * 0.42), detail, 0.6);
+                        label(dl, c - DVec2::new(0.0, r * 0.42), sheet, 0.5);
+                    }
+                    None => label(dl, c, v.name.trim_start_matches("Section ").to_string(), 0.8),
+                }
             }
             ViewKind::Elevation { direction } => {
                 let Some(b) = model_bounds(doc) else { continue };

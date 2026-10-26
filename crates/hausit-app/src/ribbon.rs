@@ -85,6 +85,10 @@ fn tab_row(app: &mut HausitApp, ui: &mut Ui) {
                     .collect();
                 let name = if !cats.is_empty() && cats.iter().all(|c| *c == cats[0]) {
                     format!("Modify | {}", cats[0].name())
+                } else if cats.is_empty() && crate::sheets::active_sheet(app).is_some() {
+                    "Modify | Viewports".into()
+                } else if cats.is_empty() {
+                    "Modify | Views".into()
                 } else {
                     "Modify | Multi-Select".into()
                 };
@@ -136,10 +140,10 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
         app.open_dialog();
     }
     if ui.button("Open Sample House").clicked() {
-        app.set_document(hausit_model::template::sample_project(), None);
+        app.set_document(crate::sheets::sample_house(), None);
     }
     if ui.button("Open Sample Warehouse").clicked() {
-        app.set_document(hausit_model::template::industrial_sample(), None);
+        app.set_document(crate::sheets::sample_warehouse(), None);
     }
     ui.separator();
     ui.add_enabled_ui(!app.show_home, |ui| {
@@ -155,7 +159,10 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
             }
             ui.add_enabled(false, egui::Button::new("IFC… (planned)"));
             ui.add_enabled(false, egui::Button::new("DWG… (planned)"));
-            ui.add_enabled(false, egui::Button::new("PDF… (planned)"));
+            if ui.button("PDF…").clicked() {
+                crate::sheets::start_export(app);
+                ui.close();
+            }
         });
         ui.separator();
         if ui.button("Close Project (Home)").clicked() {
@@ -490,7 +497,39 @@ fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
                 name: String::new(),
             });
         }
-        planned(ui, Icon::Planned, "Sheet", "Sheet");
+    });
+    panel(ui, "Sheet Composition", |ui| {
+        if big(
+            ui,
+            Icon::Sheet,
+            "Sheet",
+            "Sheet: create a new sheet with a title block",
+            false,
+            true,
+        ) {
+            crate::sheets::start_new_sheet(app);
+        }
+        let sheet = crate::sheets::active_sheet(app);
+        if big(
+            ui,
+            Icon::PlaceView,
+            "Place View",
+            "Place View: put a view or schedule on the active sheet",
+            false,
+            sheet.is_some(),
+        ) {
+            app.dialogs.place_view = sheet.map(|s| (s, None));
+        }
+        if big(
+            ui,
+            Icon::Pdf,
+            "Export PDF",
+            "Export sheets to PDF",
+            false,
+            app.doc.sheets().next().is_some(),
+        ) {
+            crate::sheets::start_export(app);
+        }
     });
     panel(ui, "Windows", |ui| {
         if big(

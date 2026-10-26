@@ -293,42 +293,74 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
         ViewKind::Elevation { .. } => "Elevation",
         ViewKind::Section { .. } => "Section",
         ViewKind::Schedule(_) => "Schedule",
+        ViewKind::Sheet(_) => "Sheet",
     };
     ui.label(RichText::new(format!("{kind}: {}", view.name)).strong());
     ui.add_space(4.0);
     let mut v = view.clone();
     let unit = app.doc.length_unit;
     let header = if v.kind.is_graphical() { "Graphics" } else { "Extents" };
-    egui::CollapsingHeader::new(RichText::new(header).strong())
-        .default_open(true)
-        .show(ui, |ui| {
-            egui::Grid::new("view_props").num_columns(2).show(ui, |ui| {
-                if v.kind.is_graphical() {
-                    ui.label("View Scale");
-                    ui.add(egui::DragValue::new(&mut v.scale).range(1..=5000).prefix("1 : "));
-                    ui.end_row();
-                    ui.label("Detail Level");
-                    egui::ComboBox::from_id_salt("vp_detail")
-                        .selected_text(v.detail_level.label())
+    let is_sheet = matches!(v.kind, ViewKind::Sheet(_));
+    if let ViewKind::Sheet(def) = &mut v.kind {
+        egui::CollapsingHeader::new(RichText::new("Sheet").strong())
+            .id_salt("sheet_identity")
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("sheet_props").num_columns(2).show(ui, |ui| {
+                    for (label, value) in [
+                        ("Sheet Number", &mut def.number),
+                        ("Drawn By", &mut def.drawn_by),
+                        ("Checked By", &mut def.checked_by),
+                        ("Sheet Issue Date", &mut def.issue_date),
+                    ] {
+                        ui.label(label);
+                        text_field(ui, ("sheet", label, view_id), value);
+                        ui.end_row();
+                    }
+                    ui.label("Title Block");
+                    egui::ComboBox::from_id_salt("sheet_size")
+                        .selected_text(def.size.title_block())
                         .show_ui(ui, |ui| {
-                            for d in hausit_model::DetailLevel::ALL {
-                                ui.selectable_value(&mut v.detail_level, d, d.label());
+                            for s in hausit_model::SheetSize::ALL {
+                                ui.selectable_value(&mut def.size, s, s.title_block());
                             }
                         });
                     ui.end_row();
-                }
-                if v.kind.plan_level().is_some() {
-                    ui.label("Cut Plane (View Range)");
-                    length_edit(ui, "vp_cut", &mut v.cut_height, unit);
-                    ui.end_row();
-                }
-                if let ViewKind::Section { far_clip, .. } = &mut v.kind {
-                    ui.label("Far Clip Offset");
-                    length_edit(ui, "vp_far", far_clip, unit);
-                    ui.end_row();
-                }
+                });
             });
-        });
+    }
+    if !is_sheet {
+        egui::CollapsingHeader::new(RichText::new(header).strong())
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("view_props").num_columns(2).show(ui, |ui| {
+                    if v.kind.is_graphical() && !is_sheet {
+                        ui.label("View Scale");
+                        ui.add(egui::DragValue::new(&mut v.scale).range(1..=5000).prefix("1 : "));
+                        ui.end_row();
+                        ui.label("Detail Level");
+                        egui::ComboBox::from_id_salt("vp_detail")
+                            .selected_text(v.detail_level.label())
+                            .show_ui(ui, |ui| {
+                                for d in hausit_model::DetailLevel::ALL {
+                                    ui.selectable_value(&mut v.detail_level, d, d.label());
+                                }
+                            });
+                        ui.end_row();
+                    }
+                    if v.kind.plan_level().is_some() {
+                        ui.label("Cut Plane (View Range)");
+                        length_edit(ui, "vp_cut", &mut v.cut_height, unit);
+                        ui.end_row();
+                    }
+                    if let ViewKind::Section { far_clip, .. } = &mut v.kind {
+                        ui.label("Far Clip Offset");
+                        length_edit(ui, "vp_far", far_clip, unit);
+                        ui.end_row();
+                    }
+                });
+            });
+    }
     if matches!(v.kind, ViewKind::ThreeD) {
         egui::CollapsingHeader::new(RichText::new("Extents").strong())
             .default_open(true)
@@ -388,5 +420,19 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
             }
             Ok(())
         });
+    }
+}
+
+/// A text field that commits when it loses focus, like Revit's.
+fn text_field(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &mut String) {
+    let key = egui::Id::unique(id);
+    let mut t = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| value.clone());
+    let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(140.0));
+    if r.has_focus() {
+        ui.ctx().data_mut(|d| d.insert_temp(key, t.clone()));
+    }
+    if r.lost_focus() {
+        ui.ctx().data_mut(|d| d.remove::<String>(key));
+        *value = t;
     }
 }

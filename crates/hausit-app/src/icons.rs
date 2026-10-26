@@ -31,6 +31,9 @@ pub enum Icon {
     Finish,
     Cancel,
     Planned,
+    Sheet,
+    PlaceView,
+    Pdf,
     Column,
     Room,
     Dimension,
@@ -506,6 +509,52 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             seg((16.0, 10.0), (16.0, 16.0), line(1.4, BLUE));
             seg((16.0, 10.0), (13.0, 13.0), line(1.4, BLUE));
             seg((16.0, 10.0), (19.0, 13.0), line(1.4, BLUE));
+        }
+        Icon::Sheet => {
+            p.rect(rect(3.0, 7.0, 29.0, 25.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            p.rect(
+                rect(5.0, 9.0, 27.0, 23.0),
+                0.0,
+                Color32::TRANSPARENT,
+                line(0.8, INK),
+                egui::StrokeKind::Middle,
+            );
+            seg((21.0, 9.0), (21.0, 23.0), line(1.0, INK));
+            for y in [15.0, 19.0] {
+                seg((21.0, y), (27.0, y), line(0.8, INK));
+            }
+        }
+        Icon::PlaceView => {
+            p.rect(rect(3.0, 7.0, 29.0, 25.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            p.rect(
+                rect(7.0, 11.0, 19.0, 20.0),
+                0.0,
+                k(Color32::from_rgb(200, 220, 245)),
+                line(1.0, BLUE),
+                egui::StrokeKind::Middle,
+            );
+            seg((7.0, 22.5), (19.0, 22.5), line(1.4, INK));
+        }
+        Icon::Pdf => {
+            poly(
+                &[(7.0, 3.0), (21.0, 3.0), (26.0, 8.0), (26.0, 29.0), (7.0, 29.0)],
+                Color32::WHITE,
+                ink,
+            );
+            p.rect(
+                rect(4.0, 14.0, 22.0, 22.0),
+                1.0,
+                k(Color32::from_rgb(200, 40, 40)),
+                Stroke::NONE,
+                egui::StrokeKind::Middle,
+            );
+            p.text(
+                at(13.0, 18.0),
+                egui::Align2::CENTER_CENTER,
+                "PDF",
+                egui::FontId::proportional(6.5 * s),
+                Color32::WHITE,
+            );
         }
         Icon::Planned => {
             p.circle_stroke(at(16.0, 16.0), 11.0 * s, line(1.5, INK));

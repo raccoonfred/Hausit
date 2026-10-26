@@ -703,6 +703,11 @@ impl Document {
         for c in callouts {
             self.delete_view(c);
         }
+        for v in self.views.values_mut() {
+            if let ViewKind::Sheet(s) = &mut v.kind {
+                s.viewports.retain(|p| p.view != id);
+            }
+        }
         self.touch();
     }
 
@@ -710,7 +715,7 @@ impl Document {
     /// rectangle `a`–`b` (view coordinates), at 1:20 and Fine detail.
     pub fn add_callout(&mut self, parent: ElementId, a: DVec2, b: DVec2) -> Option<ElementId> {
         let p = self.view(parent)?.clone();
-        if !p.kind.is_graphical() || matches!(p.kind, ViewKind::ThreeD) {
+        if !p.kind.is_graphical() || matches!(p.kind, ViewKind::ThreeD | ViewKind::Sheet(_)) {
             return None;
         }
         // "Callout of Section 1", then "Callout of Section 1 (2)"…
@@ -778,7 +783,7 @@ fn next_name<'a>(existing: impl Iterator<Item = &'a str>, prefix: &str, start: u
 }
 
 /// "1"→"2", "A"→"B", "Z"→"AA", "Level 9"→"Level 10".
-fn increment_name(name: &str) -> String {
+pub(crate) fn increment_name(name: &str) -> String {
     let digits: String = name
         .chars()
         .rev()
