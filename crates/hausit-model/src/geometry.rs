@@ -306,8 +306,10 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
     let (zb, mut zt) = (doc.wall_base_z(w), doc.wall_top_z(w));
     // Attached tops: the straight part stops at the lowest point of the
     // surface above; sloped pieces fill up to it.
-    let attached = attached_top_parts(doc, w, &outline, zt);
-    if let Some((zmin, _)) = &attached {
+    let holes = wall_holes(doc, id, w);
+    let opening_cuts: Vec<f64> = holes.iter().flat_map(|h| [h.0, h.1]).collect();
+    let attached = attached_top_parts(doc, w, &outline, zt, &opening_cuts);
+    if let Some((zmin, _, _)) = &attached {
         zt = zmin.max(zb);
     }
     if zt - zb < EPS && attached.is_none() {
@@ -315,12 +317,14 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
     }
     let dir = w.direction();
     let base = dir.dot(w.start);
-    let holes = wall_holes(doc, id, w);
 
-    // Split the wall along its axis at every opening edge.
-    let mut cuts: Vec<f64> = holes
+    // Split the wall along its axis at every opening edge, and where the
+    // attached pieces above are split, so their shared edges match (and
+    // read as one face in 3D).
+    let mut cuts: Vec<f64> = opening_cuts
         .iter()
-        .flat_map(|h| [h.0, h.1])
+        .copied()
+        .chain(attached.iter().flat_map(|a| a.2.iter().copied()))
         .filter(|s| *s > EPS && *s < w.length() - EPS)
         .collect();
     cuts.sort_by(f64::total_cmp);
@@ -362,14 +366,59 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
                 break;
             }
         }
-        if zt > z + EPS {
-            parts.push(Part::prism(Material::Default, Prism::new(poly, z, zt)));
+        match &attached {
+            // Attached: one solid from here up to the sloped top, so the
+            // wall faces have no seam at the straight top's height.
+            Some((_, slices, _)) => {
+                for (sp, tops) in slices {
+                    let c = sp.iter().copied().sum::<DVec2>() / sp.len() as f64;
+                    let u = dir.dot(c) - base;
+                    if (!a.is_finite() || u > a) && (!b.is_finite() || u < b) {
+                        parts.push(solid_under(sp, z, tops));
+                    }
+                }
+            }
+            _ if zt > z + EPS => parts.push(Part::prism(Material::Default, Prism::new(poly, z, zt))),
+            _ => {}
         }
     }
-    if let Some((_, upper)) = attached {
-        parts.extend(upper);
-    }
     parts
+}
+
+/// A vertical solid over `poly` from `z0` up to per-corner heights.
+fn solid_under(poly: &[DVec2], z0: f64, tops: &[f64]) -> Part {
+    let (mut poly, mut tops) = (poly.to_vec(), tops.to_vec());
+    if polygon_area(&poly) < 0.0 {
+        poly.reverse();
+        tops.reverse();
+    }
+    let n = poly.len();
+    let at = |i: usize, z: f64| DVec3::new(poly[i].x, poly[i].y, z);
+    let mut faces = vec![
+        Face {
+            pts: (0..n).rev().map(|i| at(i, z0)).collect(),
+        },
+        Face {
+            pts: (0..n).map(|i| at(i, tops[i])).collect(),
+        },
+    ];
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let mut pts = vec![at(i, z0), at(j, z0)];
+        if tops[j] - z0 > EPS {
+            pts.push(at(j, tops[j]));
+        }
+        if tops[i] - z0 > EPS {
+            pts.push(at(i, tops[i]));
+        }
+        if pts.len() >= 3 {
+            faces.push(Face { pts });
+        }
+    }
+    Part {
+        material: Material::Default,
+        shape: Shape::Faces(faces),
+    }
 }
 
 /// Planar pieces of the surfaces a wall top can attach to: plan polygon
@@ -414,10 +463,18 @@ fn plane_of(pts: &[DVec3]) -> Option<DVec3> {
     Some(DVec3::new(-n.x / n.z, -n.y / n.z, p.z + (n.x * p.x + n.y * p.y) / n.z))
 }
 
-/// Solids between a wall's straight top and the surfaces it is attached
-/// to, cut into slices along the wall wherever the surface changes plane.
-/// Returns the lowest attached height and the slices.
-fn attached_top_parts(doc: &Document, w: &Wall, outline: &[DVec2; 4], zt: f64) -> Option<(f64, Vec<Part>)> {
+/// The top of a wall attached to roofs or floors: the wall outline cut
+/// into slices (along the wall, wherever the surface changes plane or
+/// `extra` asks) with the surface height at each slice corner. Returns
+/// the lowest attached height, the slices and the cut positions.
+#[allow(clippy::type_complexity)]
+fn attached_top_parts(
+    doc: &Document,
+    w: &Wall,
+    outline: &[DVec2; 4],
+    zt: f64,
+    extra: &[f64],
+) -> Option<(f64, Vec<(Vec<DVec2>, Vec<f64>)>, Vec<f64>)> {
     let surfaces: Vec<(Vec<DVec2>, DVec3)> = w.attached_top.iter().flat_map(|t| attach_surfaces(doc, *t)).collect();
     if surfaces.is_empty() {
         return None;
@@ -450,6 +507,7 @@ fn attached_top_parts(doc: &Document, w: &Wall, outline: &[DVec2; 4], zt: f64) -
             }
         }
     }
+    us.extend(extra.iter().copied().filter(|u| *u > 0.0 && *u < w.length()));
     us.sort_by(f64::total_cmp);
     us.dedup_by(|a, b| (*a - *b).abs() < 1.0);
 
@@ -477,44 +535,7 @@ fn attached_top_parts(doc: &Document, w: &Wall, outline: &[DVec2; 4], zt: f64) -
     if !zmin.is_finite() {
         return None;
     }
-    let mut parts = Vec::new();
-    for (mut poly, mut tops) in slices {
-        if polygon_area(&poly) < 0.0 {
-            poly.reverse();
-            tops.reverse();
-        }
-        if tops.iter().all(|t| *t - zmin < EPS) {
-            continue;
-        }
-        let n = poly.len();
-        let at = |i: usize, z: f64| DVec3::new(poly[i].x, poly[i].y, z);
-        let mut faces = vec![
-            Face {
-                pts: (0..n).rev().map(|i| at(i, zmin)).collect(),
-            },
-            Face {
-                pts: (0..n).map(|i| at(i, tops[i])).collect(),
-            },
-        ];
-        for i in 0..n {
-            let j = (i + 1) % n;
-            let mut pts = vec![at(i, zmin), at(j, zmin)];
-            if tops[j] - zmin > EPS {
-                pts.push(at(j, tops[j]));
-            }
-            if tops[i] - zmin > EPS {
-                pts.push(at(i, tops[i]));
-            }
-            if pts.len() >= 3 {
-                faces.push(Face { pts });
-            }
-        }
-        parts.push(Part {
-            material: Material::Default,
-            shape: Shape::Faces(faces),
-        });
-    }
-    Some((zmin, parts))
+    Some((zmin, slices, us))
 }
 
 // ----- columns --------------------------------------------------------------
