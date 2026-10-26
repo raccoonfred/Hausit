@@ -853,7 +853,10 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                 seg(*a, p);
             }
         }
-        Tool::Grid { start: Some(a) } | Tool::Section { start: Some(a) } | Tool::RoomSeparation { start: Some(a) } => seg(*a, p),
+        Tool::Grid { start: Some(a) }
+        | Tool::Section { start: Some(a) }
+        | Tool::RoomSeparation { start: Some(a) }
+        | Tool::Beam { start: Some(a), .. } => seg(*a, p),
         Tool::Mirror {
             draw: true,
             start: Some(a),
@@ -886,17 +889,23 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                 None => label_at(painter, xf.to_screen(p) + vec2(0.0, -18.0), "Not enclosed"),
             }
         }
-        Tool::Column => {
-            let Some(t) = app.type_for(Category::StructuralColumns).and_then(|t| app.doc.family_type(t)) else {
+        Tool::Column | Tool::Footing => {
+            let cat = app.tool.category().unwrap_or(Category::StructuralColumns);
+            let Some(t) = app.type_for(cat).and_then(|t| app.doc.family_type(t)) else {
                 return;
             };
-            let (b, h) = (t.length_or("b", 300.0) / 2.0, t.length_or("h", 300.0) / 2.0);
-            let (b, h) = if app.options.flip { (h, b) } else { (b, h) };
-            let r: Vec<Pos2> = [(-b, -h), (b, -h), (b, h), (-b, h)]
-                .iter()
-                .map(|(x, y)| xf.to_screen(p + DVec2::new(*x, *y)))
-                .collect();
-            painter.add(Shape::convex_polygon(r, Color32::from_rgba_unmultiplied(0, 120, 230, 60), s));
+            let outline: Vec<DVec2> = if cat == Category::StructuralFoundations {
+                let (b, h) = (t.length_or("Width", 1200.0) / 2.0, t.length_or("Length", 1200.0) / 2.0);
+                vec![DVec2::new(-b, -h), DVec2::new(b, -h), DVec2::new(b, h), DVec2::new(-b, h)]
+            } else {
+                hausit_model::geometry::section_profile(Some(t))
+            };
+            let rot = |v: DVec2| if app.options.flip { DVec2::new(-v.y, v.x) } else { v };
+            let r: Vec<Pos2> = outline.iter().map(|v| xf.to_screen(p + rot(*v))).collect();
+            let mut shapes = Vec::new();
+            fill_polygon(&r, Color32::from_rgba_unmultiplied(0, 120, 230, 60), &mut shapes);
+            painter.extend(shapes);
+            painter.add(Shape::closed_line(r, s));
         }
         Tool::Dimension { refs } => {
             let hovered = tools::pick_dim_ref(app, p, app.options.pick_tol);

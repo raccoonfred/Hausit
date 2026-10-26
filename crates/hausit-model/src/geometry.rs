@@ -199,6 +199,21 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             }
             vec![Part::prism(Material::Default, Prism::new(column_outline(doc, id)?, z0, z1))]
         }
+        ElementData::Framing(f) => {
+            let (a, b) = framing_axis(doc, id, f);
+            if a.distance(b) < EPS {
+                return None;
+            }
+            let profile = section_profile(doc.type_of(id));
+            vec![Part {
+                material: Material::Default,
+                shape: Shape::Faces(sweep(&profile, a, b)),
+            }]
+        }
+        ElementData::Footing(_) | ElementData::WallFooting(_) => {
+            let (outline, z0, z1) = foundation_extent(doc, id)?;
+            vec![Part::prism(Material::Default, Prism::new(outline, z0, z1))]
+        }
         ElementData::Level(_)
         | ElementData::Grid(_)
         | ElementData::Room(_)
@@ -571,22 +586,165 @@ pub fn column_extent(doc: &Document, c: &Column) -> (f64, f64) {
     (z0, z1)
 }
 
-/// Plan outline of a rectangular column ("b" across, "h" deep).
+/// Plan outline of a column: its type's section ("b" across, "h" deep for
+/// rectangles), rotated about its point.
 pub fn column_outline(doc: &Document, id: ElementId) -> Option<Vec<DVec2>> {
     let ElementData::Column(c) = &doc.element(id)?.data else {
         return None;
     };
-    let t = doc.type_of(id);
-    let b = t.map(|t| t.length_or("b", 300.0)).unwrap_or(300.0) / 2.0;
-    let h = t.map(|t| t.length_or("h", 300.0)).unwrap_or(300.0) / 2.0;
     let (s, co) = c.rotation.to_radians().sin_cos();
     let (u, v) = (DVec2::new(co, s), DVec2::new(-s, co));
-    Some(vec![
-        c.point - u * b - v * h,
-        c.point + u * b - v * h,
-        c.point + u * b + v * h,
-        c.point - u * b + v * h,
-    ])
+    let profile = section_profile(doc.type_of(id));
+    Some(profile.iter().map(|p| c.point + u * p.x + v * p.y).collect())
+}
+
+// ----- structural sections, framing and foundations -------------------------
+
+/// The cross-section of a column or framing type, centred on the origin:
+/// x across the width, y along the depth, counter-clockwise. "Section
+/// Shape" picks I (d, bf, tw, tf), Angle (d, bf, tw) or a rectangle (b, h).
+pub fn section_profile(t: Option<&crate::family::FamilyType>) -> Vec<DVec2> {
+    let len = |k: &str, d: f64| t.map(|t| t.length_or(k, d)).unwrap_or(d);
+    let shape = t
+        .and_then(|t| match t.params.get("Section Shape") {
+            Some(crate::params::ParamValue::Text(s)) => Some(s.as_str()),
+            _ => None,
+        })
+        .unwrap_or("Rectangular");
+    let p = DVec2::new;
+    match shape {
+        "I" => {
+            let (hw, hd) = (len("bf", 150.0) / 2.0, len("d", 300.0) / 2.0);
+            let (htw, tf) = (len("tw", 7.0) / 2.0, len("tf", 11.0).min(hd));
+            vec![
+                p(-hw, -hd),
+                p(hw, -hd),
+                p(hw, -hd + tf),
+                p(htw, -hd + tf),
+                p(htw, hd - tf),
+                p(hw, hd - tf),
+                p(hw, hd),
+                p(-hw, hd),
+                p(-hw, hd - tf),
+                p(-htw, hd - tf),
+                p(-htw, -hd + tf),
+                p(-hw, -hd + tf),
+            ]
+        }
+        "Angle" => {
+            let (hw, hd) = (len("bf", 100.0) / 2.0, len("d", 100.0) / 2.0);
+            let t = len("tw", 10.0).min(hw).min(hd);
+            vec![
+                p(-hw, -hd),
+                p(hw, -hd),
+                p(hw, -hd + t),
+                p(-hw + t, -hd + t),
+                p(-hw + t, hd),
+                p(-hw, hd),
+            ]
+        }
+        _ => {
+            let (hb, hh) = (len("b", 300.0) / 2.0, len("h", 300.0) / 2.0);
+            vec![p(-hb, -hh), p(hb, -hh), p(hb, hh), p(-hb, hh)]
+        }
+    }
+}
+
+/// Depth of a section (its extent along y).
+pub fn section_depth(t: Option<&crate::family::FamilyType>) -> f64 {
+    let ys = section_profile(t)
+        .iter()
+        .map(|p| p.y)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(y), b.max(y)));
+    ys.1 - ys.0
+}
+
+/// The centreline of a framing member in 3D. A beam's reference line is
+/// its top, so its centreline sits half its depth lower.
+pub fn framing_axis(doc: &Document, id: ElementId, f: &Framing) -> (DVec3, DVec3) {
+    let z = doc.level_elevation(f.level);
+    let drop = match f.kind {
+        FramingKind::Beam => section_depth(doc.type_of(id)) / 2.0,
+        FramingKind::Brace => 0.0,
+    };
+    (
+        DVec3::new(f.start.x, f.start.y, z + f.start_offset - drop),
+        DVec3::new(f.end.x, f.end.y, z + f.end_offset - drop),
+    )
+}
+
+/// Sweeps a closed profile along the segment `a`–`b`. Profile x runs to
+/// the left of the member (seen from above), y upwards.
+pub fn sweep(profile: &[DVec2], a: DVec3, b: DVec3) -> Vec<Face> {
+    let d = (b - a).normalize();
+    let across = DVec3::Z.cross(d).try_normalize().unwrap_or(DVec3::Y);
+    let up = d.cross(across);
+    let at = |p: DVec2, base: DVec3| base + across * p.x + up * p.y;
+    let mut faces = vec![
+        Face {
+            pts: profile.iter().map(|p| at(*p, a)).collect(),
+        }
+        .oriented(-d),
+        Face {
+            pts: profile.iter().map(|p| at(*p, b)).collect(),
+        }
+        .oriented(d),
+    ];
+    let n = profile.len();
+    let ccw = polygon_area(profile) > 0.0;
+    for i in 0..n {
+        let (p, q) = (profile[i], profile[(i + 1) % n]);
+        let e = q - p;
+        let out2 = if ccw { DVec2::new(e.y, -e.x) } else { DVec2::new(-e.y, e.x) };
+        let out = across * out2.x + up * out2.y;
+        faces.push(
+            Face {
+                pts: vec![at(p, a), at(q, a), at(q, b), at(p, b)],
+            }
+            .oriented(out),
+        );
+    }
+    faces
+}
+
+/// Plan outline and height range of an isolated or wall foundation. Both
+/// hang below their reference: a pad below its level (plus offset), a
+/// strip below the bottom of its wall.
+pub fn foundation_extent(doc: &Document, id: ElementId) -> Option<(Vec<DVec2>, f64, f64)> {
+    let e = doc.element(id)?;
+    let t = doc.type_of(id);
+    let len = |k: &str, d: f64| t.map(|t| t.length_or(k, d)).unwrap_or(d);
+    let thickness = len("Thickness", 500.0);
+    match &e.data {
+        ElementData::Footing(f) => {
+            let (hw, hl) = (len("Width", 1200.0) / 2.0, len("Length", 1200.0) / 2.0);
+            let (s, co) = f.rotation.to_radians().sin_cos();
+            let (u, v) = (DVec2::new(co, s), DVec2::new(-s, co));
+            let top = doc.level_elevation(f.level) + f.offset;
+            let outline = vec![
+                f.point - u * hw - v * hl,
+                f.point + u * hw - v * hl,
+                f.point + u * hw + v * hl,
+                f.point - u * hw + v * hl,
+            ];
+            Some((outline, top - thickness, top))
+        }
+        ElementData::WallFooting(f) => {
+            let w = doc.element(f.wall)?.as_wall()?;
+            let hw = len("Width", 600.0) / 2.0;
+            let dir = w.direction();
+            if dir == DVec2::ZERO {
+                return None;
+            }
+            // Strips run past the wall ends by half their width, so
+            // footings meeting at a corner overlap into a full square.
+            let n = perp(dir);
+            let (a, b) = (w.start - dir * hw, w.end + dir * hw);
+            let top = doc.level_elevation(w.base_level) + w.base_offset;
+            Some((vec![a - n * hw, b - n * hw, b + n * hw, a + n * hw], top - thickness, top))
+        }
+        _ => None,
+    }
 }
 
 // ----- doors & windows ------------------------------------------------------
@@ -801,7 +959,7 @@ mod tests {
     fn openings_cut_walls() {
         let mut doc = sample_project();
         // South wall hosts a door and a window. Detached, it is a plain
-        // 4 m high prism.
+        // prism from 425 below Level 1 up to Level 2.
         let south = doc.elements_of(Category::Walls).nth(3).unwrap().id;
         if let Some(ElementData::Wall(w)) = doc.element_mut(south).map(|e| &mut e.data) {
             w.attached_top.clear();
@@ -813,7 +971,7 @@ mod tests {
             .iter()
             .map(|p| if let Shape::Prism(p) = &p.shape { p.volume() } else { 0.0 })
             .sum();
-        let gross = w.length() * 350.0 * 4000.0; // a square mitre keeps centreline length × thickness
+        let gross = w.length() * 350.0 * 4425.0; // a square mitre keeps centreline length × thickness
         let holes = 915.0 * 2134.0 * 350.0 + 1200.0 * 1500.0 * 350.0;
         assert!((vol - (gross - holes)).abs() < 1.0, "vol {vol} expected {}", gross - holes);
     }
@@ -870,5 +1028,66 @@ mod tests {
             let west = top(walls[0]);
             assert!(west > ridge - 600.0, "overhang {overhang}: west wall top {west}, ridge {ridge}");
         }
+    }
+
+    #[test]
+    fn framing_and_foundations() {
+        use crate::template::industrial_sample;
+        let doc = industrial_sample();
+        // A beam's volume is its section area times its length, and it
+        // hangs below its reference line.
+        let beam = doc
+            .elements_of(Category::StructuralFraming)
+            .find(|e| matches!(&e.data, ElementData::Framing(f) if f.kind == FramingKind::Beam && f.start_offset == f.end_offset))
+            .unwrap();
+        let ElementData::Framing(f) = &beam.data else { unreachable!() };
+        let g = element_geometry(&doc, beam.id).unwrap();
+        let faces = g.parts[0].faces();
+        let area = polygon_area(&section_profile(doc.type_of(beam.id))).abs();
+        assert_eq!(faces.len(), 2 + 12);
+        let top = faces
+            .iter()
+            .flat_map(|f| f.pts.iter().map(|p| p.z))
+            .fold(f64::NEG_INFINITY, f64::max);
+        assert!((top - 6000.0).abs() < 1e-6, "beam top {top}");
+        // Divergence theorem: volume from the closed faces.
+        let vol: f64 = faces
+            .iter()
+            .map(|f| {
+                let o = f.pts[0];
+                (1..f.pts.len() - 1)
+                    .map(|i| o.dot((f.pts[i] - o).cross(f.pts[i + 1] - o)) / 6.0)
+                    .sum::<f64>()
+            })
+            .sum();
+        assert!(
+            (vol - area * f.length()).abs() / vol < 1e-9,
+            "vol {vol}, expected {}",
+            area * f.length()
+        );
+        // Pads sit under columns with their top 250 below Level 1.
+        let pads: Vec<_> = doc.elements_of(Category::StructuralFoundations).collect();
+        assert_eq!(pads.len(), 12);
+        let (outline, z0, z1) = foundation_extent(&doc, pads[0].id).unwrap();
+        assert_eq!((z0, z1), (-850.0, -250.0));
+        assert!((polygon_area(&outline).abs() - 1800.0 * 1800.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn wall_footings_follow_walls() {
+        let doc = crate::template::sample_project();
+        let footing = doc
+            .elements_of(Category::StructuralFoundations)
+            .find(|e| matches!(e.data, ElementData::WallFooting(_)))
+            .unwrap();
+        let ElementData::WallFooting(f) = &footing.data else {
+            unreachable!()
+        };
+        let w = doc.element(f.wall).unwrap().as_wall().unwrap();
+        let (outline, z0, z1) = foundation_extent(&doc, footing.id).unwrap();
+        // 600 wide, 300 deep, under the wall's base 425 below Level 1, and
+        // half its width past each end of the wall.
+        assert_eq!((z0, z1), (-725.0, -425.0));
+        assert!((polygon_area(&outline).abs() - 600.0 * (w.length() + 600.0)).abs() < 1e-6);
     }
 }

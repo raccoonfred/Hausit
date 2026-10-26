@@ -676,6 +676,14 @@ pub fn home(app: &mut HausitApp, ui: &mut Ui) {
             ) {
                 app.set_document(hausit_model::template::sample_project(), None);
             }
+            if card(
+                ui,
+                Icon::ThreeD,
+                "Sample Warehouse",
+                "A steel portal-frame shed with bracing, pad footings and metal cladding",
+            ) {
+                app.set_document(hausit_model::template::industrial_sample(), None);
+            }
         });
         ui.add_space(24.0);
         egui::Frame::new()

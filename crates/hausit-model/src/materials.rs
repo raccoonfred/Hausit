@@ -62,7 +62,12 @@ pub fn default_materials() -> Vec<MaterialDef> {
         name: name.into(),
         color,
         cut_pattern,
-        pattern_color: [96, 96, 96],
+        // Solid cuts (steel, membranes) read darker than hatching.
+        pattern_color: if cut_pattern == FillPattern::Solid {
+            [50, 50, 50]
+        } else {
+            [96, 96, 96]
+        },
     };
     use FillPattern::*;
     vec![

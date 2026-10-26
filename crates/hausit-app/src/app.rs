@@ -348,12 +348,15 @@ impl HausitApp {
 
     /// Type the next placed element of `cat` uses (first type by default).
     pub fn type_for(&mut self, cat: Category) -> Option<ElementId> {
+        // Isolated and wall foundations share a category but not types.
+        let want = self.tool.wall_foundation();
+        let ok = |t: &hausit_model::FamilyType| cat != Category::StructuralFoundations || want.is_none_or(|w| t.is_wall_foundation() == w);
         if let Some(t) = self.current_type.get(&cat) {
-            if self.doc.family_type(*t).is_some() {
+            if self.doc.family_type(*t).is_some_and(ok) {
                 return Some(*t);
             }
         }
-        let t = self.doc.types_of(cat).next()?.id;
+        let t = self.doc.types_of(cat).find(|t| ok(t))?.id;
         self.current_type.insert(cat, t);
         Some(t)
     }

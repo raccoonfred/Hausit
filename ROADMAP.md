@@ -76,8 +76,8 @@ needed for full parity, **P3** is long-tail.
 |---|---|---|---|
 | Structural columns | Have | — | Vertical only |
 | Slanted columns | Missing | P2 | |
-| Beams, beam systems, braces, trusses | Missing | P1 | |
-| Isolated, wall and slab foundations | Missing | P1 | |
+| Beams, beam systems, braces, trusses | Partial | P1 | Beams and braces with steel I, angle and rectangular sections; beam systems and trusses still to do |
+| Isolated, wall and slab foundations | Partial | P1 | Isolated (with At Columns) and wall foundations; slab foundations still to do |
 | Structural walls and floors (flag, analytical) | Missing | P1 | Mostly a parameter on existing elements |
 | Steel connections | Missing | P3 | |
 | Rebar, area/path reinforcement, fabric | Missing | P2 | Big subsystem |

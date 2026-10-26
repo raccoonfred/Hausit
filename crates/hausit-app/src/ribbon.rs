@@ -138,6 +138,9 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
     if ui.button("Open Sample House").clicked() {
         app.set_document(hausit_model::template::sample_project(), None);
     }
+    if ui.button("Open Sample Warehouse").clicked() {
+        app.set_document(hausit_model::template::industrial_sample(), None);
+    }
     ui.separator();
     ui.add_enabled_ui(!app.show_home, |ui| {
         if ui.button("Save                        Ctrl+S").clicked() {
@@ -337,7 +340,7 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
 fn structure(app: &mut HausitApp, ui: &mut Ui) {
     select_panel(app, ui);
     panel(ui, "Structure", |ui| {
-        planned(ui, Icon::Planned, "Beam", "Beam");
+        tool_button(app, ui, Icon::Beam, "Beam", "Beam (BM)", Tool::Beam { start: None, brace: false });
         tool_button(
             app,
             ui,
@@ -361,10 +364,11 @@ fn structure(app: &mut HausitApp, ui: &mut Ui) {
                 structural: true,
             },
         );
+        tool_button(app, ui, Icon::Brace, "Brace", "Brace (BR)", Tool::Beam { start: None, brace: true });
     });
     panel(ui, "Foundation", |ui| {
-        planned(ui, Icon::Planned, "Isolated", "Isolated Foundation");
-        planned(ui, Icon::Planned, "Wall", "Wall Foundation");
+        tool_button(app, ui, Icon::Footing, "Isolated", "Isolated Foundation", Tool::Footing);
+        tool_button(app, ui, Icon::WallFoundation, "Wall", "Wall Foundation (FT)", Tool::WallFoundation);
     });
     panel(ui, "Datum", |ui| {
         tool_button(app, ui, Icon::Level, "Level", "Level (LL)", Tool::Level);

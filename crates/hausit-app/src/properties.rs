@@ -72,7 +72,18 @@ fn type_selector(app: &mut HausitApp, ui: &mut Ui, cat: Category, elements: &[El
             None
         }
     };
-    let types: Vec<(ElementId, String, String)> = app.doc.types_of(cat).map(|t| (t.id, t.family.clone(), t.name.clone())).collect();
+    // Isolated and wall foundations cannot swap types with each other.
+    let wall_foundation = match elements.first().and_then(|id| app.doc.element(*id)).map(|e| &e.data) {
+        Some(hausit_model::ElementData::WallFooting(_)) => Some(true),
+        Some(hausit_model::ElementData::Footing(_)) => Some(false),
+        _ => app.tool.wall_foundation(),
+    };
+    let types: Vec<(ElementId, String, String)> = app
+        .doc
+        .types_of(cat)
+        .filter(|t| cat != Category::StructuralFoundations || wall_foundation.is_none_or(|w| t.is_wall_foundation() == w))
+        .map(|t| (t.id, t.family.clone(), t.name.clone()))
+        .collect();
     let current_label = current
         .and_then(|c| app.doc.family_type(c))
         .map(|t| format!("{}\n{}", t.family, t.name))

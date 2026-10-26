@@ -58,6 +58,12 @@ impl FamilyType {
         self.layers = layers;
     }
 
+    /// Wall foundation types (a system family) as opposed to isolated
+    /// foundations, both in Structural Foundations.
+    pub fn is_wall_foundation(&self) -> bool {
+        self.category == Category::StructuralFoundations && self.family == WALL_FOUNDATION
+    }
+
     /// Whether the type has a layer structure to edit.
     pub fn has_structure(&self) -> bool {
         matches!(self.category, Category::Walls | Category::Floors | Category::Roofs)
@@ -71,6 +77,9 @@ impl FamilyType {
         self.length_or("Height", 2100.0)
     }
 }
+
+/// Family name of wall (strip) foundation types.
+pub const WALL_FOUNDATION: &str = "Wall Foundation";
 
 /// Parameters a newly created type of each category starts with.
 pub fn default_type_params(category: Category) -> TypeParams {
@@ -99,6 +108,20 @@ pub fn default_type_params(category: Category) -> TypeParams {
         Category::StructuralColumns => {
             p.insert("b".into(), len(300.0));
             p.insert("h".into(), len(300.0));
+            p.insert("Structural Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
+        }
+        Category::StructuralFraming => {
+            p.insert("Section Shape".into(), ParamValue::Text("I".into()));
+            p.insert("d".into(), len(300.0));
+            p.insert("bf".into(), len(150.0));
+            p.insert("tw".into(), len(7.0));
+            p.insert("tf".into(), len(11.0));
+            p.insert("Structural Material".into(), ParamValue::Text("Steel".into()));
+        }
+        Category::StructuralFoundations => {
+            p.insert("Width".into(), len(1200.0));
+            p.insert("Length".into(), len(1200.0));
+            p.insert("Thickness".into(), len(500.0));
             p.insert("Structural Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
         }
         Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => {}

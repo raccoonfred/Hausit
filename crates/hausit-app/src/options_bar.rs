@@ -102,12 +102,27 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::RoomSeparation { .. } => {
                         ui.checkbox(&mut app.options.chain, "Chain");
                     }
+                    Tool::Beam { brace: false, .. } => {
+                        ui.checkbox(&mut app.options.chain, "Chain");
+                        ui.separator();
+                        ui.label(RichText::new("The beam's top is at this level.").color(Color32::DARK_GRAY));
+                    }
+                    Tool::Beam { .. } => {
+                        ui.label(RichText::new("Braces run from this level to the level above.").color(Color32::DARK_GRAY));
+                    }
+                    Tool::Footing => {
+                        if ui.button("At Columns").on_hover_text("Place a foundation under every column on this level").clicked() {
+                            crate::tools::footings_at_columns(app);
+                        }
+                        ui.separator();
+                        ui.label(RichText::new("Space rotates the foundation 90°.").color(Color32::DARK_GRAY));
+                    }
                     Tool::Move { .. } | Tool::Copy { .. } => {
                         ui.label(RichText::new("Hold Shift to constrain to horizontal/vertical.").color(Color32::DARK_GRAY));
                     }
                     Tool::Modify => {
                         if app.selection.is_empty() {
-                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · CL column · MV move · CO copy · RO rotate · MM mirror · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
+                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · CL column · BM beam · BR brace · FT wall foundation · MV move · CO copy · RO rotate · MM mirror · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
                         } else {
                             ui.label(format!("{} selected", app.selection.len()));
                         }

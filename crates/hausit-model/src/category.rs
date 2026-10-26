@@ -11,13 +11,15 @@ pub enum Category {
     Doors,
     Windows,
     StructuralColumns,
+    StructuralFraming,
+    StructuralFoundations,
     Rooms,
     RoomSeparation,
     Dimensions,
 }
 
 impl Category {
-    pub const ALL: [Category; 11] = [
+    pub const ALL: [Category; 13] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -26,28 +28,34 @@ impl Category {
         Category::Doors,
         Category::Windows,
         Category::StructuralColumns,
+        Category::StructuralFraming,
+        Category::StructuralFoundations,
         Category::Rooms,
         Category::RoomSeparation,
         Category::Dimensions,
     ];
 
     /// Categories that have family types (and so appear under "Families").
-    pub const TYPED: [Category; 6] = [
+    pub const TYPED: [Category; 8] = [
         Category::Doors,
         Category::Floors,
         Category::Roofs,
         Category::StructuralColumns,
+        Category::StructuralFoundations,
+        Category::StructuralFraming,
         Category::Walls,
         Category::Windows,
     ];
 
     /// Categories that can be scheduled.
-    pub const SCHEDULABLE: [Category; 7] = [
+    pub const SCHEDULABLE: [Category; 9] = [
         Category::Doors,
         Category::Floors,
         Category::Roofs,
         Category::Rooms,
         Category::StructuralColumns,
+        Category::StructuralFoundations,
+        Category::StructuralFraming,
         Category::Walls,
         Category::Windows,
     ];
@@ -62,6 +70,8 @@ impl Category {
             Category::Doors => "Doors",
             Category::Windows => "Windows",
             Category::StructuralColumns => "Structural Columns",
+            Category::StructuralFraming => "Structural Framing",
+            Category::StructuralFoundations => "Structural Foundations",
             Category::Rooms => "Rooms",
             Category::RoomSeparation => "Room Separation Lines",
             Category::Dimensions => "Dimensions",
@@ -79,6 +89,8 @@ impl Category {
             Category::Doors => "Door",
             Category::Windows => "Window",
             Category::StructuralColumns => "Structural Column",
+            Category::StructuralFraming => "Structural Framing",
+            Category::StructuralFoundations => "Structural Foundation",
             Category::Rooms => "Room",
             Category::RoomSeparation => "Room Separation Line",
             Category::Dimensions => "Dimension",

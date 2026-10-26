@@ -4,7 +4,7 @@
 
 use crate::bsp::{Bsp, Poly};
 use crate::frame::ViewFrame;
-use crate::hatch::{draw_band, layer_bands, Band};
+use crate::hatch::{draw_band, layer_bands, structural_material, Band};
 use crate::{DisplayList, Prim, Rgba, Stroke, BLACK, CUT_FILL};
 use hausit_core::geom::{clip_polygon_2d, perp, polygon_area};
 use hausit_core::{DVec2, DVec3, ElementId, Plane};
@@ -346,11 +346,14 @@ fn section_caps(
                         let rect = vec![DVec2::new(a, p.z0), DVec2::new(b, p.z0), DVec2::new(b, p.z1), DVec2::new(a, p.z1)];
                         let rect = clip_polygon_2d(&rect, DVec2::X, u1);
                         let edge = crate::pen(doc, g.category, true, view.scale);
-                        let (bands, lines) = if part.material == Material::Glass {
+                        let (mut bands, lines) = if part.material == Material::Glass {
                             (vec![], vec![])
                         } else {
                             layer_polys(doc, view, g, &rect, o, r2)
                         };
+                        if bands.is_empty() {
+                            bands.extend(material_band(doc, view, g.id, &rect));
+                        }
                         if bands.is_empty() {
                             dl.push(Prim::Polygon(rect), Some(edge), Some(fill), Some(g.id));
                             continue;
@@ -382,7 +385,10 @@ fn section_caps(
                     let layered: Vec<_> = loops
                         .into_iter()
                         .map(|l| {
-                            let (b, lines) = layer_polys(doc, view, g, &l, o, r2);
+                            let (mut b, lines) = layer_polys(doc, view, g, &l, o, r2);
+                            if b.is_empty() {
+                                b.extend(material_band(doc, view, g.id, &l));
+                            }
                             (l, b, lines)
                         })
                         .filter(|(_, b, _)| !b.is_empty())
@@ -400,6 +406,19 @@ fn section_caps(
             }
         }
     }
+}
+
+/// A column, beam or foundation cut in section: one band of its type's
+/// structural material (Medium and Fine detail).
+fn material_band<'a>(doc: &'a Document, view: &View, id: ElementId, poly: &[DVec2]) -> Option<Band<'a>> {
+    if view.detail_level == hausit_model::DetailLevel::Coarse {
+        return None;
+    }
+    Some(Band {
+        outline: poly.to_vec(),
+        along: DVec2::X,
+        material: structural_material(doc, id)?,
+    })
 }
 
 /// A layered wall or floor cut in section: `poly` (view coordinates) split

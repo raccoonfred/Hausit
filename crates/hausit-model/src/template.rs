@@ -180,6 +180,98 @@ pub fn load_default_types(doc: &mut Document) {
             column(b, h),
         );
     }
+
+    // Steel I-sections: depth, flange width, web and flange thickness.
+    let steel = |cat: Category, d: f64, bf: f64, tw: f64, tf: f64| {
+        let mut p = with(cat, &[("d", len(d)), ("bf", len(bf)), ("tw", len(tw)), ("tf", len(tf))]);
+        p.insert("Section Shape".into(), text("I"));
+        p.insert("Structural Material".into(), text("Steel"));
+        p
+    };
+    for (name, d, bf, tw, tf) in [
+        ("IS 254x254", 260.3, 256.3, 10.3, 17.3),
+        ("IS 305x305", 307.9, 305.3, 11.0, 18.0),
+        ("IS 203x203", 203.2, 203.6, 7.2, 11.0),
+    ] {
+        doc.add_type(
+            StructuralColumns,
+            "Steel I-Section Column",
+            name,
+            steel(StructuralColumns, d, bf, tw, tf),
+        );
+    }
+    for (name, d, bf, tw, tf) in [
+        ("IS 203x133", 203.2, 133.2, 5.7, 7.8),
+        ("IS 305x165", 303.4, 165.0, 6.0, 10.2),
+        ("IS 406x178", 402.6, 177.7, 7.9, 10.9),
+        ("IS 533x210", 528.3, 208.8, 9.6, 13.2),
+    ] {
+        doc.add_type(StructuralFraming, "Steel I-Section", name, steel(StructuralFraming, d, bf, tw, tf));
+    }
+    let rect = |b: f64, h: f64, material: &str| {
+        let mut p = with(StructuralFraming, &[("b", len(b)), ("h", len(h))]);
+        for k in ["d", "bf", "tw", "tf"] {
+            p.shift_remove(k);
+        }
+        p.insert("Section Shape".into(), text("Rectangular"));
+        p.insert("Structural Material".into(), text(material));
+        p
+    };
+    doc.add_type(
+        StructuralFraming,
+        "Concrete Rectangular Beam",
+        "300 x 600mm",
+        rect(300.0, 600.0, "Concrete, Cast-in-Place"),
+    );
+    doc.add_type(
+        StructuralFraming,
+        "Concrete Rectangular Beam",
+        "400 x 800mm",
+        rect(400.0, 800.0, "Concrete, Cast-in-Place"),
+    );
+    doc.add_type(
+        StructuralFraming,
+        "Timber Rectangular Beam",
+        "47 x 200mm",
+        rect(47.0, 200.0, "Timber - Softwood"),
+    );
+    doc.add_type(
+        StructuralFraming,
+        "Timber Rectangular Beam",
+        "75 x 225mm",
+        rect(75.0, 225.0, "Timber - Softwood"),
+    );
+    let mut angle = with(StructuralFraming, &[("d", len(100.0)), ("bf", len(100.0)), ("tw", len(10.0))]);
+    angle.shift_remove("tf");
+    angle.insert("Section Shape".into(), text("Angle"));
+    doc.add_type(StructuralFraming, "Steel Angle", "L 100x100x10", angle);
+
+    let pad = |w: f64, l: f64, t: f64| {
+        with(
+            StructuralFoundations,
+            &[("Width", len(w)), ("Length", len(l)), ("Thickness", len(t))],
+        )
+    };
+    doc.add_type(
+        StructuralFoundations,
+        "Pad Footing",
+        "1200 x 1200 x 500mm",
+        pad(1200.0, 1200.0, 500.0),
+    );
+    doc.add_type(
+        StructuralFoundations,
+        "Pad Footing",
+        "1800 x 1800 x 600mm",
+        pad(1800.0, 1800.0, 600.0),
+    );
+    let strip = |w: f64, t: f64| {
+        let mut p = with(StructuralFoundations, &[("Width", len(w)), ("Thickness", len(t))]);
+        p.shift_remove("Length");
+        p
+    };
+    let wf = crate::family::WALL_FOUNDATION;
+    doc.add_type(StructuralFoundations, wf, "Bearing Footing - 600 x 300", strip(600.0, 300.0));
+    doc.add_type(StructuralFoundations, wf, "Bearing Footing - 900 x 400", strip(900.0, 400.0));
 }
 
 /// Creates a level together with its floor plan view.
@@ -244,6 +336,7 @@ pub fn sample_project() -> Document {
         DVec2::new(12000.0, 8000.0),
         DVec2::new(12000.0, 0.0),
     ];
+    // They run down past the 425 mm ground slab onto strip footings.
     let mut walls = Vec::new();
     for i in 0..4 {
         walls.push(doc.add_element(ElementData::Wall(Wall {
@@ -251,7 +344,7 @@ pub fn sample_project() -> Document {
             start: pts[i],
             end: pts[(i + 1) % 4],
             base_level: l1,
-            base_offset: 0.0,
+            base_offset: -425.0,
             top: TopConstraint::UpToLevel { level: l2, offset: 0.0 },
             structural: false,
             room_bounding: true,
@@ -303,16 +396,17 @@ pub fn sample_project() -> Document {
     doc.add_element(ElementData::Window(opening(win, walls[2], 4000.0, 800.0)));
 
     let floor_t = t(&doc, Category::Floors, "Concrete - Domestic 425mm");
-    let outer = vec![
-        DVec2::new(-150.0, -150.0),
-        DVec2::new(12150.0, -150.0),
-        DVec2::new(12150.0, 8150.0),
-        DVec2::new(-150.0, 8150.0),
+    // The slab spans between the walls' inner faces.
+    let inner = vec![
+        DVec2::new(175.0, 175.0),
+        DVec2::new(11825.0, 175.0),
+        DVec2::new(11825.0, 7825.0),
+        DVec2::new(175.0, 7825.0),
     ];
     doc.add_element(ElementData::Floor(Floor {
         type_id: floor_t,
         level: l1,
-        boundary: outer.clone(),
+        boundary: inner,
         height_offset: 0.0,
         room_bounding: true,
         structural: false,
@@ -340,6 +434,15 @@ pub fn sample_project() -> Document {
         if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {
             w.attached_top = vec![roof];
         }
+    }
+
+    let strip = doc
+        .types_of(Category::StructuralFoundations)
+        .find(|t| t.is_wall_foundation())
+        .unwrap()
+        .id;
+    for w in &walls {
+        doc.add_element(ElementData::WallFooting(WallFooting { type_id: strip, wall: *w }));
     }
 
     if let Some(t) = doc.family_type_mut(win) {
@@ -390,5 +493,194 @@ pub fn sample_project() -> Document {
     doc.add_view("Door Schedule", ViewKind::Schedule(crate::ScheduleDef::new(Category::Doors)));
     doc.add_view("Wall Schedule", ViewKind::Schedule(crate::ScheduleDef::new(Category::Walls)));
     doc.add_view("Room Schedule", ViewKind::Schedule(crate::ScheduleDef::new(Category::Rooms)));
+    doc
+}
+
+/// A small steel portal-frame shed: five 6 m bays spanning 15 m, with pad
+/// footings, cross-bracing in the end bays, insulated panel walls and a
+/// 6° insulated metal roof.
+pub fn industrial_sample() -> Document {
+    let mut doc = new_project();
+    doc.project_info.name = "Sample Warehouse".into();
+    let levels = doc.levels();
+    let (l1, eaves) = (levels[0].0, levels[1].0);
+    if let Some(ElementData::Level(l)) = doc.element_mut(eaves).map(|e| &mut e.data) {
+        l.name = "Eaves".into();
+        l.elevation = 6000.0;
+    }
+    let plan = doc
+        .views()
+        .find(|v| matches!(v.kind, ViewKind::FloorPlan { level } if level == eaves))
+        .map(|v| v.id);
+    if let Some(v) = plan.and_then(|v| doc.view_mut(v)) {
+        v.name = "Eaves".into();
+    }
+    let t = |doc: &Document, c: Category, name: &str| doc.types_of(c).find(|t| t.name == name).unwrap().id;
+    let (bays, bay, span) = (5, 6000.0, 15000.0);
+    let pitch = 6.0_f64.to_radians().tan();
+    let rise = span / 2.0 * pitch;
+
+    for i in 0..=bays {
+        let x = i as f64 * bay;
+        doc.add_element(ElementData::Grid(Grid {
+            name: (i + 1).to_string(),
+            start: DVec2::new(x, -2500.0),
+            end: DVec2::new(x, span + 2500.0),
+        }));
+    }
+    for (i, y) in [0.0, span].iter().enumerate() {
+        doc.add_element(ElementData::Grid(Grid {
+            name: ((b'A' + i as u8) as char).to_string(),
+            start: DVec2::new(-2500.0, *y),
+            end: DVec2::new(bays as f64 * bay + 2500.0, *y),
+        }));
+    }
+
+    // Portal frames: columns on pads, a rafter pair up to the ridge.
+    let column = t(&doc, Category::StructuralColumns, "IS 305x305");
+    let rafter = t(&doc, Category::StructuralFraming, "IS 533x210");
+    let eaves_beam = t(&doc, Category::StructuralFraming, "IS 305x165");
+    let angle = t(&doc, Category::StructuralFraming, "L 100x100x10");
+    let pad = t(&doc, Category::StructuralFoundations, "1800 x 1800 x 600mm");
+    let beam = |type_id, kind, level, start, end, start_offset, end_offset| {
+        ElementData::Framing(Framing {
+            type_id,
+            kind,
+            level,
+            start,
+            end,
+            start_offset,
+            end_offset,
+        })
+    };
+    for i in 0..=bays {
+        let x = i as f64 * bay;
+        for y in [0.0, span] {
+            let p = DVec2::new(x, y);
+            doc.add_element(ElementData::Column(Column {
+                type_id: column,
+                point: p,
+                rotation: 0.0,
+                base_level: l1,
+                base_offset: 0.0,
+                top_level: eaves,
+                top_offset: 0.0,
+            }));
+            doc.add_element(ElementData::Footing(Footing {
+                type_id: pad,
+                level: l1,
+                point: p,
+                rotation: 0.0,
+                offset: -250.0,
+            }));
+        }
+        let ridge = DVec2::new(x, span / 2.0);
+        doc.add_element(beam(rafter, FramingKind::Beam, eaves, DVec2::new(x, 0.0), ridge, 0.0, rise));
+        doc.add_element(beam(rafter, FramingKind::Beam, eaves, ridge, DVec2::new(x, span), rise, 0.0));
+    }
+    for i in 0..bays {
+        let (x0, x1) = (i as f64 * bay, (i + 1) as f64 * bay);
+        for y in [0.0, span] {
+            doc.add_element(beam(
+                eaves_beam,
+                FramingKind::Beam,
+                eaves,
+                DVec2::new(x0, y),
+                DVec2::new(x1, y),
+                0.0,
+                0.0,
+            ));
+        }
+    }
+    // Cross-bracing in both end bays, in the side walls' plane.
+    for (x0, x1) in [(0.0, bay), ((bays - 1) as f64 * bay, bays as f64 * bay)] {
+        for y in [0.0, span] {
+            let (a, b) = (DVec2::new(x0, y), DVec2::new(x1, y));
+            doc.add_element(beam(angle, FramingKind::Brace, l1, a, b, 300.0, 5400.0));
+            doc.add_element(beam(angle, FramingKind::Brace, l1, b, a, 300.0, 5400.0));
+        }
+    }
+
+    // Cladding outside the steel, a slab inside it.
+    let panel = t(&doc, Category::Walls, "Exterior - Insulated Metal Panel 150mm");
+    let (lo, hi) = (-240.0, bays as f64 * bay + 240.0);
+    let (ylo, yhi) = (-240.0, span + 240.0);
+    let corners = [DVec2::new(lo, ylo), DVec2::new(lo, yhi), DVec2::new(hi, yhi), DVec2::new(hi, ylo)];
+    let mut walls = Vec::new();
+    for i in 0..4 {
+        walls.push(doc.add_element(ElementData::Wall(Wall {
+            type_id: panel,
+            start: corners[i],
+            end: corners[(i + 1) % 4],
+            base_level: l1,
+            base_offset: 0.0,
+            top: TopConstraint::UpToLevel { level: eaves, offset: 0.0 },
+            structural: false,
+            room_bounding: true,
+            attached_top: vec![],
+        })));
+    }
+    let slab = t(&doc, Category::Floors, "Concrete Slab - Industrial 250mm");
+    let inset = 75.0;
+    doc.add_element(ElementData::Floor(Floor {
+        type_id: slab,
+        level: l1,
+        boundary: vec![
+            DVec2::new(lo + inset, ylo + inset),
+            DVec2::new(hi - inset, ylo + inset),
+            DVec2::new(hi - inset, yhi - inset),
+            DVec2::new(lo + inset, yhi - inset),
+        ],
+        height_offset: 0.0,
+        room_bounding: true,
+        structural: true,
+    }));
+    let roof_t = t(&doc, Category::Roofs, "Insulated Metal Sheet 200mm");
+    let o = 300.0;
+    let roof = doc.add_element(ElementData::Roof(Roof {
+        type_id: roof_t,
+        level: eaves,
+        footprint: vec![
+            DVec2::new(lo - o, ylo - o),
+            DVec2::new(hi + o, ylo - o),
+            DVec2::new(hi + o, yhi + o),
+            DVec2::new(lo - o, yhi + o),
+        ],
+        base_offset: 0.0,
+        slope: 6.0,
+        shape: RoofShape::Gable,
+        defines_slope: vec![],
+    }));
+    for w in &walls {
+        if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {
+            w.attached_top = vec![roof];
+        }
+    }
+    let door = t(&doc, Category::Doors, "0915 x 2134mm");
+    doc.add_element(ElementData::Door(HostedOpening {
+        type_id: door,
+        host: walls[3],
+        offset: 3000.0,
+        sill_height: 0.0,
+        flip_hand: false,
+        flip_facing: false,
+    }));
+
+    doc.add_view(
+        &doc.unique_view_name("Section"),
+        ViewKind::Section {
+            start: DVec2::new(bay * 1.5, -3000.0),
+            end: DVec2::new(bay * 1.5, span + 3000.0),
+            far_clip: 20000.0,
+        },
+    );
+    doc.add_view(
+        "Framing Schedule",
+        ViewKind::Schedule(crate::ScheduleDef::new(Category::StructuralFraming)),
+    );
+    doc.add_view(
+        "Foundation Schedule",
+        ViewKind::Schedule(crate::ScheduleDef::new(Category::StructuralFoundations)),
+    );
     doc
 }

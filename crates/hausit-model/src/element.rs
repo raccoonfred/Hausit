@@ -28,6 +28,9 @@ impl Element {
             ElementData::Roof(r) => Some(r.type_id),
             ElementData::Door(o) | ElementData::Window(o) => Some(o.type_id),
             ElementData::Column(c) => Some(c.type_id),
+            ElementData::Framing(f) => Some(f.type_id),
+            ElementData::Footing(f) => Some(f.type_id),
+            ElementData::WallFooting(f) => Some(f.type_id),
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -43,6 +46,9 @@ impl Element {
             ElementData::Roof(r) => r.type_id = t,
             ElementData::Door(o) | ElementData::Window(o) => o.type_id = t,
             ElementData::Column(c) => c.type_id = t,
+            ElementData::Framing(f) => f.type_id = t,
+            ElementData::Footing(f) => f.type_id = t,
+            ElementData::WallFooting(f) => f.type_id = t,
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -83,6 +89,9 @@ pub enum ElementData {
     Door(HostedOpening),
     Window(HostedOpening),
     Column(Column),
+    Framing(Framing),
+    Footing(Footing),
+    WallFooting(WallFooting),
     Room(Room),
     RoomSeparation(SketchedLine),
     Dimension(Dimension),
@@ -99,6 +108,8 @@ impl ElementData {
             ElementData::Door(_) => Category::Doors,
             ElementData::Window(_) => Category::Windows,
             ElementData::Column(_) => Category::StructuralColumns,
+            ElementData::Framing(_) => Category::StructuralFraming,
+            ElementData::Footing(_) | ElementData::WallFooting(_) => Category::StructuralFoundations,
             ElementData::Room(_) => Category::Rooms,
             ElementData::RoomSeparation(_) => Category::RoomSeparation,
             ElementData::Dimension(_) => Category::Dimensions,
@@ -309,6 +320,57 @@ pub struct Column {
     pub top_level: ElementId,
     #[serde(default)]
     pub top_offset: f64,
+}
+
+/// Whether a framing member is a beam or a brace. Beams hang from their
+/// reference line (its height is the top of the beam); braces are centred
+/// on it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FramingKind {
+    #[default]
+    Beam,
+    Brace,
+}
+
+/// Structural framing: a beam or brace swept along a straight line.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Framing {
+    pub type_id: ElementId,
+    pub kind: FramingKind,
+    /// Reference level; the end heights are offsets from it.
+    pub level: ElementId,
+    pub start: DVec2,
+    pub end: DVec2,
+    #[serde(default)]
+    pub start_offset: f64,
+    #[serde(default)]
+    pub end_offset: f64,
+}
+
+impl Framing {
+    pub fn length(&self) -> f64 {
+        self.start.distance(self.end)
+    }
+}
+
+/// An isolated (pad) foundation, its top at its level plus an offset.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Footing {
+    pub type_id: ElementId,
+    pub level: ElementId,
+    pub point: DVec2,
+    /// Rotation in plan, degrees.
+    #[serde(default)]
+    pub rotation: f64,
+    #[serde(default)]
+    pub offset: f64,
+}
+
+/// A strip foundation under a wall; it follows the wall.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct WallFooting {
+    pub type_id: ElementId,
+    pub wall: ElementId,
 }
 
 /// A room, placed at a point; its boundary comes from the room-bounding

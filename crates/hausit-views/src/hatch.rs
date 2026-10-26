@@ -60,6 +60,14 @@ pub fn layer_bands<'a>(
     (bands, lines)
 }
 
+/// The "Structural Material" of an element's type, if the project has it.
+pub fn structural_material(doc: &Document, id: ElementId) -> Option<&str> {
+    match doc.type_of(id)?.params.get("Structural Material")? {
+        hausit_model::ParamValue::Text(name) => doc.material(name).map(|m| m.name.as_str()),
+        _ => None,
+    }
+}
+
 /// Draws a band's material fill and pattern.
 pub fn draw_band(dl: &mut DisplayList, doc: &Document, band: &Band, scale: f64, element: Option<ElementId>) {
     let (pattern, color) = match doc.material(band.material) {

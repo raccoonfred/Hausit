@@ -39,6 +39,16 @@ pub enum Tool {
         base: Option<DVec2>,
     },
     Column,
+    /// Structural framing between two points: a beam, or a brace from
+    /// this level up to the level above.
+    Beam {
+        start: Option<DVec2>,
+        brace: bool,
+    },
+    /// Isolated (pad) foundation.
+    Footing,
+    /// Wall foundation: pick walls.
+    WallFoundation,
     Room,
     RoomSeparation {
         start: Option<DVec2>,
@@ -70,6 +80,15 @@ pub enum Tool {
 }
 
 impl Tool {
+    /// For foundation tools: whether they place wall foundations.
+    pub fn wall_foundation(&self) -> Option<bool> {
+        match self {
+            Tool::Footing => Some(false),
+            Tool::WallFoundation => Some(true),
+            _ => None,
+        }
+    }
+
     /// Contextual tab title, e.g. "Modify | Place Wall".
     pub fn context_title(&self) -> &'static str {
         match self {
@@ -85,6 +104,10 @@ impl Tool {
             Tool::Move { .. } => "Modify | Move",
             Tool::Copy { .. } => "Modify | Copy",
             Tool::Column => "Modify | Place Structural Column",
+            Tool::Beam { brace: false, .. } => "Modify | Place Beam",
+            Tool::Beam { .. } => "Modify | Place Brace",
+            Tool::Footing => "Modify | Place Isolated Foundation",
+            Tool::WallFoundation => "Modify | Place Wall Foundation",
             Tool::Room => "Modify | Place Room",
             Tool::RoomSeparation { .. } => "Modify | Place Room Separation",
             Tool::Dimension { .. } => "Modify | Place Dimensions",
@@ -116,6 +139,12 @@ impl Tool {
             Tool::Move { base: None } | Tool::Copy { base: None } => "Click to enter move start point.",
             Tool::Move { .. } | Tool::Copy { .. } => "Click to enter move end point.",
             Tool::Column => "Click to place a structural column. Space rotates it 90°. At Grids places one at every grid intersection.",
+            Tool::Beam { start: None, brace: false } => "Click to enter beam start point.",
+            Tool::Beam { start: None, .. } => "Click to enter brace start point (on this level).",
+            Tool::Beam { brace: false, .. } => "Click to enter beam end point. Esc ends the chain.",
+            Tool::Beam { .. } => "Click to enter brace end point (on the level above).",
+            Tool::Footing => "Click to place an isolated foundation. Space rotates it 90°. At Columns places one under every column.",
+            Tool::WallFoundation => "Click walls to add a wall foundation under them.",
             Tool::Room => "Click inside an area enclosed by walls or room separation lines to place a room.",
             Tool::RoomSeparation { start: None } => "Click to enter room separation line start point.",
             Tool::RoomSeparation { .. } => "Click to enter line end point. Esc ends the chain.",
@@ -141,6 +170,8 @@ impl Tool {
             Tool::Floor { .. } => Some(Category::Floors),
             Tool::Roof { .. } => Some(Category::Roofs),
             Tool::Column => Some(Category::StructuralColumns),
+            Tool::Beam { .. } => Some(Category::StructuralFraming),
+            Tool::Footing | Tool::WallFoundation => Some(Category::StructuralFoundations),
             _ => None,
         }
     }
@@ -151,7 +182,7 @@ impl Tool {
         match self {
             Tool::Modify => true,
             Tool::Mirror { draw: false, .. } => matches!(cat, Category::Walls | Category::Grids | Category::RoomSeparation),
-            Tool::Trim { .. } | Tool::Split => cat == Category::Walls,
+            Tool::Trim { .. } | Tool::Split | Tool::WallFoundation => cat == Category::Walls,
             Tool::Attach { .. } => matches!(cat, Category::Roofs | Category::Floors),
             _ => false,
         }
@@ -164,6 +195,7 @@ impl Tool {
             | Tool::Grid { start }
             | Tool::Section { start }
             | Tool::RoomSeparation { start }
+            | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start,
             Tool::Move { base } | Tool::Copy { base } => *base,
             Tool::Rotate { center, .. } => Some(*center),
@@ -197,6 +229,7 @@ impl Tool {
             | Tool::Grid { start }
             | Tool::Section { start }
             | Tool::RoomSeparation { start }
+            | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start = None,
             Tool::Move { base } | Tool::Copy { base } => *base = None,
             Tool::Rotate { from, .. } => *from = None,
@@ -381,6 +414,9 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Grid { .. }
             | Tool::Section { .. }
             | Tool::Column
+            | Tool::Beam { .. }
+            | Tool::Footing
+            | Tool::WallFoundation
             | Tool::Room
             | Tool::RoomSeparation { .. }
             | Tool::Dimension { .. }
@@ -912,6 +948,59 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
             let c = new_column(app, type_id, level, p);
             app.transact("Create Structural Column", |doc| Ok(doc.add_element(ElementData::Column(c))));
         }
+        Tool::Beam { start, brace } => match *start {
+            None => *start = Some(p),
+            Some(a) if a.distance(p) > 10.0 => {
+                let Some(level) = app.active_level() else { return };
+                let Some(type_id) = app.type_for(Category::StructuralFraming) else {
+                    return;
+                };
+                let rise = app
+                    .doc
+                    .level_above(level)
+                    .map(|l| app.doc.level_elevation(l) - app.doc.level_elevation(level))
+                    .unwrap_or(3000.0);
+                let f = Framing {
+                    type_id,
+                    kind: if *brace { FramingKind::Brace } else { FramingKind::Beam },
+                    level,
+                    start: a,
+                    end: p,
+                    start_offset: 0.0,
+                    end_offset: if *brace { rise } else { 0.0 },
+                };
+                let what = if *brace { "Create Brace" } else { "Create Beam" };
+                app.transact(what, |doc| Ok(doc.add_element(ElementData::Framing(f))));
+                *start = if app.options.chain && !*brace { Some(p) } else { None };
+            }
+            _ => {}
+        },
+        Tool::Footing => {
+            let Some(level) = app.active_level() else { return };
+            let Some(type_id) = app.type_for(Category::StructuralFoundations) else {
+                return;
+            };
+            let f = new_footing(app, type_id, level, p);
+            app.transact("Create Isolated Foundation", |doc| Ok(doc.add_element(ElementData::Footing(f))));
+        }
+        Tool::WallFoundation => {
+            let Some(wall) = pick_wall(app, p) else {
+                app.status = "Click a wall.".into();
+                app.tool = tool;
+                return;
+            };
+            let has = app
+                .doc
+                .elements_of(Category::StructuralFoundations)
+                .any(|e| matches!(&e.data, ElementData::WallFooting(f) if f.wall == wall));
+            if has {
+                app.status = "That wall already has a foundation.".into();
+            } else if let Some(type_id) = app.type_for(Category::StructuralFoundations) {
+                app.transact("Create Wall Foundation", |doc| {
+                    Ok(doc.add_element(ElementData::WallFooting(WallFooting { type_id, wall })))
+                });
+            }
+        }
         Tool::Room => {
             if let Some(id) = place_room(app, p) {
                 app.status = format!("Placed {}.", app.doc.describe(id));
@@ -1059,6 +1148,74 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
     app.status = app.tool.prompt().into();
 }
 
+fn new_footing(app: &HausitApp, type_id: ElementId, level: ElementId, p: DVec2) -> Footing {
+    Footing {
+        type_id,
+        level,
+        point: p,
+        rotation: if app.options.flip { 90.0 } else { 0.0 },
+        offset: 0.0,
+    }
+}
+
+/// "At Columns": an isolated foundation under every column standing on
+/// the active level that does not have one yet.
+pub fn footings_at_columns(app: &mut HausitApp) {
+    let Some(level) = app.active_level() else { return };
+    let Some(type_id) = app.type_for(Category::StructuralFoundations) else {
+        return;
+    };
+    let existing: Vec<DVec2> = app
+        .doc
+        .elements_of(Category::StructuralFoundations)
+        .filter_map(|e| match &e.data {
+            ElementData::Footing(f) if f.level == level => Some(f.point),
+            _ => None,
+        })
+        .collect();
+    let feet: Vec<Footing> = app
+        .doc
+        .elements_of(Category::StructuralColumns)
+        .filter_map(|e| match &e.data {
+            ElementData::Column(c) if c.base_level == level && !existing.iter().any(|q| q.distance(c.point) < 1.0) => Some(Footing {
+                type_id,
+                level,
+                point: c.point,
+                rotation: c.rotation,
+                offset: c.base_offset,
+            }),
+            _ => None,
+        })
+        .collect();
+    if feet.is_empty() {
+        app.status = "Every column on this level already has a foundation.".into();
+        return;
+    }
+    let n = feet.len();
+    app.transact("Create Isolated Foundations at Columns", |doc| {
+        for f in feet {
+            doc.add_element(ElementData::Footing(f));
+        }
+        Ok(())
+    });
+    app.status = format!("Placed {n} isolated foundations under columns.");
+}
+
+/// The wall under the cursor on the active level.
+fn pick_wall(app: &HausitApp, p: DVec2) -> Option<ElementId> {
+    let level = app.active_level()?;
+    app.doc
+        .elements_of(Category::Walls)
+        .filter_map(|e| {
+            let w = e.as_wall()?;
+            let t = app.doc.type_of(e.id).map(|t| t.thickness()).unwrap_or(200.0);
+            let d = distance_to_segment(p, w.start, w.end);
+            (w.base_level == level && d <= t / 2.0 + app.options.pick_tol).then_some((e.id, d))
+        })
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .map(|(id, _)| id)
+}
+
 fn new_column(app: &HausitApp, type_id: ElementId, level: ElementId, p: DVec2) -> Column {
     Column {
         type_id,
@@ -1186,6 +1343,13 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::Floor(f) => pts.extend(&f.boundary),
             ElementData::Roof(r) => pts.extend(&r.footprint),
             ElementData::Column(c) => pts.push(c.point),
+            ElementData::Framing(f) => pts.extend([f.start, f.end]),
+            ElementData::Footing(f) => pts.push(f.point),
+            ElementData::WallFooting(f) => {
+                if let Some(w) = app.doc.element(f.wall).and_then(|h| h.as_wall()) {
+                    pts.extend([w.start, w.end]);
+                }
+            }
             ElementData::Room(r) => pts.push(r.point),
             ElementData::RoomSeparation(l) => pts.extend([l.start, l.end]),
             ElementData::Door(o) | ElementData::Window(o) => {
@@ -1513,7 +1677,12 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
             app.undo();
         }
     }
-    if space && matches!(app.tool, Tool::Wall { .. } | Tool::Door | Tool::Window | Tool::Column) {
+    if space
+        && matches!(
+            app.tool,
+            Tool::Wall { .. } | Tool::Door | Tool::Window | Tool::Column | Tool::Footing
+        )
+    {
         // Spacebar flips the wall's exterior side or the door's hand.
         app.options.flip = !app.options.flip;
     }
@@ -1639,6 +1808,18 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "CL" => {
             start(app, Tool::Column);
+            true
+        }
+        "BM" => {
+            start(app, Tool::Beam { start: None, brace: false });
+            true
+        }
+        "BR" => {
+            start(app, Tool::Beam { start: None, brace: true });
+            true
+        }
+        "FT" => {
+            start(app, Tool::WallFoundation);
             true
         }
         "RO" => {

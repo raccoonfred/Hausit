@@ -96,6 +96,8 @@ impl ScheduleField {
             Category::Roofs => v.extend([Level, Area, Slope, Thickness]),
             Category::Doors | Category::Windows => v.extend([Level, Width, Height, SillHeight, HeadHeight, Host]),
             Category::StructuralColumns => v.extend([Level, Length, Volume]),
+            Category::StructuralFraming => v.extend([Level, Length, Volume]),
+            Category::StructuralFoundations => v.extend([Level, Length, Volume]),
             Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => return vec![],
         }
         v
@@ -110,6 +112,8 @@ impl ScheduleField {
             Category::Roofs => vec![Type, Level, Area, Slope],
             Category::Doors | Category::Windows => vec![Mark, Type, Width, Height, Level, Count],
             Category::StructuralColumns => vec![Type, Level, Length, Count],
+            Category::StructuralFraming => vec![Type, Level, Length, Count],
+            Category::StructuralFoundations => vec![Type, Level, Volume, Count],
             Category::Rooms => vec![Number, Name, Level, Area, Perimeter, Volume],
             Category::Levels | Category::Grids | Category::RoomSeparation | Category::Dimensions => vec![],
         }

@@ -1,6 +1,6 @@
 //! Hausit: building information modelling with a Revit-style workflow.
 //!
-//! Usage: `hausit [PROJECT.hausit | FILE.rvt] [--sample] [--view "View Name"]`
+//! Usage: `hausit [PROJECT.hausit | FILE.rvt] [--sample | --sample-industrial] [--view "View Name"]`
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -20,7 +20,8 @@ mod viewcube;
 #[derive(Clone, Default)]
 struct Args {
     path: Option<std::path::PathBuf>,
-    sample: bool,
+    /// Sample project to open: the house, or the industrial shed.
+    sample: Option<bool>,
     view: Option<String>,
 }
 
@@ -29,7 +30,8 @@ fn parse_args() -> Args {
     let mut it = std::env::args_os().skip(1);
     while let Some(a) = it.next() {
         match a.to_str() {
-            Some("--sample") => args.sample = true,
+            Some("--sample") => args.sample = Some(false),
+            Some("--sample-industrial") => args.sample = Some(true),
             Some("--view") => args.view = it.next().map(|v| v.to_string_lossy().to_string()),
             _ => args.path = Some(a.into()),
         }
@@ -53,8 +55,10 @@ fn run(args: Args, renderer: eframe::Renderer) -> eframe::Result {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             theme::apply(&cc.egui_ctx);
             let mut app = app::HausitApp::default();
-            if args.sample {
-                app.set_document(hausit_model::template::sample_project(), None);
+            match args.sample {
+                Some(false) => app.set_document(hausit_model::template::sample_project(), None),
+                Some(true) => app.set_document(hausit_model::template::industrial_sample(), None),
+                None => {}
             }
             if let Some(p) = &args.path {
                 app.open_path(p);

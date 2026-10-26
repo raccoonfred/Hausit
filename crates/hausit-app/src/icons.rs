@@ -41,6 +41,10 @@ pub enum Icon {
     Trim,
     Split,
     Attach,
+    Beam,
+    Brace,
+    Footing,
+    WallFoundation,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -398,6 +402,57 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             seg((16.0, 26.0), (16.0, 15.0), line(1.8, BLUE));
             seg((16.0, 15.0), (13.0, 19.0), line(1.8, BLUE));
             seg((16.0, 15.0), (19.0, 19.0), line(1.8, BLUE));
+        }
+        Icon::Beam => {
+            // An I-beam in perspective.
+            let steel = Color32::from_rgb(150, 160, 172);
+            poly(&[(3.0, 12.0), (23.0, 6.0), (29.0, 8.0), (9.0, 14.0)], steel, ink);
+            poly(&[(5.0, 21.0), (25.0, 15.0), (25.0, 17.0), (5.0, 23.0)], steel, ink);
+            poly(
+                &[(6.0, 13.5), (26.0, 7.5), (26.0, 15.5), (6.0, 21.5)],
+                Color32::from_rgb(120, 130, 142),
+                ink,
+            );
+        }
+        Icon::Brace => {
+            seg((5.0, 4.0), (5.0, 28.0), line(2.5, INK));
+            seg((27.0, 4.0), (27.0, 28.0), line(2.5, INK));
+            seg((5.0, 27.0), (27.0, 5.0), line(2.2, Color32::from_rgb(120, 130, 142)));
+            seg((5.0, 5.0), (27.0, 27.0), line(2.2, Color32::from_rgb(120, 130, 142)));
+        }
+        Icon::Footing => {
+            p.rect(
+                rect(13.0, 3.0, 19.0, 17.0),
+                0.0,
+                k(Color32::from_gray(200)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            poly(
+                &[(4.0, 20.0), (10.0, 16.0), (28.0, 16.0), (22.0, 20.0)],
+                Color32::from_rgb(205, 205, 200),
+                ink,
+            );
+            poly(
+                &[(4.0, 20.0), (22.0, 20.0), (22.0, 27.0), (4.0, 27.0)],
+                Color32::from_rgb(175, 175, 170),
+                ink,
+            );
+            poly(
+                &[(22.0, 20.0), (28.0, 16.0), (28.0, 23.0), (22.0, 27.0)],
+                Color32::from_rgb(150, 150, 146),
+                ink,
+            );
+        }
+        Icon::WallFoundation => {
+            p.rect(rect(11.0, 3.0, 21.0, 19.0), 0.0, k(BRICK), ink, egui::StrokeKind::Middle);
+            p.rect(
+                rect(5.0, 19.0, 27.0, 27.0),
+                0.0,
+                k(Color32::from_rgb(185, 185, 180)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
         }
         Icon::Planned => {
             p.circle_stroke(at(16.0, 16.0), 11.0 * s, line(1.5, INK));

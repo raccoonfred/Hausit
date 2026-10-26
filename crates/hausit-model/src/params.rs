@@ -2,7 +2,7 @@
 //! Revit-style Properties palette without knowing its concrete type.
 
 use crate::document::{Document, ModelError};
-use crate::element::{ElementData, RoofShape, TopConstraint};
+use crate::element::{ElementData, FramingKind, RoofShape, TopConstraint};
 use hausit_core::ElementId;
 use serde::{Deserialize, Serialize};
 
@@ -202,11 +202,32 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Rotation", G::Constraints, V::Angle(c.rotation)));
             let (z0, z1) = crate::geometry::column_extent(doc, c);
             p.push(Parameter::new("Length", G::Dimensions, V::Length(z1 - z0)).ro());
-            let area = doc
-                .type_of(id)
-                .map(|t| t.length_or("b", 300.0) * t.length_or("h", 300.0))
-                .unwrap_or(0.0);
+            let area = section_area(doc, id);
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(area * (z1 - z0))).ro());
+        }
+        ElementData::Framing(f) => {
+            p.push(Parameter::new("Reference Level", G::Constraints, V::Element(f.level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Start Level Offset", G::Constraints, V::Length(f.start_offset)));
+            p.push(Parameter::new("End Level Offset", G::Constraints, V::Length(f.end_offset)));
+            let usages = vec!["Beam".to_string(), "Brace".to_string()];
+            let idx = usize::from(f.kind == FramingKind::Brace);
+            p.push(Parameter::new("Structural Usage", G::Structural, V::Choice(idx)).kind(ParamKind::Choice(usages)));
+            let (a, b) = crate::geometry::framing_axis(doc, id, f);
+            let len = a.distance(b);
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(len)).ro());
+            p.push(Parameter::new("Volume", G::Dimensions, V::Volume(section_area(doc, id) * len)).ro());
+        }
+        ElementData::Footing(f) => {
+            p.push(Parameter::new("Level", G::Constraints, V::Element(f.level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Height Offset From Level", G::Constraints, V::Length(f.offset)));
+            p.push(Parameter::new("Rotation", G::Constraints, V::Angle(f.rotation)));
+            p.push(Parameter::new("Volume", G::Dimensions, V::Volume(foundation_volume(doc, id))).ro());
+        }
+        ElementData::WallFooting(f) => {
+            p.push(Parameter::new("Host", G::Other, V::Text(doc.describe(f.wall))).ro());
+            let len = doc.element(f.wall).and_then(|w| w.as_wall()).map(|w| w.length()).unwrap_or(0.0);
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(len)).ro());
+            p.push(Parameter::new("Volume", G::Dimensions, V::Volume(foundation_volume(doc, id))).ro());
         }
         ElementData::Room(r) => {
             let info = crate::rooms::room_info(doc, r);
@@ -323,6 +344,20 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Rotation", V::Angle(a)) => c.rotation = a,
                 _ => return Err(bad()),
             },
+            ElementData::Framing(f) => match (name, value) {
+                ("Reference Level", V::Element(l)) if l.is_valid() => f.level = l,
+                ("Start Level Offset", V::Length(v)) => f.start_offset = v,
+                ("End Level Offset", V::Length(v)) => f.end_offset = v,
+                ("Structural Usage", V::Choice(i)) if i < 2 => f.kind = if i == 0 { FramingKind::Beam } else { FramingKind::Brace },
+                _ => return Err(bad()),
+            },
+            ElementData::Footing(f) => match (name, value) {
+                ("Level", V::Element(l)) if l.is_valid() => f.level = l,
+                ("Height Offset From Level", V::Length(v)) => f.offset = v,
+                ("Rotation", V::Angle(a)) => f.rotation = a,
+                _ => return Err(bad()),
+            },
+            ElementData::WallFooting(_) => return Err(bad()),
             ElementData::Room(r) => match (name, value) {
                 ("Upper Limit", V::Element(l)) => r.upper_limit = l,
                 ("Limit Offset", V::Length(v)) => r.limit_offset = v,
@@ -355,4 +390,15 @@ pub fn set_type_parameter(doc: &mut Document, type_id: ElementId, name: &str, va
     *slot = value;
     doc.touch();
     Ok(())
+}
+
+/// Cross-section area of a column or framing type, mm².
+fn section_area(doc: &Document, id: ElementId) -> f64 {
+    hausit_core::geom::polygon_area(&crate::geometry::section_profile(doc.type_of(id))).abs()
+}
+
+fn foundation_volume(doc: &Document, id: ElementId) -> f64 {
+    crate::geometry::foundation_extent(doc, id)
+        .map(|(o, z0, z1)| hausit_core::geom::polygon_area(&o).abs() * (z1 - z0))
+        .unwrap_or(0.0)
 }

@@ -3,13 +3,16 @@
 //! symbols, grids, and section/elevation marks.
 
 use crate::annotate::{grid_bubble, view_marks};
-use crate::hatch::{draw_band, layer_bands};
-use crate::{pen, Anchor, DisplayList, Prim, Rgba, Stroke, THIN};
+use crate::hatch::{draw_band, layer_bands, structural_material, Band};
+use crate::{pen, Anchor, Dash, DisplayList, Prim, Rgba, Stroke, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, ElementId, LengthUnit};
-use hausit_model::geometry::{column_extent, column_outline, element_geometry, opening_frame, roof_plan_lines, Material, Shape};
+use hausit_model::geometry::{
+    column_extent, column_outline, element_geometry, foundation_extent, framing_axis, opening_frame, roof_plan_lines, section_depth,
+    section_profile, Material, Shape,
+};
 use hausit_model::rooms::room_info;
-use hausit_model::{Category, DetailLevel, Document, ElementData, ParamValue, View};
+use hausit_model::{Category, DetailLevel, Document, ElementData, FramingKind, ParamValue, View};
 
 /// Paper height of tag text, mm.
 const TAG_TEXT: f64 = 2.5;
@@ -101,6 +104,31 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    // Foundations below the level, hidden (dashed), as Revit shows them in
+    // plans whose view depth reaches them.
+    for e in doc.elements_of(Category::StructuralFoundations) {
+        let Some((outline, z0, z1)) = foundation_extent(doc, e.id) else {
+            continue;
+        };
+        let Some(base) = foundation_level(doc, e.id) else { continue };
+        if base != level && !(z0 < cut_z && z1 > elev) {
+            continue;
+        }
+        let mut stroke = pen(doc, Category::StructuralFoundations, false, view.scale);
+        if z1 <= elev + 1.0 {
+            stroke.dash = Dash::Dashed;
+        }
+        dl.push(
+            Prim::Polyline {
+                pts: outline,
+                closed: true,
+            },
+            Some(stroke),
+            None,
+            Some(e.id),
+        );
+    }
+
     // Walls (and door/window frames): projection below the cut, then cut.
     let mut cut_edges: Vec<(DVec2, DVec2, ElementId)> = Vec::new();
     for e in doc.elements_of(Category::Walls) {
@@ -181,12 +209,27 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         let (z0, z1) = column_extent(doc, c);
         let Some(outline) = column_outline(doc, e.id) else { continue };
         if z0 <= cut_z && cut_z < z1 {
-            dl.push(
-                Prim::Polygon(outline),
-                Some(pen(doc, Category::StructuralColumns, true, view.scale)),
-                Some(COLUMN_FILL),
-                Some(e.id),
-            );
+            let edge = pen(doc, Category::StructuralColumns, true, view.scale);
+            match structural_material(doc, e.id).filter(|_| view.detail_level != DetailLevel::Coarse) {
+                Some(material) => {
+                    let band = Band {
+                        outline: outline.clone(),
+                        along: DVec2::X,
+                        material,
+                    };
+                    draw_band(&mut dl, doc, &band, scale, Some(e.id));
+                    dl.push(
+                        Prim::Polyline {
+                            pts: outline,
+                            closed: true,
+                        },
+                        Some(edge),
+                        None,
+                        Some(e.id),
+                    );
+                }
+                None => dl.push(Prim::Polygon(outline), Some(edge), Some(COLUMN_FILL), Some(e.id)),
+            }
         } else if z1 <= cut_z && z1 > elev - 1.0 {
             dl.push(
                 Prim::Polyline {
@@ -196,6 +239,50 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 Some(pen(doc, Category::StructuralColumns, false, view.scale)),
                 None,
                 Some(e.id),
+            );
+        }
+    }
+
+    // Structural framing: members on this level (as a structural plan
+    // shows them) and members passing through the view range, as their
+    // outline, or a single line at Coarse.
+    for e in doc.elements_of(Category::StructuralFraming) {
+        let ElementData::Framing(f) = &e.data else { continue };
+        let (a, b) = framing_axis(doc, e.id, f);
+        let depth = section_depth(doc.type_of(e.id));
+        let (z0, z1) = (a.z.min(b.z) - depth / 2.0, a.z.max(b.z) + depth / 2.0);
+        if !(f.level == level || (z0 < cut_z && z1 > elev)) {
+            continue;
+        }
+        let stroke = pen(doc, Category::StructuralFraming, false, view.scale);
+        let (p, q) = (DVec2::new(a.x, a.y), DVec2::new(b.x, b.y));
+        let dir = (q - p).normalize_or_zero();
+        if view.detail_level == DetailLevel::Coarse || dir == DVec2::ZERO {
+            dl.line(p, q, stroke, Some(e.id));
+            continue;
+        }
+        let profile = section_profile(doc.type_of(e.id));
+        let hw = profile.iter().map(|v| v.x.abs()).fold(0.0, f64::max);
+        let n = perp(dir) * hw;
+        dl.push(
+            Prim::Polyline {
+                pts: vec![p - n, q - n, q + n, p + n],
+                closed: true,
+            },
+            Some(stroke),
+            None,
+            Some(e.id),
+        );
+        if f.kind == FramingKind::Brace {
+            // Braces show their line too, as in Revit's plan symbol.
+            dl.line(
+                p,
+                q,
+                Stroke {
+                    dash: Dash::Dashed,
+                    ..THIN
+                },
+                None,
             );
         }
     }
@@ -395,3 +482,12 @@ const COLUMN_FILL: Rgba = [150, 150, 150, 255];
 
 /// Generic walls have no cut pattern in Revit: white inside heavy outlines.
 const CUT_FILL_LIGHT: Rgba = [255, 255, 255, 255];
+
+/// The level a foundation belongs to: its own, or its wall's base level.
+fn foundation_level(doc: &Document, id: ElementId) -> Option<ElementId> {
+    match &doc.element(id)?.data {
+        ElementData::Footing(f) => Some(f.level),
+        ElementData::WallFooting(f) => doc.element(f.wall)?.as_wall().map(|w| w.base_level),
+        _ => None,
+    }
+}

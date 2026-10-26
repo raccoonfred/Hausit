@@ -180,6 +180,9 @@ impl Document {
                     ElementData::Floor(f) => f.level == id,
                     ElementData::Roof(r) => r.level == id,
                     ElementData::Column(c) => c.base_level == id,
+                    ElementData::Framing(f) => f.level == id,
+                    ElementData::Footing(f) => f.level == id,
+                    ElementData::WallFooting(f) => f.wall == id,
                     ElementData::Room(r) => r.level == id,
                     ElementData::RoomSeparation(l) => l.level == id,
                     // Dimensions go with their view or any element they measure.
@@ -258,6 +261,11 @@ impl Document {
                 ElementData::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
                 ElementData::Roof(r) => r.footprint.iter_mut().for_each(|p| *p += delta),
                 ElementData::Column(c) => c.point += delta,
+                ElementData::Framing(f) => {
+                    f.start += delta;
+                    f.end += delta;
+                }
+                ElementData::Footing(f) => f.point += delta,
                 ElementData::Room(r) => r.point += delta,
                 ElementData::RoomSeparation(l) => {
                     l.start += delta;
@@ -271,7 +279,7 @@ impl Document {
                         }
                     }
                 }
-                ElementData::Door(_) | ElementData::Window(_) | ElementData::Level(_) => {}
+                ElementData::Door(_) | ElementData::Window(_) | ElementData::WallFooting(_) | ElementData::Level(_) => {}
             }
         }
         // Openings selected without their host slide along it.
@@ -296,17 +304,14 @@ impl Document {
     pub fn copy(&mut self, ids: &[ElementId], delta: DVec2) -> Vec<ElementId> {
         let mut map = std::collections::HashMap::new();
         let mut new_ids = Vec::new();
-        // Hosts first so openings can be re-hosted.
+        // Hosts first so openings and wall foundations can be re-hosted.
+        let hosted = |e: &Element| e.category().is_hosted() || matches!(e.data, ElementData::WallFooting(_));
         let mut order: Vec<ElementId> = ids
             .iter()
             .copied()
-            .filter(|i| self.element(*i).map(|e| !e.category().is_hosted()).unwrap_or(false))
+            .filter(|i| self.element(*i).map(|e| !hosted(e)).unwrap_or(false))
             .collect();
-        order.extend(
-            ids.iter()
-                .copied()
-                .filter(|i| self.element(*i).map(|e| e.category().is_hosted()).unwrap_or(false)),
-        );
+        order.extend(ids.iter().copied().filter(|i| self.element(*i).map(hosted).unwrap_or(false)));
         for id in order {
             let Some(src) = self.element(id).cloned() else { continue };
             let mut data = src.data.clone();
@@ -316,6 +321,10 @@ impl Document {
                 ElementData::Door(o) | ElementData::Window(o) => match map.get(&o.host) {
                     Some(h) => o.host = *h,
                     None => continue, // Revit also requires the host when copying in plan.
+                },
+                ElementData::WallFooting(f) => match map.get(&f.wall) {
+                    Some(w) => f.wall = *w,
+                    None => continue,
                 },
                 ElementData::Room(r) => r.number = self.next_room_number(),
                 // Dimensions stay with the elements they measure.
@@ -404,6 +413,14 @@ impl Document {
                     c.point = f(c.point);
                     c.rotation = if mirror { 2.0 * angle - c.rotation } else { c.rotation + angle };
                 }
+                ElementData::Framing(fr) => {
+                    fr.start = f(fr.start);
+                    fr.end = f(fr.end);
+                }
+                ElementData::Footing(ft) => {
+                    ft.point = f(ft.point);
+                    ft.rotation = if mirror { 2.0 * angle - ft.rotation } else { ft.rotation + angle };
+                }
                 ElementData::Room(r) => r.point = f(r.point),
                 ElementData::RoomSeparation(l) => {
                     l.start = f(l.start);
@@ -419,7 +436,7 @@ impl Document {
                         }
                     }
                 }
-                ElementData::Door(_) | ElementData::Window(_) | ElementData::Level(_) => {}
+                ElementData::Door(_) | ElementData::Window(_) | ElementData::WallFooting(_) | ElementData::Level(_) => {}
             }
         }
         for e in self.elements.values_mut() {
@@ -614,6 +631,10 @@ impl Document {
         let t = self.types.get(&new_type).ok_or(ModelError::NotFound(new_type))?;
         if t.category != cat {
             return Err(ModelError::Rejected("Type belongs to another category.".into()));
+        }
+        let is_wall_footing = matches!(self.element(element).map(|e| &e.data), Some(ElementData::WallFooting(_)));
+        if cat == Category::StructuralFoundations && t.is_wall_foundation() != is_wall_footing {
+            return Err(ModelError::Rejected("Isolated and wall foundations use different types.".into()));
         }
         self.elements.get_mut(&element).unwrap().set_type_id(new_type);
         self.touch();
