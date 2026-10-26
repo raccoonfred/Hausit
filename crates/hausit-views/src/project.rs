@@ -4,7 +4,7 @@
 
 use crate::bsp::{Bsp, Poly};
 use crate::frame::ViewFrame;
-use crate::{DisplayList, Prim, Rgba, Stroke, BLACK, CUT_FILL, HEAVY};
+use crate::{DisplayList, Prim, Rgba, Stroke, BLACK, CUT_FILL};
 use hausit_core::geom::{clip_polygon_2d, polygon_area};
 use hausit_core::{DVec2, DVec3, ElementId, Plane};
 use hausit_model::geometry::{model_geometry, Material, Shape};
@@ -138,7 +138,7 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
 
     // Section: cut caps where the section plane slices prisms.
     if frame.depth_clip.is_some() {
-        section_caps(&geometry, frame, &mut dl);
+        section_caps(doc, view, &geometry, frame, &mut dl);
     }
     dl
 }
@@ -187,13 +187,15 @@ fn internal_faces(faces: &[(Material, hausit_model::geometry::Face)]) -> Vec<boo
 /// their seams can be hidden.
 fn split_t_junctions(polys: &mut [Poly<FaceData>]) {
     use std::collections::HashMap;
-    let mut groups: HashMap<(i64, i64, i64, i64), Vec<usize>> = HashMap::new();
+    // Per element and plane: seams between pieces of one element.
+    let mut groups: HashMap<(ElementId, i64, i64, i64, i64), Vec<usize>> = HashMap::new();
     for (i, p) in polys.iter().enumerate() {
         let n = hausit_core::geom::polygon_normal(&p.pts).normalize_or_zero();
         if n == DVec3::ZERO {
             continue;
         }
         let key = (
+            p.data.id,
             (n.x * 1000.0).round() as i64,
             (n.y * 1000.0).round() as i64,
             (n.z * 1000.0).round() as i64,
@@ -300,7 +302,13 @@ fn clip_with_edges(pts: &[DVec3], edges: &[bool], plane: &Plane) -> (Vec<DVec3>,
 
 /// Draws the cut faces of prisms intersected by the section plane (heavy
 /// outline, solid fill), and cut lines through sloped faces.
-fn section_caps(geometry: &[hausit_model::geometry::ElementGeometry], frame: &ViewFrame, dl: &mut DisplayList) {
+fn section_caps(
+    doc: &Document,
+    view: &View,
+    geometry: &[hausit_model::geometry::ElementGeometry],
+    frame: &ViewFrame,
+    dl: &mut DisplayList,
+) {
     let o = DVec2::new(frame.origin.x, frame.origin.y);
     let f2 = DVec2::new(frame.forward.x, frame.forward.y);
     let r2 = DVec2::new(frame.right.x, frame.right.y);
@@ -336,7 +344,12 @@ fn section_caps(geometry: &[hausit_model::geometry::ElementGeometry], frame: &Vi
                         };
                         let rect = vec![DVec2::new(a, p.z0), DVec2::new(b, p.z0), DVec2::new(b, p.z1), DVec2::new(a, p.z1)];
                         let rect = clip_polygon_2d(&rect, DVec2::X, u1);
-                        dl.push(Prim::Polygon(rect), Some(HEAVY), Some(fill), Some(g.id));
+                        dl.push(
+                            Prim::Polygon(rect),
+                            Some(crate::pen(doc, g.category, true, view.scale)),
+                            Some(fill),
+                            Some(g.id),
+                        );
                     }
                 }
                 Shape::Faces(faces) => {
@@ -353,7 +366,7 @@ fn section_caps(geometry: &[hausit_model::geometry::ElementGeometry], frame: &Vi
                             }
                         }
                         if hits.len() == 2 && hits.iter().all(|h| h.x >= u0 - 1e-6 && h.x <= u1 + 1e-6) {
-                            dl.line(hits[0], hits[1], HEAVY, Some(g.id));
+                            dl.line(hits[0], hits[1], crate::pen(doc, g.category, true, view.scale), Some(g.id));
                         }
                     }
                 }

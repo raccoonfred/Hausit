@@ -38,6 +38,10 @@ pub struct Document {
     pub project_info: ProjectInfo,
     #[serde(default)]
     pub length_unit: LengthUnit,
+    #[serde(default)]
+    pub object_styles: crate::styles::ObjectStyles,
+    #[serde(default)]
+    pub line_weights: crate::styles::LineWeights,
     elements: IndexMap<ElementId, Element>,
     types: IndexMap<ElementId, FamilyType>,
     views: IndexMap<ElementId, View>,
@@ -45,6 +49,8 @@ pub struct Document {
     /// Bumped on every change; lets views cache derived graphics.
     #[serde(skip)]
     revision: u64,
+    #[serde(skip)]
+    index: crate::index::IndexCache,
 }
 
 impl Default for Document {
@@ -63,11 +69,14 @@ impl Document {
                 ..Default::default()
             },
             length_unit: LengthUnit::Millimeters,
+            object_styles: Default::default(),
+            line_weights: Default::default(),
             elements: IndexMap::new(),
             types: IndexMap::new(),
             views: IndexMap::new(),
             next_id: 1,
             revision: 0,
+            index: Default::default(),
         }
     }
 
@@ -99,7 +108,14 @@ impl Document {
     }
 
     pub fn elements_of(&self, cat: Category) -> impl Iterator<Item = &Element> {
-        self.elements.values().filter(move |e| e.category() == cat)
+        let ids = self.index().of_category(cat).to_vec();
+        ids.into_iter().filter_map(move |id| self.elements.get(&id))
+    }
+
+    /// Lookup tables for this revision of the document.
+    pub fn index(&self) -> std::sync::Arc<crate::index::DocIndex> {
+        self.index
+            .get(self.revision, || crate::index::DocIndex::build(self.elements.values()))
     }
 
     pub fn element(&self, id: ElementId) -> Option<&Element> {
@@ -136,7 +152,14 @@ impl Document {
 
     /// Next free numeric Mark for a category, as Revit auto-numbers doors.
     fn next_mark(&self, cat: Category) -> String {
-        let max = self.elements_of(cat).filter_map(|e| e.mark.parse::<u64>().ok()).max().unwrap_or(0);
+        // Scans directly: called while adding elements, when the index is stale.
+        let max = self
+            .elements
+            .values()
+            .filter(|e| e.category() == cat)
+            .filter_map(|e| e.mark.parse::<u64>().ok())
+            .max()
+            .unwrap_or(0);
         (max + 1).to_string()
     }
 
@@ -484,9 +507,10 @@ impl Document {
 
     /// Doors and windows hosted by a wall.
     pub fn openings_in(&self, wall: ElementId) -> impl Iterator<Item = (&Element, &HostedOpening)> {
-        self.elements.values().filter_map(move |e| match e.as_opening() {
-            Some(o) if o.host == wall => Some((e, o)),
-            _ => None,
+        let ids = self.index().openings_of(wall).to_vec();
+        ids.into_iter().filter_map(move |id| {
+            let e = self.elements.get(&id)?;
+            Some((e, e.as_opening()?)).filter(|(_, o)| o.host == wall)
         })
     }
 

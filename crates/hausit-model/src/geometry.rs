@@ -111,6 +111,25 @@ impl Part {
             Shape::Faces(f) => f.clone(),
         }
     }
+    /// Plan view of a vertical solid: its footprint, base height and the
+    /// lowest point of its top (a sloped top can be higher elsewhere).
+    /// `None` for solids that are not vertical extrusions.
+    pub fn vertical_extent(&self) -> Option<(Vec<DVec2>, f64, f64)> {
+        match &self.shape {
+            Shape::Prism(p) => Some((p.footprint.clone(), p.z0, p.z1)),
+            Shape::Faces(faces) => {
+                let bottom = faces.iter().find(|f| f.normal().z < -0.999)?;
+                let z0 = bottom.pts.first()?.z;
+                let top = faces
+                    .iter()
+                    .filter(|f| f.normal().z > 1e-6)
+                    .flat_map(|f| f.pts.iter().map(|p| p.z))
+                    .fold(f64::INFINITY, f64::min);
+                top.is_finite()
+                    .then(|| (bottom.pts.iter().rev().map(|p| p.truncate()).collect(), z0, top))
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -230,11 +249,12 @@ fn join_end(doc: &Document, me: ElementId, p: DVec2, away: DVec2, h: f64) -> Opt
     let mut corner = None;
     let mut corner_count = 0;
     let mut tee = None;
-    for e in doc.elements_of(Category::Walls) {
+    for id in doc.index().walls_near(my_base, p) {
+        let Some(e) = doc.element(id) else { continue };
         if e.id == me {
             continue;
         }
-        let w = e.as_wall().unwrap();
+        let Some(w) = e.as_wall() else { continue };
         if w.base_level != my_base {
             continue;
         }

@@ -92,6 +92,18 @@ crates/
 
 Internal lengths are millimetres. Run the tests with `cargo test --workspace`.
 
+## Trademarks
+
+Revit and Autodesk are registered trademarks of Autodesk, Inc. Hausit is not
+affiliated with or endorsed by Autodesk. Hausit is an independent,
+open-source program that follows a Revit-style workflow and aims to open
+Revit files for interoperability.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), and [ROADMAP.md](ROADMAP.md) for what
+is planned.
+
 ## License
 
 Hausit is dual-licensed under either of

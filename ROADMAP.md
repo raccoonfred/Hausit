@@ -414,10 +414,10 @@ a lawyer who knows software IP review the points below.
 
 ### 5.4 Practical checklist
 
-- [ ] Trademark disclaimer in README and About dialog.
-- [ ] Contributor guidelines: no Autodesk artwork, help text, families or
+- [x] Trademark disclaimer in README and About dialog.
+- [x] Contributor guidelines: no Autodesk artwork, help text, families or
       decompiled code. Add a `CONTRIBUTING.md` section.
-- [ ] Clean-room log for `hausit-rvt`.
+- [x] Clean-room log for `hausit-rvt` (`crates/hausit-rvt/CLEAN_ROOM.md`).
 - [ ] Legal review before 1.0 or any commercial offering.
 
 ---

@@ -17,9 +17,11 @@ pub mod element;
 pub mod family;
 pub mod geometry;
 pub mod history;
+pub mod index;
 pub mod params;
 pub mod rooms;
 pub mod schedule;
+pub mod styles;
 pub mod template;
 pub mod view;
 

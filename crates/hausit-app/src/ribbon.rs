@@ -497,7 +497,16 @@ fn manage(app: &mut HausitApp, ui: &mut Ui) {
             app.dialogs.units = true;
         }
         planned(ui, Icon::Planned, "Materials", "Materials");
-        planned(ui, Icon::Planned, "Object Styles", "Object Styles");
+        if big(
+            ui,
+            Icon::TypeProps,
+            "Object Styles",
+            "Object Styles: line weights and colours by category",
+            false,
+            true,
+        ) {
+            app.dialogs.object_styles = Some((app.doc.object_styles.clone(), app.doc.line_weights.clone()));
+        }
     });
     panel(ui, "Phasing", |ui| planned(ui, Icon::Planned, "Phases", "Phases"));
 }

@@ -55,6 +55,18 @@ impl Stroke {
     }
 }
 
+/// Screen pixels per paper millimetre for line weights.
+const PX_PER_MM: f64 = 5.2;
+
+/// The stroke a category draws with in a view at 1:`scale`, from the
+/// document's object styles and line weights.
+pub fn pen(doc: &Document, cat: hausit_model::Category, cut: bool, scale: u32) -> Stroke {
+    let style = doc.object_styles.get(cat);
+    let mm = doc.line_weights.width(if cut { style.cut } else { style.projection }, scale);
+    let [r, g, b] = style.color;
+    Stroke::new((mm * PX_PER_MM).max(1.0) as f32, [r, g, b, 255])
+}
+
 pub const THIN: Stroke = Stroke::new(1.0, BLACK);
 pub const MEDIUM: Stroke = Stroke::new(1.6, BLACK);
 pub const HEAVY: Stroke = Stroke::new(2.6, BLACK);
@@ -185,6 +197,29 @@ mod tests {
                 assert!(!dl.items.is_empty(), "view {} is empty", v.name);
                 assert!(dl.bounds().is_some());
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod plan_tests {
+    use super::*;
+    use hausit_model::template::sample_project;
+    use hausit_model::Category;
+
+    /// Every wall is cut in the Level 1 plan, including walls attached to
+    /// the roof.
+    #[test]
+    fn all_walls_cut_in_plan() {
+        let doc = sample_project();
+        let plan = doc.views().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap();
+        let dl = build(&doc, plan);
+        for w in doc.elements_of(Category::Walls) {
+            let cut = dl
+                .items
+                .iter()
+                .any(|it| it.element == Some(w.id) && matches!(it.prim, Prim::Polygon(_)) && it.fill.is_some());
+            assert!(cut, "wall {} is not cut", w.id);
         }
     }
 }

@@ -3,7 +3,7 @@
 //! symbols, grids, and section/elevation marks.
 
 use crate::annotate::{grid_bubble, view_marks};
-use crate::{Anchor, DisplayList, Prim, Rgba, Stroke, HEAVY, MEDIUM, THIN};
+use crate::{pen, Anchor, DisplayList, Prim, Rgba, Stroke, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, ElementId, LengthUnit};
 use hausit_model::geometry::{column_extent, column_outline, element_geometry, opening_frame, roof_plan_lines, Material, Shape};
@@ -32,7 +32,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                     pts: f.boundary.clone(),
                     closed: true,
                 },
-                Some(THIN),
+                Some(pen(doc, Category::Floors, false, view.scale)),
                 None,
                 Some(e.id),
             );
@@ -49,12 +49,12 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                     pts: r.footprint.clone(),
                     closed: true,
                 },
-                Some(MEDIUM),
+                Some(pen(doc, Category::Roofs, false, view.scale)),
                 None,
                 Some(e.id),
             );
             for (a, b) in roof_plan_lines(r) {
-                dl.line(a, b, THIN, Some(e.id));
+                dl.line(a, b, pen(doc, Category::Roofs, false, view.scale), Some(e.id));
             }
         }
     }
@@ -96,7 +96,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements_of(Category::RoomSeparation) {
         let ElementData::RoomSeparation(l) = &e.data else { continue };
         if l.level == level {
-            dl.line(l.start, l.end, THIN, Some(e.id));
+            dl.line(l.start, l.end, pen(doc, Category::RoomSeparation, false, view.scale), Some(e.id));
         }
     }
 
@@ -105,20 +105,23 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements_of(Category::Walls) {
         let Some(g) = element_geometry(doc, e.id) else { continue };
         for part in &g.parts {
-            let Shape::Prism(p) = &part.shape else { continue };
-            if p.z0 <= cut_z && cut_z < p.z1 {
-                dl.push(Prim::Polygon(p.footprint.clone()), None, Some(CUT_FILL_LIGHT), Some(e.id));
-                let n = p.footprint.len();
+            // Straight pieces and pieces attached to a roof above.
+            let Some((footprint, z0, z1)) = part.vertical_extent() else {
+                continue;
+            };
+            if z0 <= cut_z && cut_z < z1 {
+                dl.push(Prim::Polygon(footprint.clone()), None, Some(CUT_FILL_LIGHT), Some(e.id));
+                let n = footprint.len();
                 for i in 0..n {
-                    cut_edges.push((p.footprint[i], p.footprint[(i + 1) % n], e.id));
+                    cut_edges.push((footprint[i], footprint[(i + 1) % n], e.id));
                 }
-            } else if p.z1 <= cut_z && p.z1 > elev - 1.0 {
+            } else if z1 <= cut_z && z1 > elev - 1.0 {
                 dl.push(
                     Prim::Polyline {
-                        pts: p.footprint.clone(),
+                        pts: footprint.clone(),
                         closed: true,
                     },
-                    Some(THIN),
+                    Some(pen(doc, Category::Walls, false, view.scale)),
                     None,
                     Some(e.id),
                 );
@@ -127,16 +130,23 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     }
     // Stroke only cut edges that are not shared by two pieces, so mitred
     // corners and wall segments read as one continuous wall.
-    let shared = |a: DVec2, b: DVec2| {
-        cut_edges
-            .iter()
-            .filter(|(c, d, _)| (a.distance(*d) < 0.5 && b.distance(*c) < 0.5) || (a.distance(*c) < 0.5 && b.distance(*d) < 0.5))
-            .count()
-            > 1
+    let key = |a: DVec2, b: DVec2| {
+        let q = |p: DVec2| ((p.x * 2.0).round() as i64, (p.y * 2.0).round() as i64);
+        let (qa, qb) = (q(a), q(b));
+        if qa < qb {
+            (qa, qb)
+        } else {
+            (qb, qa)
+        }
     };
+    let mut edge_count: std::collections::HashMap<_, usize> = std::collections::HashMap::new();
+    for (a, b, _) in &cut_edges {
+        *edge_count.entry(key(*a, *b)).or_default() += 1;
+    }
+    let shared = |a: DVec2, b: DVec2| edge_count.get(&key(a, b)).copied().unwrap_or(0) > 1;
     for (a, b, id) in &cut_edges {
         if !shared(*a, *b) {
-            dl.line(*a, *b, HEAVY, Some(*id));
+            dl.line(*a, *b, pen(doc, Category::Walls, true, view.scale), Some(*id));
         }
     }
 
@@ -147,14 +157,19 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         let (z0, z1) = column_extent(doc, c);
         let Some(outline) = column_outline(doc, e.id) else { continue };
         if z0 <= cut_z && cut_z < z1 {
-            dl.push(Prim::Polygon(outline), Some(HEAVY), Some(COLUMN_FILL), Some(e.id));
+            dl.push(
+                Prim::Polygon(outline),
+                Some(pen(doc, Category::StructuralColumns, true, view.scale)),
+                Some(COLUMN_FILL),
+                Some(e.id),
+            );
         } else if z1 <= cut_z && z1 > elev - 1.0 {
             dl.push(
                 Prim::Polyline {
                     pts: outline,
                     closed: true,
                 },
-                Some(THIN),
+                Some(pen(doc, Category::StructuralColumns, false, view.scale)),
                 None,
                 Some(e.id),
             );
@@ -201,7 +216,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 let side = to_closed * t;
                 dl.push(
                     Prim::Polygon(vec![hinge, open_end, open_end + side, hinge + side]),
-                    Some(MEDIUM),
+                    Some(pen(doc, Category::Doors, true, view.scale)),
                     Some([255, 255, 255, 255]),
                     Some(e.id),
                 );
@@ -221,7 +236,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                         start: a0,
                         end: a0 + sweep,
                     },
-                    Some(THIN),
+                    Some(pen(doc, Category::Doors, false, view.scale)),
                     None,
                     Some(e.id),
                 );
@@ -238,13 +253,23 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             let a = f.center - f.dir * hw;
             let b = f.center + f.dir * hw;
             for off in [half_t, -half_t] {
-                dl.line(a + n * off, b + n * off, THIN, Some(e.id));
+                dl.line(a + n * off, b + n * off, pen(doc, Category::Windows, false, view.scale), Some(e.id));
             }
             for off in [25.0, -25.0] {
                 dl.line(a + n * off, b + n * off, Stroke::new(1.0, GLASS), Some(e.id));
             }
-            dl.line(a + n * half_t, a - n * half_t, MEDIUM, Some(e.id));
-            dl.line(b + n * half_t, b - n * half_t, MEDIUM, Some(e.id));
+            dl.line(
+                a + n * half_t,
+                a - n * half_t,
+                pen(doc, Category::Windows, true, view.scale),
+                Some(e.id),
+            );
+            dl.line(
+                b + n * half_t,
+                b - n * half_t,
+                pen(doc, Category::Windows, true, view.scale),
+                Some(e.id),
+            );
         }
         // Tags: doors show their Mark, windows their Type Mark.
         let h = TAG_TEXT * scale;

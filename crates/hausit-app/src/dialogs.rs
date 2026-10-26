@@ -47,6 +47,8 @@ pub struct Dialogs {
     pub roof_level: Option<(ElementId, ElementId)>,
     /// After creating a roof: attach these walls to it?
     pub attach_walls: Option<(ElementId, Vec<ElementId>)>,
+    /// Object Styles dialog: the settings being edited.
+    pub object_styles: Option<(hausit_model::styles::ObjectStyles, hausit_model::styles::LineWeights)>,
 }
 
 impl Dialogs {
@@ -59,6 +61,10 @@ impl Dialogs {
         }
     }
 }
+
+/// Shown wherever Hausit names Autodesk products (see ROADMAP.md, 5.1).
+pub const TRADEMARK_NOTICE: &str = "Revit and Autodesk are registered trademarks of Autodesk, Inc. \
+     Hausit is not affiliated with or endorsed by Autodesk.";
 
 fn window(title: &str) -> egui::Window<'_> {
     egui::Window::new(title)
@@ -77,6 +83,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     confirm(app, ctx);
     roof_level(app, ctx);
     attach_walls(app, ctx);
+    object_styles(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;
@@ -86,6 +93,8 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
             ui.label("Open-source building information modelling with a Revit-style workflow.");
             ui.label("Written in Rust; runs on Windows, macOS and Linux.");
             ui.hyperlink("https://github.com/raccoonfred/Hausit");
+            ui.add_space(6.0);
+            ui.label(RichText::new(TRADEMARK_NOTICE).small().color(Color32::DARK_GRAY));
         });
         app.dialogs.about = open;
     }
@@ -355,6 +364,73 @@ fn project_info(app: &mut HausitApp, ctx: &Context) {
     }
     if close {
         app.dialogs.project_info = false;
+    }
+}
+
+fn object_styles(app: &mut HausitApp, ctx: &Context) {
+    let Some((styles, weights)) = app.dialogs.object_styles.as_mut() else {
+        return;
+    };
+    let mut result = None;
+    window("Object Styles").show(ctx, |ui| {
+        ui.label("Line weights are pen numbers (1 to 16). Pen widths per scale are below.");
+        ui.add_space(4.0);
+        egui::Grid::new("object_styles").striped(true).num_columns(4).show(ui, |ui| {
+            for h in ["Category", "Projection", "Cut", "Line Color"] {
+                ui.label(RichText::new(h).strong());
+            }
+            ui.end_row();
+            for (cat, st) in styles.0.iter_mut() {
+                ui.label(cat.name());
+                ui.add(egui::DragValue::new(&mut st.projection).range(1..=16));
+                if cat.is_model() {
+                    ui.add(egui::DragValue::new(&mut st.cut).range(1..=16));
+                } else {
+                    ui.label("");
+                }
+                ui.color_edit_button_srgb(&mut st.color);
+                ui.end_row();
+            }
+        });
+        ui.add_space(6.0);
+        egui::CollapsingHeader::new("Line Weights (paper mm)").show(ui, |ui| {
+            egui::Grid::new("line_weights").striped(true).show(ui, |ui| {
+                ui.label(RichText::new("Pen").strong());
+                for s in hausit_model::styles::SCALES {
+                    ui.label(RichText::new(format!("1:{s}")).strong());
+                }
+                ui.end_row();
+                for (i, row) in weights.widths.iter_mut().enumerate() {
+                    ui.label((i + 1).to_string());
+                    for w in row.iter_mut() {
+                        ui.add(egui::DragValue::new(w).range(0.01..=10.0).speed(0.01).max_decimals(2));
+                    }
+                    ui.end_row();
+                }
+            });
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button("   OK   ").clicked() {
+                result = Some(true);
+            }
+            if ui.button(" Cancel ").clicked() {
+                result = Some(false);
+            }
+        });
+    });
+    match result {
+        Some(true) => {
+            let (styles, weights) = app.dialogs.object_styles.take().unwrap();
+            app.transact("Object Styles", |doc| {
+                doc.object_styles = styles;
+                doc.line_weights = weights;
+                doc.touch();
+                Ok(())
+            });
+        }
+        Some(false) => app.dialogs.object_styles = None,
+        None => {}
     }
 }
 
