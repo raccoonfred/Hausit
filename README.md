@@ -55,6 +55,11 @@ Ribbon buttons for features that are not built yet (stairs, railings,
 ceilings, beams, foundations, text, sheets and so on) are shown greyed out with
 a "planned" tooltip, so the layout matches Revit while the features arrive.
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for the gap analysis against Revit, the phased
+plan, the path to opening RVT files and the legal ground rules.
+
 ## Opening Revit files
 
 Opening `.rvt` and `.rfa` files from every Revit version is a core goal.
