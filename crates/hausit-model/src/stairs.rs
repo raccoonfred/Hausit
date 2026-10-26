@@ -15,9 +15,15 @@ pub struct StairRules {
     pub tread: f64,
     pub structural_depth: f64,
     pub landing_thickness: f64,
-    /// Monolithic stairs are solid below each step; others have plate
-    /// treads.
+    /// Monolithic stairs are cast as one waist slab below the steps;
+    /// assembled stairs have treads carried by stringers.
     pub monolithic: bool,
+    /// How far an assembled tread overhangs the riser below.
+    pub nosing: f64,
+    pub closed_risers: bool,
+    pub riser_thickness: f64,
+    pub stringer_width: f64,
+    pub stringer_depth: f64,
 }
 
 impl StairRules {
@@ -29,6 +35,11 @@ impl StairRules {
             structural_depth: len("Structural Depth", 150.0),
             landing_thickness: len("Landing Thickness", 200.0),
             monolithic: !matches!(t.and_then(|t| t.params.get("Monolithic")), Some(ParamValue::Bool(false))),
+            nosing: len("Nosing Length", 25.0).max(0.0),
+            closed_risers: matches!(t.and_then(|t| t.params.get("Closed Risers")), Some(ParamValue::Bool(true))),
+            riser_thickness: len("Riser Thickness", 20.0).max(1.0),
+            stringer_width: len("Stringer Width", 50.0).max(0.0),
+            stringer_depth: len("Stringer Depth", 250.0).max(0.0),
         }
     }
 }
@@ -318,8 +329,8 @@ mod tests {
             max_riser: 180.0,
             tread: 280.0,
             structural_depth: 150.0,
-            landing_thickness: 200.0,
             monolithic: true,
+            ..StairRules::of(None)
         }
     }
 

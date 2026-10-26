@@ -6,7 +6,7 @@ use crate::bsp::{Bsp, Poly};
 use crate::frame::ViewFrame;
 use crate::hatch::{draw_band, layer_bands, structural_material, Band};
 use crate::{DisplayList, Prim, Rgba, Stroke, BLACK, CUT_FILL};
-use hausit_core::geom::{clip_polygon_2d, perp, polygon_area};
+use hausit_core::geom::{clip_polygon_2d, distance_to_segment, perp, polygon_area};
 use hausit_core::{DVec2, DVec3, ElementId, Plane};
 use hausit_model::geometry::{model_geometry, Material, Shape};
 use hausit_model::{Category, Document, ElementData, View, VisualStyle};
@@ -364,6 +364,9 @@ fn section_caps(
                 Shape::Faces(faces) => {
                     let plane = Plane::from_point_normal(frame.origin, frame.forward);
                     let mut segs = Vec::new();
+                    // Cuts through upward-facing faces, with their normal
+                    // in view coordinates: the top surface of a roof.
+                    let mut tops = Vec::new();
                     for face in faces {
                         let mut hits = Vec::new();
                         let m = face.pts.len();
@@ -377,28 +380,32 @@ fn section_caps(
                         }
                         if hits.len() == 2 && hits.iter().all(|h| h.x >= u0 - 1e-6 && h.x <= u1 + 1e-6) {
                             segs.push((hits[0], hits[1]));
+                            let n = face.normal();
+                            let n2 = DVec2::new(n.dot(frame.right), n.dot(frame.up));
+                            if n.z > 0.05 && n2.length() > 1e-6 {
+                                tops.push((hits[0], hits[1], n2.normalize()));
+                            }
                         }
                     }
-                    // A layered solid cut whole gets its layers too.
+                    // Every closed cut is filled; layered types get their layers.
                     let edge = crate::pen(doc, g.category, true, view.scale);
                     let loops = chain_loops(segs.clone());
-                    let layered: Vec<_> = loops
-                        .into_iter()
-                        .map(|l| {
-                            let (mut b, lines) = layer_polys(doc, view, g, &l, o, r2);
-                            if b.is_empty() {
-                                b.extend(material_band(doc, view, g.id, &l));
-                            }
-                            (l, b, lines)
-                        })
-                        .filter(|(_, b, _)| !b.is_empty())
-                        .collect();
-                    if layered.is_empty() {
+                    if loops.is_empty() {
                         for (a, b) in segs {
                             dl.line(a, b, edge, Some(g.id));
                         }
-                    } else {
-                        for (l, bands, lines) in layered {
+                    }
+                    for l in loops {
+                        let (mut bands, mut lines) = layer_polys(doc, view, g, &l, o, r2);
+                        if bands.is_empty() {
+                            (bands, lines) = roof_layers(doc, view, g.id, &l, &tops);
+                        }
+                        if bands.is_empty() {
+                            bands.extend(material_band(doc, view, g.id, &l));
+                        }
+                        if bands.is_empty() {
+                            dl.push(Prim::Polygon(l), Some(edge), Some(CUT_FILL), Some(g.id));
+                        } else {
                             draw_layers(dl, doc, view, g.id, l, &bands, &lines, edge);
                         }
                     }
@@ -406,6 +413,57 @@ fn section_caps(
             }
         }
     }
+}
+
+/// A sloped roof cut in section: its layers follow the top surface. The
+/// cut is split where roof planes meet (on the bisector, as at a ridge),
+/// and each piece is layered down from its own top line.
+fn roof_layers<'a>(
+    doc: &'a Document,
+    view: &View,
+    id: ElementId,
+    outline: &[DVec2],
+    tops: &[(DVec2, DVec2, DVec2)],
+) -> (Vec<Band<'a>>, Vec<(DVec2, DVec2)>) {
+    let none = (vec![], vec![]);
+    if view.detail_level == hausit_model::DetailLevel::Coarse {
+        return none;
+    }
+    let Some(t) = doc.type_of(id).filter(|t| !t.layers.is_empty()) else {
+        return none;
+    };
+    if !matches!(doc.element(id).map(|e| &e.data), Some(ElementData::Roof(_))) {
+        return none;
+    }
+    let on_outline = |p: DVec2| (0..outline.len()).any(|i| distance_to_segment(p, outline[i], outline[(i + 1) % outline.len()]) < 1.0);
+    let tops: Vec<_> = tops.iter().filter(|(a, b, _)| on_outline((*a + *b) * 0.5)).collect();
+    let (mut bands, mut lines) = (Vec::new(), Vec::new());
+    for (i, (a, b, n)) in tops.iter().enumerate() {
+        let mut piece = outline.to_vec();
+        let mid = (*a + *b) * 0.5;
+        for (j, (c, d, m)) in tops.iter().enumerate() {
+            if i == j || (*n - *m).length() < 1e-6 {
+                continue;
+            }
+            let Some(v) = [*a, *b].into_iter().find(|p| p.distance(*c) < 1.0 || p.distance(*d) < 1.0) else {
+                continue;
+            };
+            // Keep the side of the bisector at `v` that holds this plane.
+            let dir = -(*n + *m);
+            let k = perp(dir.try_normalize().unwrap_or(DVec2::Y));
+            let k = if k.dot(mid - v) > 0.0 { -k } else { k };
+            piece = clip_polygon_2d(&piece, k, k.dot(v));
+        }
+        if piece.len() < 3 {
+            continue;
+        }
+        let along = (*b - *a).try_normalize().unwrap_or(DVec2::X);
+        let layers = t.layers.iter().map(|l| (l.material.as_str(), l.thickness));
+        let (bs, ls) = layer_bands(&piece, *a, along, *n, 0.0, layers);
+        bands.extend(bs);
+        lines.extend(ls);
+    }
+    (bands, lines)
 }
 
 /// A column, beam or foundation cut in section: one band of its type's

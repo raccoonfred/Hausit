@@ -102,7 +102,8 @@ pub fn pattern_lines(poly: &[DVec2], pattern: FillPattern, along: DVec2, scale: 
         }
         FillPattern::Parallel => parallel_lines(poly, along, sp * 0.5),
         FillPattern::Concrete => concrete(poly, sp),
-        FillPattern::Insulation => insulation(poly, along),
+        FillPattern::Insulation => batt(poly, along),
+        FillPattern::RigidInsulation => rigid(poly, along),
     }
 }
 
@@ -158,8 +159,33 @@ fn concrete(poly: &[DVec2], spacing: f64) -> Vec<(DVec2, DVec2)> {
     out
 }
 
-/// The zigzag batt symbol, spanning the layer across its thickness.
-fn insulation(poly: &[DVec2], along: DVec2) -> Vec<(DVec2, DVec2)> {
+/// The batt insulation symbol: a looped curve (a prolate trochoid) that
+/// spans the layer across its thickness, as insulation is drawn by hand.
+fn batt(poly: &[DVec2], along: DVec2) -> Vec<(DVec2, DVec2)> {
+    let n = perp(along);
+    let (lo, hi) = range(poly, n);
+    let (a0, a1) = range(poly, along);
+    let t = hi - lo;
+    let (b, a) = (t * 0.45, t * 0.2);
+    let step = 0.4;
+    if t <= 0.0 || (a1 - a0 + 2.0 * b) / a / step > 40_000.0 {
+        return vec![];
+    }
+    let mid = (lo + hi) * 0.5;
+    let at = |th: f64| along * (a * th - b * th.sin()) + n * (mid + b * th.cos());
+    let mut out = Vec::new();
+    let mut th = (a0 - b) / a;
+    let end = (a1 + b) / a;
+    while th < end {
+        out.extend(clip_segment(poly, at(th), at(th + step)));
+        th += step;
+    }
+    out
+}
+
+/// Rigid insulation: diagonals crossing between the faces, one bay per
+/// thickness along the layer.
+fn rigid(poly: &[DVec2], along: DVec2) -> Vec<(DVec2, DVec2)> {
     let n = perp(along);
     let (lo, hi) = range(poly, n);
     let (a0, a1) = range(poly, along);
@@ -167,16 +193,13 @@ fn insulation(poly: &[DVec2], along: DVec2) -> Vec<(DVec2, DVec2)> {
     if t <= 0.0 || (a1 - a0) / t > 5000.0 {
         return vec![];
     }
-    let inset = t * 0.08;
-    let step = t * 0.5;
     let mut out = Vec::new();
-    let mut s = (a0 / step).floor();
-    while s * step < a1 {
-        let side = |k: f64| if (k as i64).rem_euclid(2) == 0 { lo + inset } else { hi - inset };
-        let p = along * (s * step) + n * side(s);
-        let q = along * ((s + 1.0) * step) + n * side(s + 1.0);
-        out.extend(clip_segment(poly, p, q));
-        s += 1.0;
+    let mut s = (a0 / t).floor() * t;
+    while s < a1 {
+        let p = |u: f64, v: f64| along * u + n * v;
+        out.extend(clip_segment(poly, p(s, lo), p(s + t, hi)));
+        out.extend(clip_segment(poly, p(s + t, lo), p(s, hi)));
+        s += t;
     }
     out
 }

@@ -142,6 +142,20 @@ pub fn load_default_types(doc: &mut Document) {
         doc,
         Roofs,
         "Basic Roof",
+        "Tiled - Insulated Timber Rafters 300mm",
+        with(Roofs, &[("Thickness", len(300.0))]),
+        vec![
+            l(F::Finish1, "Roof Tile - Clay", 50.0),
+            l(F::Substrate, "Timber - Softwood", 25.0),
+            l(F::Membrane, "Membrane", 5.0),
+            l(F::Structure, "Insulation - Mineral Wool", 205.0),
+            l(F::Finish2, "Gypsum Board", 15.0),
+        ],
+    );
+    layered(
+        doc,
+        Roofs,
+        "Basic Roof",
         "Insulated Metal Sheet 200mm",
         with(Roofs, &[("Thickness", len(200.0))]),
         vec![
@@ -284,6 +298,14 @@ pub fn load_default_types(doc: &mut Document) {
         p.insert("Material".into(), text(material));
         p
     };
+    // Assembled stairs: nosing, closed risers, stringer width and depth.
+    let assembled = |mut p: TypeParams, nosing: f64, risers: bool, sw: f64, sd: f64| {
+        p.insert("Nosing Length".into(), len(nosing));
+        p.insert("Closed Risers".into(), ParamValue::Bool(risers));
+        p.insert("Stringer Width".into(), len(sw));
+        p.insert("Stringer Depth".into(), len(sd));
+        p
+    };
     doc.add_type(
         Stairs,
         "Cast-In-Place Stair",
@@ -294,13 +316,19 @@ pub fn load_default_types(doc: &mut Document) {
         Stairs,
         "Assembled Stair",
         "Timber - 220 max riser 220 tread",
-        stair(220.0, 220.0, 900.0, 32.0, 50.0, false, "Timber - Softwood"),
+        assembled(
+            stair(220.0, 220.0, 900.0, 32.0, 50.0, false, "Timber - Softwood"),
+            25.0,
+            true,
+            40.0,
+            275.0,
+        ),
     );
     doc.add_type(
         Stairs,
         "Assembled Stair",
         "Steel - 190 max riser 250 tread",
-        stair(190.0, 250.0, 1000.0, 40.0, 60.0, false, "Steel"),
+        assembled(stair(190.0, 250.0, 1000.0, 40.0, 60.0, false, "Steel"), 0.0, false, 15.0, 250.0),
     );
     let railing = |height: f64, spacing: f64, baluster: f64, rail: f64, mid: i64| {
         let mut p = with(
@@ -490,7 +518,7 @@ pub fn sample_project() -> Document {
         structural: false,
     }));
 
-    let roof_t = t(&doc, Category::Roofs, "Generic - 400mm");
+    let roof_t = t(&doc, Category::Roofs, "Tiled - Insulated Timber Rafters 300mm");
     let eaves = vec![
         DVec2::new(-750.0, -750.0),
         DVec2::new(12750.0, -750.0),

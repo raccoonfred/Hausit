@@ -722,22 +722,122 @@ pub fn sweep(profile: &[DVec2], a: DVec3, b: DVec3) -> Vec<Face> {
 fn stair_parts(doc: &Document, id: ElementId) -> Option<Vec<Part>> {
     let l = crate::stairs::stair_layout(doc, id)?;
     let rules = crate::stairs::StairRules::of(doc.type_of(id));
-    Some(
-        l.pieces
-            .iter()
-            .map(|p| {
-                let depth = if p.landing {
-                    rules.landing_thickness
-                } else if rules.monolithic {
-                    rules.structural_depth + l.riser
-                } else {
-                    rules.structural_depth
-                };
-                let z0 = (p.z_top - depth.max(1.0)).max(l.z0.min(p.z_top - 1.0));
-                Part::prism(Material::Default, Prism::new(p.outline.clone(), z0, p.z_top))
-            })
-            .collect(),
-    )
+    let mut parts = Vec::new();
+    let dir = |p: &crate::stairs::StairPiece| (p.outline[1] - p.outline[0]).normalize_or_zero();
+    let mut i = 0;
+    while i < l.pieces.len() {
+        let p = &l.pieces[i];
+        if p.landing {
+            let z0 = p.z_top - rules.landing_thickness.max(1.0);
+            parts.push(Part::prism(Material::Default, Prism::new(p.outline.clone(), z0, p.z_top)));
+            i += 1;
+            continue;
+        }
+        // A run: consecutive treads going the same way.
+        let mut j = i + 1;
+        while j < l.pieces.len() && !l.pieces[j].landing && dir(&l.pieces[j]).dot(dir(p)) > 0.999 {
+            j += 1;
+        }
+        run_parts(&l, &rules, &l.pieces[i..j], l.pieces.get(j).is_none(), &mut parts);
+        i = j;
+    }
+    Some(parts)
+}
+
+/// The parts of one straight run. Profiles are drawn in the run's
+/// vertical plane (s along the run from the first nosing, z up) and swept
+/// across its width.
+fn run_parts(
+    l: &crate::stairs::StairLayout,
+    rules: &crate::stairs::StairRules,
+    run: &[crate::stairs::StairPiece],
+    last: bool,
+    parts: &mut Vec<Part>,
+) {
+    let first = &run[0];
+    let tread = first.outline[0].distance(first.outline[1]);
+    if tread < EPS {
+        return;
+    }
+    let r = (first.outline[1] - first.outline[0]) / tread;
+    let w = DVec2::new(r.y, -r.x);
+    let (mut fa, mut fb) = first.front;
+    if (fb - fa).dot(w) < 0.0 {
+        std::mem::swap(&mut fa, &mut fb);
+    }
+    let riser = l.riser;
+    let slope = riser / tread;
+    let z_start = first.z_top - riser;
+    let s_end = tread * run.len() as f64;
+    let z_last = run[run.len() - 1].z_top;
+    let mut add = |profile: Vec<DVec2>, a: DVec2, b: DVec2| {
+        if b.distance(a) > EPS && polygon_area(&profile).abs() > EPS {
+            parts.push(Part {
+                material: Material::Default,
+                shape: Shape::Faces(sweep(&profile, DVec3::new(a.x, a.y, 0.0), DVec3::new(b.x, b.y, 0.0))),
+            });
+        }
+    };
+    let rect = |s0: f64, s1: f64, z0: f64, z1: f64| vec![DVec2::new(s0, z0), DVec2::new(s1, z0), DVec2::new(s1, z1), DVec2::new(s0, z1)];
+    if rules.monolithic {
+        // Stepped top over a waist slab of the structural depth, measured
+        // square to the pitch, bearing on the floor or landing below.
+        let waist = rules.structural_depth.max(1.0) * (1.0 + slope * slope).sqrt();
+        let mut pts = vec![DVec2::new(0.0, z_start)];
+        for (k, p) in run.iter().enumerate() {
+            pts.push(DVec2::new(k as f64 * tread, p.z_top));
+            pts.push(DVec2::new((k + 1) as f64 * tread, p.z_top));
+        }
+        if last {
+            pts.push(DVec2::new(s_end, l.z1));
+        }
+        let soffit_end = z_start + slope * s_end - waist;
+        if soffit_end > z_start + EPS {
+            pts.push(DVec2::new(s_end, soffit_end));
+            pts.push(DVec2::new(waist / slope, z_start));
+        } else {
+            pts.push(DVec2::new(s_end, z_start));
+        }
+        add(pts, fa, fb);
+        return;
+    }
+    // Assembled: stringers on both sides carry the treads (with nosings)
+    // and, when closed, risers.
+    let sw = rules.stringer_width.min((fb - fa).length() / 4.0);
+    let (ta, tb) = (fa + w * sw, fb - w * sw);
+    let tt = rules.structural_depth.clamp(1.0, riser);
+    for (k, p) in run.iter().enumerate() {
+        let s0 = k as f64 * tread;
+        add(rect(s0 - rules.nosing, s0 + tread, p.z_top - tt, p.z_top), ta, tb);
+        if rules.closed_risers {
+            let z0 = p.z_top - riser;
+            add(rect(s0, s0 + rules.riser_thickness, z0, p.z_top - tt), ta, tb);
+        }
+    }
+    if last && rules.closed_risers {
+        add(rect(s_end, s_end + rules.riser_thickness, z_last, l.z1 - tt), ta, tb);
+    }
+    if sw > EPS && rules.stringer_depth > EPS {
+        // Along the nosing line, standing 50 above it, from the floor below
+        // to the floor above (or into the landing).
+        let nose = |s: f64| first.z_top + slope * s;
+        let (s0, s1) = (-tread, if last { s_end } else { s_end - tread * 0.5 });
+        let above = 50.0f64.min(rules.stringer_depth / 2.0);
+        let h = sw / 2.0;
+        let profile = vec![
+            DVec2::new(-h, above - rules.stringer_depth),
+            DVec2::new(h, above - rules.stringer_depth),
+            DVec2::new(h, above),
+            DVec2::new(-h, above),
+        ];
+        for c in [fa + w * h, fb - w * h] {
+            let (a, b) = (c + r * s0, c + r * s1);
+            parts.push(Part {
+                material: Material::Default,
+                shape: Shape::Faces(sweep(&profile, DVec3::new(a.x, a.y, nose(s0)), DVec3::new(b.x, b.y, nose(s1)))),
+            });
+        }
+    }
 }
 
 fn railing_parts(doc: &Document, id: ElementId, r: &Railing) -> Vec<Part> {
@@ -1199,11 +1299,17 @@ mod tests {
         let doc = crate::template::industrial_sample();
         let stair = doc.elements_of(Category::Stairs).next().unwrap().id;
         let g = element_geometry(&doc, stair).unwrap();
-        // 3000 mm at 190 max: 16 risers, so 15 treads, the last one at
-        // the mezzanine less one riser.
-        assert_eq!(g.parts.len(), 15);
-        let tops: Vec<f64> = g.parts.iter().map(|p| p.vertical_extent().unwrap().2).collect();
+        // 3000 mm at 190 max: 16 risers, so 15 treads (open risers) and
+        // two stringers; the last tread is at the mezzanine less one riser.
+        assert_eq!(g.parts.len(), 17);
+        let tops: Vec<f64> = g
+            .parts
+            .iter()
+            .map(|p| p.faces().iter().flat_map(|f| f.pts.iter().map(|q| q.z)).fold(f64::MIN, f64::max))
+            .collect();
         assert!((tops[14] - 3000.0 * 15.0 / 16.0).abs() < 1e-6, "{tops:?}");
+        // The stringers reach the mezzanine, 50 above the nosing line.
+        assert!((tops[15] - 3050.0).abs() < 30.0, "{tops:?}");
         // Its railings rise with it: the top rail is 1100 above the pitch
         // line at both ends.
         let rail = doc

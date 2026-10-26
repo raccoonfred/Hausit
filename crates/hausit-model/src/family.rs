@@ -138,6 +138,11 @@ pub fn default_type_params(category: Category) -> TypeParams {
             p.insert("Structural Depth".into(), len(150.0));
             p.insert("Landing Thickness".into(), len(200.0));
             p.insert("Monolithic".into(), ParamValue::Bool(true));
+            p.insert("Nosing Length".into(), len(25.0));
+            p.insert("Closed Risers".into(), ParamValue::Bool(false));
+            p.insert("Riser Thickness".into(), len(20.0));
+            p.insert("Stringer Width".into(), len(50.0));
+            p.insert("Stringer Depth".into(), len(250.0));
             p.insert("Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
         }
         Category::Railings => {

@@ -15,14 +15,16 @@ pub enum FillPattern {
     Crosshatch,
     /// Scattered dots and small triangles.
     Concrete,
-    /// Zigzag batt symbol, along the layer.
+    /// Batt insulation: a looped curve filling the layer.
     Insulation,
     /// Lines along the layer.
     Parallel,
+    /// Rigid board insulation: crossed diagonals between the faces.
+    RigidInsulation,
 }
 
 impl FillPattern {
-    pub const ALL: [FillPattern; 7] = [
+    pub const ALL: [FillPattern; 8] = [
         FillPattern::None,
         FillPattern::Solid,
         FillPattern::Diagonal,
@@ -30,6 +32,7 @@ impl FillPattern {
         FillPattern::Concrete,
         FillPattern::Insulation,
         FillPattern::Parallel,
+        FillPattern::RigidInsulation,
     ];
 
     pub fn label(self) -> &'static str {
@@ -39,8 +42,9 @@ impl FillPattern {
             FillPattern::Diagonal => "Diagonal",
             FillPattern::Crosshatch => "Crosshatch",
             FillPattern::Concrete => "Concrete",
-            FillPattern::Insulation => "Insulation",
+            FillPattern::Insulation => "Insulation - Batt",
             FillPattern::Parallel => "Parallel lines",
+            FillPattern::RigidInsulation => "Insulation - Rigid",
         }
     }
 }
@@ -77,7 +81,7 @@ pub fn default_materials() -> Vec<MaterialDef> {
         m("Masonry - Brick", [176, 98, 70], Diagonal),
         m("Masonry - Concrete Block", [198, 196, 190], Crosshatch),
         m("Insulation - Mineral Wool", [238, 222, 140], Insulation),
-        m("Insulation - Rigid Board", [235, 235, 200], Insulation),
+        m("Insulation - Rigid Board", [235, 235, 200], RigidInsulation),
         m("Air Gap", [245, 245, 245], None),
         m("Plaster", [240, 238, 232], None),
         m("Render", [232, 228, 218], None),
@@ -88,6 +92,7 @@ pub fn default_materials() -> Vec<MaterialDef> {
         m("Metal Panel - Steel", [170, 178, 186], Solid),
         m("Timber - Softwood", [214, 178, 128], Parallel),
         m("Membrane", [60, 60, 60], Solid),
+        m("Roof Tile - Clay", [168, 84, 58], Diagonal),
     ]
 }
 
