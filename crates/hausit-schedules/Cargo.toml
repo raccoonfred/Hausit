@@ -1,0 +1,11 @@
+[package]
+name = "hausit-schedules"
+description = "Schedules / quantities: tabular views over model elements"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+hausit-core.workspace = true
+hausit-model.workspace = true
+serde.workspace = true

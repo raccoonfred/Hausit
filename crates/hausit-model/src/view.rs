@@ -1,0 +1,172 @@
+//! View definitions. Views are elements of the document, as in Revit; the
+//! graphics they show are produced by the `hausit-views` crate.
+
+use crate::schedule::ScheduleDef;
+use hausit_core::{DVec2, DVec3, ElementId};
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CardinalDirection {
+    North,
+    South,
+    East,
+    West,
+}
+
+impl CardinalDirection {
+    pub const ALL: [CardinalDirection; 4] = [Self::North, Self::South, Self::East, Self::West];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::North => "North",
+            Self::South => "South",
+            Self::East => "East",
+            Self::West => "West",
+        }
+    }
+
+    /// Unit vector pointing from the model towards this side (+Y is north).
+    pub fn outward(self) -> DVec2 {
+        match self {
+            Self::North => DVec2::Y,
+            Self::South => -DVec2::Y,
+            Self::East => DVec2::X,
+            Self::West => -DVec2::X,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DetailLevel {
+    Coarse,
+    #[default]
+    Medium,
+    Fine,
+}
+
+impl DetailLevel {
+    pub const ALL: [DetailLevel; 3] = [Self::Coarse, Self::Medium, Self::Fine];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Coarse => "Coarse",
+            Self::Medium => "Medium",
+            Self::Fine => "Fine",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VisualStyle {
+    Wireframe,
+    #[default]
+    HiddenLine,
+    Shaded,
+    ConsistentColors,
+}
+
+impl VisualStyle {
+    pub const ALL: [VisualStyle; 4] = [Self::Wireframe, Self::HiddenLine, Self::Shaded, Self::ConsistentColors];
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Wireframe => "Wireframe",
+            Self::HiddenLine => "Hidden Line",
+            Self::Shaded => "Shaded",
+            Self::ConsistentColors => "Consistent Colors",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ViewKind {
+    FloorPlan {
+        level: ElementId,
+    },
+    ThreeD,
+    Elevation {
+        direction: CardinalDirection,
+    },
+    /// Section line drawn in plan; the view looks to the right of start→end.
+    Section {
+        start: DVec2,
+        end: DVec2,
+        far_clip: f64,
+    },
+    Schedule(ScheduleDef),
+}
+
+impl ViewKind {
+    /// Heading used in the Project Browser.
+    pub fn browser_group(&self) -> &'static str {
+        match self {
+            ViewKind::FloorPlan { .. } => "Floor Plans",
+            ViewKind::ThreeD => "3D Views",
+            ViewKind::Elevation { .. } => "Elevations (Building Elevation)",
+            ViewKind::Section { .. } => "Sections (Building Section)",
+            ViewKind::Schedule(_) => "Schedules/Quantities",
+        }
+    }
+
+    pub fn is_graphical(&self) -> bool {
+        !matches!(self, ViewKind::Schedule(_))
+    }
+}
+
+/// Orbit camera of a 3D view (orthographic, like Revit's default {3D}).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct OrbitCamera {
+    /// Rotation about Z, degrees. 0 looks towards +Y (north).
+    pub yaw: f64,
+    /// Elevation angle above the horizon, degrees.
+    pub pitch: f64,
+}
+
+impl Default for OrbitCamera {
+    fn default() -> Self {
+        // Revit's default 3D view looks from the south-east, from above.
+        OrbitCamera { yaw: -45.0, pitch: 30.0 }
+    }
+}
+
+impl OrbitCamera {
+    /// (right, up, forward) unit vectors. `forward` points into the screen.
+    pub fn basis(&self) -> (DVec3, DVec3, DVec3) {
+        let (y, p) = (self.yaw.to_radians(), self.pitch.to_radians());
+        let forward = DVec3::new(y.sin() * p.cos(), y.cos() * p.cos(), -p.sin());
+        let right = DVec3::new(y.cos(), -y.sin(), 0.0);
+        let up = right.cross(forward);
+        (right, up, forward)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct View {
+    pub id: ElementId,
+    pub name: String,
+    pub kind: ViewKind,
+    /// Scale denominator: 100 means 1 : 100.
+    pub scale: u32,
+    pub detail_level: DetailLevel,
+    pub visual_style: VisualStyle,
+    /// Plan cut plane height above the level (View Range ▸ Cut Plane).
+    pub cut_height: f64,
+    pub camera: OrbitCamera,
+}
+
+impl View {
+    pub fn new(id: ElementId, name: &str, kind: ViewKind) -> Self {
+        let visual_style = match kind {
+            ViewKind::ThreeD => VisualStyle::Shaded,
+            _ => VisualStyle::HiddenLine,
+        };
+        View {
+            id,
+            name: name.to_string(),
+            kind,
+            scale: 100,
+            detail_level: DetailLevel::Medium,
+            visual_style,
+            cut_height: 1200.0,
+            camera: OrbitCamera::default(),
+        }
+    }
+}
