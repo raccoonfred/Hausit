@@ -34,6 +34,6 @@ pub use family::{FamilyType, TypeParams};
 pub use history::History;
 pub use params::{ParamGroup, ParamKind, ParamValue, Parameter};
 pub use schedule::{ScheduleDef, ScheduleField};
-pub use view::{CardinalDirection, DetailLevel, View, ViewKind, VisualStyle};
+pub use view::{CardinalDirection, DetailLevel, SectionBox, View, ViewKind, VisualStyle};
 
 pub use hausit_core::{DVec2, DVec3, ElementId};

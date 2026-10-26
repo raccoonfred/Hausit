@@ -166,7 +166,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         if let Some(p) = snapped {
             if app.tool == Tool::Modify {
                 select_click(app, app.hover, ctrl, shift);
-            } else if app.tool.is_sketch() || is_plan || matches!(app.tool, Tool::Level | Tool::Attach { .. }) {
+            } else if app.tool.is_sketch() || is_plan || matches!(app.tool, Tool::Level | Tool::Attach { .. } | Tool::Callout { .. }) {
                 tools::click(app, p);
             }
         }
@@ -188,6 +188,9 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     // crossing selection.
     if is_plan {
         direct_drag(app, ui, &response, &painter, &dl, &xf);
+    }
+    if is_3d {
+        section_box_grips(app, ui, &response, &painter, &xf, view_id);
     }
     box_select(app, ui, &response, &painter, &dl, &xf);
 
@@ -234,7 +237,12 @@ fn view_tabs(app: &mut HausitApp, ui: &mut Ui) {
                             .inner_margin(egui::Margin::symmetric(8, 3));
                         frame.show(ui, |ui| {
                             ui.horizontal(|ui| {
-                                let r = ui.add(egui::Label::new(&v.name).sense(Sense::click()));
+                                // Plans and ceiling plans share their level's name.
+                                let label = match v.kind {
+                                    ViewKind::CeilingPlan { .. } => format!("{} (Ceiling)", v.name),
+                                    _ => v.name.clone(),
+                                };
+                                let r = ui.add(egui::Label::new(label).sense(Sense::click()));
                                 if r.clicked() {
                                     activate = Some(id);
                                 }
@@ -512,10 +520,10 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
         return;
     }
     let id = egui::Id::unique("box_select_start");
-    if ui
-        .ctx()
-        .data(|d| d.get_temp::<DirectDrag>(egui::Id::unique("direct_drag")).is_some())
-    {
+    if ui.ctx().data(|d| {
+        d.get_temp::<DirectDrag>(egui::Id::unique("direct_drag")).is_some()
+            || d.get_temp::<(usize, f32)>(egui::Id::unique("box_grip")).is_some()
+    }) {
         return;
     }
     if response.drag_started_by(egui::PointerButton::Primary) {
@@ -572,6 +580,103 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
             }
         }
         app.status = format!("{} selected", app.selection.len());
+    }
+}
+
+/// The section box of a 3D view: its edges, and an arrow on each face that
+/// drags that face in or out, as in Revit.
+fn section_box_grips(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: &egui::Painter, xf: &Xform, view_id: ElementId) {
+    let Some(view) = app.doc.view(view_id) else { return };
+    let Some(b) = view.section_box else { return };
+    let Some(frame) = hausit_views::ViewFrame::for_view(&app.doc, view) else {
+        return;
+    };
+    let scr = |p: glam::DVec3| xf.to_screen(frame.to_view(p).0);
+    let blue = Color32::from_rgb(40, 110, 230);
+    let corner = |i: usize| {
+        let pick = |bit: usize, lo: f64, hi: f64| if i & bit == 0 { lo } else { hi };
+        b.to_model(glam::DVec3::new(
+            pick(1, b.min.x, b.max.x),
+            pick(2, b.min.y, b.max.y),
+            pick(4, b.min.z, b.max.z),
+        ))
+    };
+    for i in 0..8 {
+        for bit in [1, 2, 4] {
+            if i & bit == 0 {
+                painter.line_segment([scr(corner(i)), scr(corner(i | bit))], Stroke::new(1.0, blue));
+            }
+        }
+    }
+    // Face centres and outward directions, in the box's local axes.
+    let mid = (b.min + b.max) * 0.5;
+    let faces: Vec<(glam::DVec3, glam::DVec3)> = (0..6)
+        .map(|k| {
+            let axis = k / 2;
+            let mut c = mid;
+            let mut n = glam::DVec3::ZERO;
+            c[axis] = if k % 2 == 0 { b.min[axis] } else { b.max[axis] };
+            n[axis] = if k % 2 == 0 { -1.0 } else { 1.0 };
+            (c, n)
+        })
+        .collect();
+    let mut grips = Vec::new();
+    for (k, (c, n)) in faces.iter().enumerate() {
+        let p = scr(b.to_model(*c));
+        let q = scr(b.to_model(*c + *n * 1000.0));
+        let d = q - p;
+        if d.length() < 4.0 {
+            continue; // faces the camera: no arrow to drag
+        }
+        let u = d.normalized();
+        let side = vec2(-u.y, u.x);
+        painter.add(Shape::convex_polygon(
+            vec![p + u * 14.0, p + side * 6.0, p - side * 6.0],
+            blue,
+            Stroke::new(1.0, Color32::WHITE),
+        ));
+        grips.push((k, p, u, d.length() / 1000.0));
+    }
+    let id = egui::Id::unique("box_grip");
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        if let Some(sp) = ui.input(|i| i.pointer.press_origin()) {
+            if let Some(g) = grips.iter().find(|g| (g.1 + g.2 * 6.0).distance(sp) < 12.0) {
+                ui.ctx().data_mut(|d| d.insert_temp(id, (g.0, 0.0f32)));
+            }
+        }
+    }
+    let Some((k, _)) = ui.ctx().data(|d| d.get_temp::<(usize, f32)>(id)) else {
+        return;
+    };
+    let Some(&(_, p, u, px_per_mm)) = grips.iter().find(|g| g.0 == k) else {
+        ui.ctx().data_mut(|d| d.remove::<(usize, f32)>(id));
+        return;
+    };
+    let (Some(start), Some(cur)) = (ui.input(|i| i.pointer.press_origin()), ui.input(|i| i.pointer.latest_pos())) else {
+        return;
+    };
+    let mm = ((cur - start).dot(u) / px_per_mm) as f64;
+    painter.line_segment([p, p + u * (cur - start).dot(u)], Stroke::new(2.0, PREVIEW));
+    label_at(
+        painter,
+        p + u * (cur - start).dot(u) + vec2(0.0, -14.0),
+        &hausit_core::format_length(mm, app.doc.length_unit),
+    );
+    if response.drag_stopped() {
+        ui.ctx().data_mut(|d| d.remove::<(usize, f32)>(id));
+        let mut nb = b;
+        let axis = k / 2;
+        if k % 2 == 0 {
+            nb.min[axis] = (b.min[axis] - mm).min(b.max[axis] - 100.0);
+        } else {
+            nb.max[axis] = (b.max[axis] + mm).max(b.min[axis] + 100.0);
+        }
+        app.transact("Resize Section Box", |doc| {
+            if let Some(v) = doc.view_mut(view_id) {
+                v.section_box = Some(nb);
+            }
+            Ok(())
+        });
     }
 }
 
@@ -852,6 +957,10 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                 ));
                 seg(*a, p);
             }
+        }
+        Tool::Callout { start: Some(a) } => {
+            let r = Rect::from_two_pos(xf.to_screen(*a), xf.to_screen(p));
+            painter.rect_stroke(r, 6.0, Stroke::new(1.5, PREVIEW), egui::StrokeKind::Middle);
         }
         Tool::Grid { start: Some(a) }
         | Tool::Section { start: Some(a) }
@@ -1167,7 +1276,30 @@ fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: Eleme
                             *target = v;
                         }
                     }
+                    if let ViewKind::Section { .. } = view.kind {
+                        if ui
+                            .button("🧊 3D Section")
+                            .on_hover_text("Open this section as a 3D view, cut by a section box on the section line")
+                            .clicked()
+                        {
+                            app.section_in_3d(view_id);
+                        }
+                    }
                     if matches!(view.kind, ViewKind::ThreeD) {
+                        let mut on = view.section_box.is_some();
+                        if ui
+                            .checkbox(&mut on, "Section Box")
+                            .on_hover_text("Cut the model to a box; drag the box's arrows to resize it")
+                            .changed()
+                        {
+                            let b = if on { crate::app::default_section_box(&app.doc) } else { None };
+                            app.transact("Section Box", |doc| {
+                                if let Some(t) = doc.view_mut(view_id) {
+                                    t.section_box = b;
+                                }
+                                Ok(())
+                            });
+                        }
                         ui.label(
                             egui::RichText::new("Orbit: right-drag or Shift+middle-drag · Pan: middle-drag · Zoom: wheel")
                                 .color(Color32::GRAY)

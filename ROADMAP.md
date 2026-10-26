@@ -59,7 +59,7 @@ needed for full parity, **P3** is long-tail.
 | Roofs by footprint | Have | — | |
 | Roof by extrusion, soffits, fascia, gutters, dormers, join/unjoin roof | Missing | P1 | |
 | Ceilings (automatic and sketch, ceiling grids, reflected ceiling plans) | Partial | P0 | Automatic ceilings, layered types with a square grid, ceiling plans for every level; sketched ceilings still to do |
-| Stairs by component and by sketch, landings, supports | Partial | P0 | Runs with landings at turns, risers from the level heights, plan cut line and UP arrow; sketch-based stairs, winders and supports still to do |
+| Stairs by component and by sketch, landings, supports | Partial | P0 | Runs with landings at turns, risers from the level heights, plan cut line and UP arrow; concrete stairs with a waist slab, assembled stairs with stringers, nosings and optional closed risers; sketch-based stairs and winders still to do |
 | Railings (path, host to stairs, balusters, top rails) | Partial | P0 | Sketched or hosted on stairs (created with them), balusters, top and intermediate rails |
 | Ramps | Missing | P1 | |
 | Shafts, vertical and face openings, dormer openings | Missing | P1 | |
@@ -128,12 +128,12 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Text, leaders, keynotes, symbols | Missing | P0 | |
 | Tag all, multi-category, material tags | Partial | P1 | |
 | Detail lines, filled regions, masking regions, detail components, insulation, repeating details | Missing | P0 | |
-| Callouts, drafting views, legends | Missing | P0 | |
+| Callouts, drafting views, legends | Partial | P0 | Callouts of plans, sections and elevations (cropped, 1:20, Fine) with a boundary and bubble in the parent view; drafting views and legends still to do |
 | Revision clouds and revision tracking | Missing | P1 | |
 | Object styles, line styles, line weights by scale, line patterns, fill patterns | Missing | P0 | Drawing quality depends on this |
 | View templates, visibility/graphics overrides, filters | Missing | P0 | |
 | View range, underlay, crop regions, scope boxes, detail levels | Partial | P0 | |
-| Materials with graphics, appearance, cut/surface patterns | Partial | P0 | Material Browser with colour and cut patterns; surface patterns and appearance still to do |
+| Materials with graphics, appearance, cut/surface patterns | Partial | P0 | Material Browser with colour, cut patterns (incl. batt and rigid insulation) and surface patterns (brick, block, tiles, cladding ribs) shown in 3D and elevations; appearance/textures still to do |
 | Schedules (quantities, material takeoff, sheet list, view list, note blocks, key schedules, calculated values, conditional formatting) | Partial | P1 | |
 
 ### 2.6 Sheets and printing
@@ -206,7 +206,7 @@ in-house tools) is a large part of why practices stay on Revit.
 | Realistic style, materials with textures | Missing | P1 | |
 | Perspective cameras, walkthroughs | Missing | P1 | |
 | Shadows, sun path, ambient occlusion, sketchy lines | Missing | P2 | |
-| Section box in 3D | Missing | P0 | Users rely on it constantly |
+| Section box in 3D | Done | P0 | Drag arrows on each face, cut faces filled; 3D Section from a section view and Selection Box (BX) |
 | Photorealistic rendering | Missing | P3 | Better as an export to an existing open renderer (Blender Cycles via glTF/USD) |
 
 ### 2.13 Performance and scale

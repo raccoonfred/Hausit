@@ -32,6 +32,11 @@ pub enum Tool {
     Section {
         start: Option<DVec2>,
     },
+    /// Callout: a rectangle in a plan or section that becomes an enlarged
+    /// detail view.
+    Callout {
+        start: Option<DVec2>,
+    },
     Move {
         base: Option<DVec2>,
     },
@@ -111,6 +116,7 @@ impl Tool {
             Tool::Level => "Modify | Place Level",
             Tool::Grid { .. } => "Modify | Place Grid",
             Tool::Section { .. } => "Modify | Section",
+            Tool::Callout { .. } => "Modify | Callout",
             Tool::Move { .. } => "Modify | Move",
             Tool::Copy { .. } => "Modify | Copy",
             Tool::Column => "Modify | Place Structural Column",
@@ -149,6 +155,8 @@ impl Tool {
             Tool::Grid { .. } => "Click to enter grid end point.",
             Tool::Section { start: None } => "Click to enter section start point.",
             Tool::Section { .. } => "Click to enter section end point.",
+            Tool::Callout { start: None } => "Click the first corner of the callout. It becomes a detail view at 1:20, Fine detail.",
+            Tool::Callout { .. } => "Click the opposite corner of the callout.",
             Tool::Move { base: None } | Tool::Copy { base: None } => "Click to enter move start point.",
             Tool::Move { .. } | Tool::Copy { .. } => "Click to enter move end point.",
             Tool::Column => "Click to place a structural column. Space rotates it 90°. At Grids places one at every grid intersection.",
@@ -215,6 +223,7 @@ impl Tool {
             Tool::Wall { start, .. }
             | Tool::Grid { start }
             | Tool::Section { start }
+            | Tool::Callout { start }
             | Tool::RoomSeparation { start }
             | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start,
@@ -250,6 +259,7 @@ impl Tool {
             Tool::Wall { start, .. }
             | Tool::Grid { start }
             | Tool::Section { start }
+            | Tool::Callout { start }
             | Tool::RoomSeparation { start }
             | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start = None,
@@ -458,6 +468,16 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
         tool,
         Tool::Move { .. } | Tool::Copy { .. } | Tool::Rotate { .. } | Tool::Mirror { .. } | Tool::Attach { .. }
     );
+    if matches!(tool, Tool::Callout { .. }) {
+        let ok = app
+            .active_view
+            .and_then(|v| app.doc.view(v))
+            .is_some_and(|v| v.kind.is_graphical() && !matches!(v.kind, ViewKind::ThreeD));
+        if !ok {
+            app.status = "Callouts are drawn in a plan, section or elevation.".into();
+            return;
+        }
+    }
     if needs_plan && app.active_level().is_none() {
         app.status = "This tool works in a floor plan. Open a floor plan from the Project Browser.".into();
         return;
@@ -966,6 +986,21 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 app.transact("Create Section", |doc| Ok(doc.add_view(&name, kind)));
                 app.status = format!("Created {name}. Double-click its head, or open it from the Project Browser.");
                 *start = None;
+            }
+            _ => {}
+        },
+        Tool::Callout { start } => match *start {
+            None => *start = Some(p),
+            Some(a) if (p - a).abs().min_element() > 10.0 => {
+                let Some(parent) = app.active_view else { return };
+                let id = app.transact("Create Callout", |doc| Ok(doc.add_callout(parent, a, p)));
+                *start = None;
+                if let Some(Some(id)) = id {
+                    app.status = format!(
+                        "Created {}. Double-click its bubble to open it.",
+                        app.doc.view(id).map(|v| v.name.clone()).unwrap_or_default()
+                    );
+                }
             }
             _ => {}
         },
@@ -1963,6 +1998,10 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "DE" => {
             app.delete_selection();
+            true
+        }
+        "BX" => {
+            app.selection_box();
             true
         }
         "RM" => {

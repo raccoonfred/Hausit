@@ -151,6 +151,49 @@ impl OrbitCamera {
     }
 }
 
+/// A 3D view's section box: the model is cut away outside it. The box is
+/// axis-aligned in a frame turned `angle` radians about Z, so it can line
+/// up with a section; `min`/`max` are in that frame.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SectionBox {
+    pub min: DVec3,
+    pub max: DVec3,
+    pub angle: f64,
+}
+
+impl SectionBox {
+    /// The box's x and y axes in model coordinates.
+    pub fn axes(&self) -> (DVec2, DVec2) {
+        let x = DVec2::from_angle(self.angle);
+        (x, DVec2::new(-x.y, x.x))
+    }
+
+    pub fn to_local(&self, p: DVec3) -> DVec3 {
+        let (x, y) = self.axes();
+        let q = DVec2::new(p.x, p.y);
+        DVec3::new(q.dot(x), q.dot(y), p.z)
+    }
+
+    pub fn to_model(&self, p: DVec3) -> DVec3 {
+        let (x, y) = self.axes();
+        let q = x * p.x + y * p.y;
+        DVec3::new(q.x, q.y, p.z)
+    }
+
+    /// The six faces as (point, outward normal) in model coordinates.
+    pub fn planes(&self) -> [(DVec3, DVec3); 6] {
+        let (x, y) = self.axes();
+        let (x, y) = (DVec3::new(x.x, x.y, 0.0), DVec3::new(y.x, y.y, 0.0));
+        let (lo, hi) = (self.to_model(self.min), self.to_model(self.max));
+        [(lo, -x), (hi, x), (lo, -y), (hi, y), (lo, -DVec3::Z), (hi, DVec3::Z)]
+    }
+
+    /// A box around model-coordinate bounds, in the model's own axes.
+    pub fn around(min: DVec3, max: DVec3) -> SectionBox {
+        SectionBox { min, max, angle: 0.0 }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct View {
     pub id: ElementId,
@@ -163,6 +206,16 @@ pub struct View {
     /// Plan cut plane height above the level (View Range ▸ Cut Plane).
     pub cut_height: f64,
     pub camera: OrbitCamera,
+    /// 3D views only: cut the model to this box.
+    #[serde(default)]
+    pub section_box: Option<SectionBox>,
+    /// Crop region in view coordinates (min, max): only what is inside
+    /// is shown. Callouts are cropped views.
+    #[serde(default)]
+    pub crop: Option<(DVec2, DVec2)>,
+    /// For a callout: the view it was drawn in, which shows its boundary.
+    #[serde(default)]
+    pub callout_of: Option<ElementId>,
 }
 
 impl View {
@@ -186,6 +239,9 @@ impl View {
             visual_style,
             cut_height,
             camera: OrbitCamera::default(),
+            section_box: None,
+            crop: None,
+            callout_of: None,
         }
     }
 }

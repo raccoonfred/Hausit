@@ -13,6 +13,7 @@ pub enum Icon {
     Level,
     Grid,
     Section,
+    Callout,
     ThreeD,
     Elevation,
     Schedule,
@@ -185,6 +186,16 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             poly(&[(4.0, 16.0), (10.0, 16.0), (7.0, 25.0)], INK, Stroke::NONE);
             poly(&[(22.0, 16.0), (28.0, 16.0), (25.0, 25.0)], INK, Stroke::NONE);
             p.circle(at(7.0, 10.0), 4.0 * s, k(Color32::WHITE), ink);
+        }
+        Icon::Callout => {
+            p.rect_stroke(
+                egui::Rect::from_min_max(at(4.0, 12.0), at(20.0, 28.0)),
+                3.0 * s,
+                line(1.6, INK),
+                egui::StrokeKind::Middle,
+            );
+            p.line_segment([at(20.0, 14.0), at(24.0, 10.0)], line(1.0, INK));
+            p.circle(at(26.0, 8.0), 4.0 * s, k(Color32::WHITE), ink);
         }
         Icon::ThreeD | Icon::Elevation => {
             poly(

@@ -315,6 +315,13 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
         return Err(ModelError::ReadOnly(name.to_string()));
     }
     let bad = || ModelError::InvalidValue(name.to_string());
+    // Renaming a level renames its plans that still carry its name, as
+    // Revit offers to.
+    if let (Some(ElementData::Level(l)), "Name", V::Text(new)) = (doc.element(id).map(|e| &e.data), name, &value) {
+        if !new.trim().is_empty() {
+            doc.rename_level_views(id, &l.name.clone(), new);
+        }
+    }
     let el = doc.element_mut(id).ok_or(ModelError::NotFound(id))?;
     match (name, &value) {
         ("Comments", V::Text(s)) => el.comments = s.clone(),

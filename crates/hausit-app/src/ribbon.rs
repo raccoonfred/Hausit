@@ -469,6 +469,14 @@ fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
             "Section: draw a section line in a plan",
             Tool::Section { start: None },
         );
+        tool_button(
+            app,
+            ui,
+            Icon::Callout,
+            "Callout",
+            "Callout: draw a rectangle in a plan or section to make an enlarged detail view (1:20, Fine)",
+            Tool::Callout { start: None },
+        );
         if big(
             ui,
             Icon::Schedule,
@@ -597,6 +605,18 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         tool_button(app, ui, Icon::Split, "Split", "Split Element (SL)", Tool::Split);
         if big(ui, Icon::Delete, "Delete", "Delete (DE)", false, !app.selection.is_empty()) {
             app.delete_selection();
+        }
+    });
+    panel(ui, "View", |ui| {
+        if big(
+            ui,
+            Icon::ThreeD,
+            "Selection Box",
+            "Selection Box (BX): open a 3D view cut to the selected elements",
+            false,
+            app.selection.iter().any(|id| app.doc.element(*id).is_some()),
+        ) {
+            app.selection_box();
         }
     });
     wall_panel(app, ui);

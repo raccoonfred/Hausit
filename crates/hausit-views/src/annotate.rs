@@ -48,7 +48,8 @@ pub fn grid_bubble(dl: &mut DisplayList, a: DVec2, b: DVec2, name: &str, scale: 
 /// target view's id, so double-clicking them can open the view.
 pub fn view_marks(doc: &Document, plan: &View, dl: &mut DisplayList) {
     let scale = plan.scale as f64;
-    for v in doc.views() {
+    // Callouts are shown in their parent view, not as marks of their own.
+    for v in doc.views().filter(|v| v.callout_of.is_none()) {
         match &v.kind {
             ViewKind::Section { start, end, .. } => {
                 let s = Stroke::new(2.0, [0, 0, 0, 255]).dashed(Dash::Dashed);
@@ -198,5 +199,60 @@ pub fn levels_and_grids(doc: &Document, view: &View, frame: &ViewFrame, dl: &mut
             }
         }
         grid_bubble(dl, DVec2::new(uv.x, zmin), DVec2::new(uv.x, zmax), &g.name, scale, e.id);
+    }
+}
+
+/// Callout boundaries drawn in the view they were made from: the crop
+/// rectangle, and a leader to a bubble with the callout's number. Tagged
+/// with the callout view, so double-clicking opens it.
+pub fn callout_marks(doc: &Document, view: &View, dl: &mut DisplayList) {
+    let scale = view.scale as f64;
+    for c in doc.views().filter(|c| c.callout_of == Some(view.id)) {
+        let Some((lo, hi)) = c.crop else { continue };
+        let id = Some(c.id);
+        let s = Stroke::new(1.6, [0, 0, 0, 255]);
+        let r = BUBBLE_R * scale;
+        // Rounded corners, as callouts are drawn.
+        let k = (r * 0.8).min((hi - lo).min_element() / 4.0);
+        let mut pts = Vec::new();
+        for (corner, a0) in [
+            (DVec2::new(hi.x - k, lo.y + k), -std::f64::consts::FRAC_PI_2),
+            (DVec2::new(hi.x - k, hi.y - k), 0.0),
+            (DVec2::new(lo.x + k, hi.y - k), std::f64::consts::FRAC_PI_2),
+            (DVec2::new(lo.x + k, lo.y + k), std::f64::consts::PI),
+        ] {
+            for i in 0..=4 {
+                pts.push(corner + DVec2::from_angle(a0 + i as f64 / 4.0 * std::f64::consts::FRAC_PI_2) * k);
+            }
+        }
+        dl.push(Prim::Polyline { pts, closed: true }, Some(s), None, id);
+        let from = DVec2::new(hi.x, hi.y - k);
+        let bubble = from + DVec2::new(r * 2.5, r * 2.5);
+        dl.line(from, bubble - DVec2::new(r, 0.0), THIN, id);
+        dl.push(
+            Prim::Circle { center: bubble, radius: r },
+            Some(THIN),
+            Some([255, 255, 255, 255]),
+            id,
+        );
+        // Numbered in the order they were drawn in this view.
+        let number = doc
+            .views()
+            .filter(|v| v.callout_of == Some(view.id))
+            .position(|v| v.id == c.id)
+            .map(|i| (i + 1).to_string())
+            .unwrap_or_default();
+        dl.push(
+            Prim::Text {
+                pos: bubble,
+                text: if number.is_empty() { "C".into() } else { number },
+                height: TEXT_H * scale * 0.8,
+                anchor: Anchor::Center,
+                angle: 0.0,
+            },
+            None,
+            None,
+            id,
+        );
     }
 }

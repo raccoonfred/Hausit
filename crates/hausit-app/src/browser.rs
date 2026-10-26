@@ -25,18 +25,34 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     "3D Views",
                     "Elevations (Building Elevation)",
                     "Sections (Building Section)",
+                    "Detail Views (Callouts)",
                 ] {
-                    let views: Vec<(ElementId, String)> = app
+                    let mut views: Vec<(ElementId, String, f64)> = app
                         .doc
                         .views()
-                        .filter(|v| v.kind.browser_group() == group)
-                        .map(|v| (v.id, v.name.clone()))
+                        .filter(|v| {
+                            let g = if v.callout_of.is_some() {
+                                "Detail Views (Callouts)"
+                            } else {
+                                v.kind.browser_group()
+                            };
+                            g == group
+                        })
+                        .map(|v| {
+                            (
+                                v.id,
+                                v.name.clone(),
+                                v.kind.plan_level().map(|l| app.doc.level_elevation(l)).unwrap_or(0.0),
+                            )
+                        })
                         .collect();
+                    // Plans go up the building, lowest level first.
+                    views.sort_by(|a, b| a.2.total_cmp(&b.2));
                     if views.is_empty() {
                         continue;
                     }
                     CollapsingHeader::new(group).default_open(true).show(ui, |ui| {
-                        for (id, name) in views {
+                        for (id, name, _) in views {
                             view_item(app, ui, id, &name);
                         }
                     });

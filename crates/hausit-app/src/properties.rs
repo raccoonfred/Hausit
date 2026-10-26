@@ -329,6 +329,34 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                 }
             });
         });
+    if matches!(v.kind, ViewKind::ThreeD) {
+        egui::CollapsingHeader::new(RichText::new("Extents").strong())
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("view_extents").num_columns(2).show(ui, |ui| {
+                    ui.label("Section Box");
+                    let mut on = v.section_box.is_some();
+                    if ui.checkbox(&mut on, "").changed() {
+                        v.section_box = if on { crate::app::default_section_box(&app.doc) } else { None };
+                    }
+                    ui.end_row();
+                    if let Some(b) = &mut v.section_box {
+                        for (label, value) in [
+                            ("Box Left", &mut b.min.x),
+                            ("Box Right", &mut b.max.x),
+                            ("Box Front", &mut b.min.y),
+                            ("Box Back", &mut b.max.y),
+                            ("Box Bottom", &mut b.min.z),
+                            ("Box Top", &mut b.max.z),
+                        ] {
+                            ui.label(label);
+                            length_edit(ui, &format!("vp_{label}"), value, unit);
+                            ui.end_row();
+                        }
+                    }
+                });
+            });
+    }
     egui::CollapsingHeader::new(RichText::new("Identity Data").strong())
         .default_open(true)
         .show(ui, |ui| {

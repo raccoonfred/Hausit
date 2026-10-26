@@ -468,3 +468,93 @@ impl HausitApp {
         });
     }
 }
+
+// ----- section boxes ------------------------------------------------------------
+
+/// A section box around the whole model, with a little room to spare.
+pub fn default_section_box(doc: &Document) -> Option<hausit_model::SectionBox> {
+    let b = hausit_model::geometry::model_bounds(doc)?;
+    let m = glam::DVec3::splat(500.0);
+    Some(hausit_model::SectionBox::around(b.min - m, b.max + m))
+}
+
+impl HausitApp {
+    /// Opens a 3D view cut to `section_box`, looking from `yaw` (Revit's
+    /// "Selection Box" and "Orient to View"). Reuses the 3D view made
+    /// for the same purpose.
+    pub fn open_3d_with_box(&mut self, name: &str, section_box: hausit_model::SectionBox, yaw: f64) {
+        let existing = self
+            .doc
+            .views()
+            .find(|v| v.name == name && matches!(v.kind, ViewKind::ThreeD))
+            .map(|v| v.id);
+        let name = name.to_string();
+        let id = self.transact("Section Box", |doc| {
+            let id = existing.unwrap_or_else(|| doc.add_view(&name, ViewKind::ThreeD));
+            if let Some(v) = doc.view_mut(id) {
+                v.section_box = Some(section_box);
+                v.camera.yaw = yaw;
+                v.camera.pitch = 20.0;
+            }
+            Ok(id)
+        });
+        if let Some(id) = id {
+            if let Some(c) = self.cameras.get_mut(&id) {
+                c.fitted = false;
+            }
+            self.open_view(id);
+        }
+    }
+
+    /// 3D view of a section: the model behind the section line, cut on it.
+    pub fn section_in_3d(&mut self, section: ElementId) {
+        let Some(v) = self.doc.view(section) else { return };
+        let ViewKind::Section { start, end, far_clip } = v.kind else {
+            return;
+        };
+        let name = format!("3D - {}", v.name);
+        let Some(model) = hausit_model::geometry::model_bounds(&self.doc) else {
+            return;
+        };
+        let d = (end - start).normalize_or_zero();
+        if d == glam::DVec2::ZERO {
+            return;
+        }
+        // Box x runs along the section line, y away from the viewer.
+        let look = glam::DVec2::new(d.y, -d.x);
+        let angle = d.y.atan2(d.x);
+        let mut b = hausit_model::SectionBox {
+            min: glam::DVec3::ZERO,
+            max: glam::DVec3::ZERO,
+            angle,
+        };
+        let (s, e) = (b.to_local(start.extend(0.0)), b.to_local(end.extend(0.0)));
+        b.min = glam::DVec3::new(s.x.min(e.x), s.y - far_clip, model.min.z - 500.0);
+        b.max = glam::DVec3::new(s.x.max(e.x), s.y, model.max.z + 500.0);
+        // Look the way the section looks, a little from the side.
+        let yaw = look.x.atan2(look.y).to_degrees() - 25.0;
+        self.open_3d_with_box(&name, b, yaw);
+    }
+
+    /// Revit's Selection Box (BX): a 3D view cut to the selected elements.
+    pub fn selection_box(&mut self) {
+        let mut b = hausit_core::geom::Aabb::EMPTY;
+        for g in hausit_model::geometry::model_geometry(&self.doc) {
+            if self.selection.contains(&g.id) {
+                b = b.union(g.bounds());
+            }
+        }
+        if b.min.x > b.max.x {
+            self.status = "Select elements first, then Selection Box (BX).".into();
+            return;
+        }
+        let m = glam::DVec3::splat(300.0);
+        let yaw = self
+            .doc
+            .views()
+            .find(|v| matches!(v.kind, ViewKind::ThreeD))
+            .map(|v| v.camera.yaw)
+            .unwrap_or(-45.0);
+        self.open_3d_with_box("3D - Selection Box", hausit_model::SectionBox::around(b.min - m, b.max + m), yaw);
+    }
+}

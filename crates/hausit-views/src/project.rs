@@ -4,12 +4,13 @@
 
 use crate::bsp::{Bsp, Poly};
 use crate::frame::ViewFrame;
-use crate::hatch::{draw_band, layer_bands, structural_material, Band};
+use crate::hatch::{clip_segment, draw_band, layer_bands, parallel_lines, structural_material, Band};
 use crate::{DisplayList, Prim, Rgba, Stroke, BLACK, CUT_FILL};
 use hausit_core::geom::{clip_polygon_2d, distance_to_segment, perp, polygon_area};
 use hausit_core::{DVec2, DVec3, ElementId, Plane};
 use hausit_model::geometry::{model_geometry, Material, Shape};
-use hausit_model::{Category, Document, ElementData, View, VisualStyle};
+use hausit_model::materials::{MaterialDef, SurfacePattern};
+use hausit_model::{Category, Document, ElementData, View, ViewKind, VisualStyle};
 
 /// Base colour of each category in shaded views.
 pub fn category_color(cat: Category, material: Material) -> Rgba {
@@ -33,6 +34,90 @@ pub fn category_color(cat: Category, material: Material) -> Rgba {
 struct FaceData {
     fill: Option<Rgba>,
     id: ElementId,
+    /// The face's model pattern (brick courses…), drawn over its fill.
+    pattern: SurfacePattern,
+}
+
+/// The material showing on a face: for layered walls, floors and roofs,
+/// the outer layer on each side and the structure on the edges; otherwise
+/// the type's material.
+fn face_material(doc: &Document, id: ElementId, n: DVec3) -> Option<&MaterialDef> {
+    let t = doc.type_of(id)?;
+    if !t.layers.is_empty() {
+        let side = match &doc.element(id)?.data {
+            ElementData::Wall(w) => DVec2::new(n.x, n.y).dot(perp(w.direction())),
+            ElementData::Floor(_) | ElementData::Roof(_) | ElementData::Ceiling(_) => n.z,
+            _ => 0.0,
+        };
+        let roof = matches!(doc.element(id)?.data, ElementData::Roof(_));
+        // Roof edges (fascias) show the roof covering.
+        let layer = if side > 0.3 || (roof && side > -0.3 && n != DVec3::ZERO) {
+            t.layers.first()
+        } else if side < -0.3 {
+            t.layers.last()
+        } else {
+            t.layers
+                .iter()
+                .find(|l| l.function == hausit_model::materials::LayerFunction::Structure)
+                .or(t.layers.first())
+        };
+        return doc.material(&layer?.material);
+    }
+    ["Material", "Structural Material"].iter().find_map(|k| match t.params.get(*k) {
+        Some(hausit_model::ParamValue::Text(name)) => doc.material(name),
+        _ => None,
+    })
+}
+
+/// Model pattern lines of a face, in model coordinates. Anchored to the
+/// model's axes so courses line up from face to face.
+fn surface_lines(pts: &[DVec3], pattern: SurfacePattern) -> Vec<(DVec3, DVec3)> {
+    let (course, joint, stagger) = pattern.layout();
+    if pts.len() < 3 || (course <= 0.0 && joint <= 0.0) {
+        return vec![];
+    }
+    let n = hausit_core::geom::polygon_normal(pts).normalize_or_zero();
+    let u = DVec3::Z.cross(n).try_normalize().unwrap_or(DVec3::X);
+    let mut v = n.cross(u);
+    if v.z < 0.0 || (v.z.abs() < 1e-9 && v.y < 0.0) {
+        v = -v;
+    }
+    let d = n.dot(pts[0]);
+    let poly: Vec<DVec2> = pts.iter().map(|p| DVec2::new(p.dot(u), p.dot(v))).collect();
+    let lift = |q: DVec2| u * q.x + v * q.y + n * d;
+    let (lo, hi) = poly
+        .iter()
+        .fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(a, b), p| {
+            (a.min(*p), b.max(*p))
+        });
+    let size = hi - lo;
+    let mut out2 = Vec::new();
+    if course > 0.0 {
+        if size.y / course > 2000.0 {
+            return vec![];
+        }
+        out2.extend(parallel_lines(&poly, DVec2::X, course));
+        if joint > 0.0 && size.x / joint * size.y / course < 20_000.0 {
+            let mut k = (lo.y / course).floor();
+            while k * course < hi.y {
+                let shift = if stagger && (k as i64).rem_euclid(2) == 1 {
+                    joint / 2.0
+                } else {
+                    0.0
+                };
+                let mut j = ((lo.x - shift) / joint).floor();
+                while j * joint + shift < hi.x {
+                    let x = j * joint + shift;
+                    out2.extend(clip_segment(&poly, DVec2::new(x, k * course), DVec2::new(x, (k + 1.0) * course)));
+                    j += 1.0;
+                }
+                k += 1.0;
+            }
+        }
+    } else if size.x / joint < 2000.0 {
+        out2.extend(parallel_lines(&poly, DVec2::Y, joint));
+    }
+    out2.into_iter().map(|(a, b)| (lift(a), lift(b))).collect()
 }
 
 pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
@@ -50,6 +135,15 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
             Plane::from_point_normal(frame.origin + frame.right * u1, -frame.right),
         )
     });
+
+    // A 3D view's section box: keep the inside of all six faces.
+    let section_box = match view.kind {
+        ViewKind::ThreeD => view.section_box,
+        _ => None,
+    };
+    let box_planes: Vec<Plane> = section_box
+        .map(|b| b.planes().iter().map(|(p, n)| Plane::from_point_normal(*p, -*n)).collect())
+        .unwrap_or_default();
 
     let geometry = model_geometry(doc);
     let mut polys = Vec::new();
@@ -80,13 +174,23 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
                     .into_iter()
                     .flatten()
                     .chain(u_planes.into_iter().flat_map(|(a, b)| [a, b]))
+                    .chain(box_planes.iter().copied())
                 {
                     (pts, edges) = clip_with_edges(&pts, &edges, &plane);
                 }
                 if pts.len() < 3 {
                     continue;
                 }
-                let base = category_color(g.category, part.material);
+                let material = (part.material == Material::Default).then(|| face_material(doc, g.id, n)).flatten();
+                let base = match material {
+                    Some(m) => [m.color[0], m.color[1], m.color[2], 255],
+                    None => category_color(g.category, part.material),
+                };
+                let pattern = match style {
+                    VisualStyle::Wireframe => SurfacePattern::None,
+                    _ if edge_on => SurfacePattern::None,
+                    _ => material.map(|m| m.surface_pattern).unwrap_or_default(),
+                };
                 let fill = match style {
                     _ if edge_on => None,
                     VisualStyle::Wireframe => None,
@@ -109,16 +213,28 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
                 polys.push(Poly {
                     pts,
                     edges,
-                    data: FaceData { fill, id: g.id },
+                    data: FaceData { fill, id: g.id, pattern },
                 });
             }
         }
+    }
+
+    if let Some(b) = section_box {
+        box_caps(doc, &geometry, &b, &box_planes, frame, style, &mut polys);
     }
 
     split_t_junctions(&mut polys);
     hide_coplanar_seams(&mut polys);
 
     let edge = Stroke::new(1.0, if style == VisualStyle::Shaded { [40, 40, 40, 255] } else { BLACK });
+    let pattern_pen = Stroke::new(
+        0.6,
+        if style == VisualStyle::HiddenLine {
+            [150, 150, 150, 255]
+        } else {
+            [70, 70, 70, 255]
+        },
+    );
     let mut dl = DisplayList::default();
     let bsp = Bsp::new(polys);
     for p in bsp.back_to_front(frame.forward) {
@@ -128,6 +244,9 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
         }
         if p.data.fill.is_some() {
             dl.push(Prim::Polygon(pts.clone()), None, p.data.fill, Some(p.data.id));
+            for (a, b) in surface_lines(&p.pts, p.data.pattern) {
+                dl.line(frame.to_view(a).0, frame.to_view(b).0, pattern_pen, None);
+            }
         }
         let n = pts.len();
         for i in 0..n {
@@ -142,6 +261,89 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
         section_caps(doc, view, &geometry, frame, &mut dl);
     }
     dl
+}
+
+/// Cut faces where a section box slices solids, filled like section cuts.
+fn box_caps(
+    doc: &Document,
+    geometry: &[hausit_model::geometry::ElementGeometry],
+    b: &hausit_model::SectionBox,
+    keep: &[Plane],
+    frame: &ViewFrame,
+    style: VisualStyle,
+    polys: &mut Vec<Poly<FaceData>>,
+) {
+    for (i, (p0, n)) in b.planes().iter().enumerate() {
+        if n.dot(frame.forward) > -1e-9 {
+            continue; // faces away from the camera
+        }
+        let plane = Plane::from_point_normal(*p0, *n);
+        let e1 = n.cross(DVec3::Z).try_normalize().unwrap_or(DVec3::X);
+        let e2 = n.cross(e1);
+        let to2 = |p: DVec3| DVec2::new((p - *p0).dot(e1), (p - *p0).dot(e2));
+        let to3 = |q: DVec2| *p0 + e1 * q.x + e2 * q.y;
+        for g in geometry {
+            let mut segs = Vec::new();
+            for part in &g.parts {
+                for face in part.faces() {
+                    let m = face.pts.len();
+                    let mut hits = Vec::new();
+                    for k in 0..m {
+                        let (a, c) = (face.pts[k], face.pts[(k + 1) % m]);
+                        let (da, dc) = (plane.signed_distance(a), plane.signed_distance(c));
+                        if (da < 0.0) != (dc < 0.0) {
+                            hits.push(to2(a + (c - a) * (da / (da - dc))));
+                        }
+                    }
+                    if hits.len() == 2 {
+                        segs.push((hits[0], hits[1]));
+                    }
+                }
+            }
+            for l in chain_loops(segs) {
+                let mut pts: Vec<DVec3> = l.into_iter().map(to3).collect();
+                let mut edges = vec![true; pts.len()];
+                for (j, k) in keep.iter().enumerate() {
+                    if j != i {
+                        (pts, edges) = clip_with_edges(&pts, &edges, k);
+                    }
+                }
+                if pts.len() < 3 {
+                    continue;
+                }
+                // Face the camera, as the caps' outward normals do.
+                if hausit_core::geom::polygon_normal(&pts).dot(*n) < 0.0 {
+                    pts.reverse();
+                    edges.reverse();
+                    edges.rotate_left(1);
+                }
+                let fill = match style {
+                    VisualStyle::Wireframe => None,
+                    VisualStyle::HiddenLine => Some(CUT_FILL),
+                    _ => {
+                        let c = face_material(doc, g.id, DVec3::ZERO)
+                            .map(|m| [m.color[0], m.color[1], m.color[2], 255])
+                            .unwrap_or(category_color(g.category, Material::Default));
+                        Some([
+                            (c[0] as f64 * 0.62) as u8,
+                            (c[1] as f64 * 0.62) as u8,
+                            (c[2] as f64 * 0.62) as u8,
+                            255,
+                        ])
+                    }
+                };
+                polys.push(Poly {
+                    pts,
+                    edges,
+                    data: FaceData {
+                        fill,
+                        id: g.id,
+                        pattern: SurfacePattern::None,
+                    },
+                });
+            }
+        }
+    }
 }
 
 /// Stand-in for the geometry part a face came from.

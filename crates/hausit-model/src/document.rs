@@ -699,6 +699,45 @@ impl Document {
 
     pub fn delete_view(&mut self, id: ElementId) {
         self.views.shift_remove(&id);
+        let callouts: Vec<ElementId> = self.views.values().filter(|v| v.callout_of == Some(id)).map(|v| v.id).collect();
+        for c in callouts {
+            self.delete_view(c);
+        }
+        self.touch();
+    }
+
+    /// Adds a callout of `parent`: a copy of the view cropped to the
+    /// rectangle `a`–`b` (view coordinates), at 1:20 and Fine detail.
+    pub fn add_callout(&mut self, parent: ElementId, a: DVec2, b: DVec2) -> Option<ElementId> {
+        let p = self.view(parent)?.clone();
+        if !p.kind.is_graphical() || matches!(p.kind, ViewKind::ThreeD) {
+            return None;
+        }
+        // "Callout of Section 1", then "Callout of Section 1 (2)"…
+        let base = format!("Callout of {}", p.name);
+        let taken = |n: &str| self.views.values().any(|v| v.name == n);
+        let name = (1..)
+            .map(|k| if k == 1 { base.clone() } else { format!("{base} ({k})") })
+            .find(|n| !taken(n))
+            .unwrap_or(base);
+        let id = self.add_view(&name, p.kind.clone());
+        let v = self.views.get_mut(&id)?;
+        v.cut_height = p.cut_height;
+        v.visual_style = p.visual_style;
+        v.scale = 20;
+        v.detail_level = crate::DetailLevel::Fine;
+        v.crop = Some((a.min(b), a.max(b)));
+        v.callout_of = Some(parent);
+        Some(id)
+    }
+
+    /// Renames the floor and ceiling plans of `level` named `old`.
+    pub fn rename_level_views(&mut self, level: ElementId, old: &str, new: &str) {
+        for v in self.views.values_mut() {
+            if v.kind.plan_level() == Some(level) && v.name == old {
+                v.name = new.to_string();
+            }
+        }
         self.touch();
     }
 

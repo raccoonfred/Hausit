@@ -139,7 +139,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     }
                     Tool::Modify => {
                         if app.selection.is_empty() {
-                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · CL column · BM beam · BR brace · FT wall foundation · MV move · CO copy · RO rotate · MM mirror · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
+                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · CL column · BM beam · BR brace · FT wall foundation · MV move · CO copy · RO rotate · MM mirror · BX selection box · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
                         } else {
                             ui.label(format!("{} selected", app.selection.len()));
                         }

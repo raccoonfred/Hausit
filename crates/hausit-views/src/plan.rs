@@ -672,9 +672,15 @@ fn arrow(dl: &mut DisplayList, pts: &[DVec2], scale: f64, stroke: Stroke, id: El
     dl.line(tip, tip - d * len - n * half, stroke, Some(id));
 }
 
-/// A square ceiling grid inside `boundary`, aligned to its first corner.
+/// A square ceiling grid inside `boundary`, with a whole tile centred in
+/// the room so the cut tiles at the edges match on both sides.
 fn grid_lines(boundary: &[DVec2], spacing: f64) -> Vec<(DVec2, DVec2)> {
-    let o = boundary[0];
+    let (lo, hi) = boundary
+        .iter()
+        .fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(a, b), p| {
+            (a.min(*p), b.max(*p))
+        });
+    let o = (lo + hi) * 0.5 + DVec2::splat(spacing / 2.0);
     let local: Vec<DVec2> = boundary.iter().map(|p| *p - o).collect();
     let mut out = Vec::new();
     for dir in [DVec2::X, DVec2::Y] {

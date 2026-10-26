@@ -168,7 +168,7 @@ impl DisplayList {
 
 /// Builds the graphics of a view. Schedules have none.
 pub fn build(doc: &Document, view: &View) -> DisplayList {
-    match &view.kind {
+    let mut dl = match &view.kind {
         ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => plan::floor_plan(doc, view, *level),
         ViewKind::ThreeD | ViewKind::Elevation { .. } | ViewKind::Section { .. } => {
             let Some(frame) = ViewFrame::for_view(doc, view) else {
@@ -181,7 +181,73 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
             dl
         }
         ViewKind::Schedule(_) => DisplayList::default(),
+    };
+    annotate::callout_marks(doc, view, &mut dl);
+    if let Some((lo, hi)) = view.crop {
+        dl = crop(dl, lo, hi);
     }
+    dl
+}
+
+/// Keeps what lies inside the rectangle `lo`–`hi`: lines and fills are
+/// clipped to it; circles, arcs and text are kept when their centre is.
+pub fn crop(dl: DisplayList, lo: DVec2, hi: DVec2) -> DisplayList {
+    use hausit_core::geom::clip_polygon_2d;
+    let inside = |p: DVec2| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y;
+    let clip = |a: DVec2, b: DVec2| -> Option<(DVec2, DVec2)> {
+        // Liang–Barsky.
+        let d = b - a;
+        let (mut t0, mut t1) = (0.0f64, 1.0f64);
+        for (p, q) in [(-d.x, a.x - lo.x), (d.x, hi.x - a.x), (-d.y, a.y - lo.y), (d.y, hi.y - a.y)] {
+            if p.abs() < 1e-12 {
+                if q < 0.0 {
+                    return None;
+                }
+            } else {
+                let r = q / p;
+                if p < 0.0 {
+                    t0 = t0.max(r);
+                } else {
+                    t1 = t1.min(r);
+                }
+            }
+        }
+        (t0 < t1).then(|| (a + d * t0, a + d * t1))
+    };
+    let mut out = DisplayList::default();
+    for item in dl.items {
+        match &item.prim {
+            Prim::Line(a, b) => {
+                if let Some((a, b)) = clip(*a, *b) {
+                    out.push(Prim::Line(a, b), item.stroke, item.fill, item.element);
+                }
+            }
+            Prim::Polyline { pts, closed } => {
+                let n = pts.len();
+                let m = if *closed { n } else { n.saturating_sub(1) };
+                for i in 0..m {
+                    if let Some((a, b)) = clip(pts[i], pts[(i + 1) % n]) {
+                        out.push(Prim::Line(a, b), item.stroke, None, item.element);
+                    }
+                }
+            }
+            Prim::Polygon(pts) => {
+                let mut p = pts.clone();
+                for (n, d) in [(DVec2::X, hi.x), (-DVec2::X, -lo.x), (DVec2::Y, hi.y), (-DVec2::Y, -lo.y)] {
+                    p = clip_polygon_2d(&p, n, d);
+                }
+                if p.len() >= 3 {
+                    out.push(Prim::Polygon(p), item.stroke, item.fill, item.element);
+                }
+            }
+            Prim::Circle { center, .. } | Prim::Arc { center, .. } | Prim::Text { pos: center, .. } => {
+                if inside(*center) {
+                    out.items.push(item);
+                }
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -271,5 +337,47 @@ mod orbit_tests {
             }
         }
         assert!(bad.is_empty(), "{} bad views, e.g. {:?}", bad.len(), &bad[..bad.len().min(5)]);
+    }
+}
+
+#[cfg(test)]
+mod crop_tests {
+    use super::*;
+    use hausit_model::template::sample_project;
+
+    #[test]
+    fn callouts_crop_their_parent() {
+        let mut doc = sample_project();
+        let section = doc.views().find(|v| matches!(v.kind, ViewKind::Section { .. })).unwrap().id;
+        let (lo, hi) = (DVec2::new(-500.0, 2500.0), DVec2::new(1500.0, 5000.0));
+        let c = doc.add_callout(section, hi, lo).unwrap();
+        let callout = doc.view(c).unwrap().clone();
+        assert_eq!((callout.scale, callout.crop), (20, Some((lo, hi))));
+        let dl = build(&doc, &callout);
+        let (min, max) = dl.bounds().unwrap();
+        assert!(min.cmpge(lo - 1e-6).all() && max.cmple(hi + 1e-6).all(), "{min} {max}");
+        // The parent shows the callout's boundary, tagged to open it.
+        let parent = build(&doc, doc.view(section).unwrap());
+        assert!(parent.items.iter().any(|i| i.element == Some(c)));
+        // Deleting the parent deletes its callouts.
+        doc.delete_view(section);
+        assert!(doc.view(c).is_none());
+    }
+
+    #[test]
+    fn section_box_cuts_the_model() {
+        let mut doc = sample_project();
+        let v3 = doc.views().find(|v| matches!(v.kind, ViewKind::ThreeD)).unwrap().id;
+        let whole = build(&doc, doc.view(v3).unwrap());
+        let b = hausit_model::geometry::model_bounds(&doc).unwrap();
+        let mut cut = hausit_model::SectionBox::around(b.min, b.max);
+        cut.max.x = (b.min.x + b.max.x) / 2.0;
+        doc.view_mut(v3).unwrap().section_box = Some(cut);
+        let half = build(&doc, doc.view(v3).unwrap());
+        let width = |d: &DisplayList| {
+            let (lo, hi) = d.bounds().unwrap();
+            hi.x - lo.x
+        };
+        assert!(width(&half) < width(&whole) * 0.8, "{} vs {}", width(&half), width(&whole));
     }
 }

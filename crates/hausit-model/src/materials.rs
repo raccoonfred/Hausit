@@ -49,6 +49,47 @@ impl FillPattern {
     }
 }
 
+/// Model pattern drawn on a material's surfaces in 3D and elevations, at
+/// real size (brick courses, panel ribs).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SurfacePattern {
+    #[default]
+    None,
+    /// 215 x 65 bricks in stretcher bond (75 mm courses).
+    Brick,
+    /// 440 x 215 blocks in stretcher bond (225 mm courses).
+    Block,
+    /// Vertical ribs at 333 mm, as on profiled metal cladding.
+    Ribs,
+    /// Tile courses at 250 mm, with joints at 300 mm.
+    Tiles,
+}
+
+impl SurfacePattern {
+    pub const ALL: [SurfacePattern; 5] = [Self::None, Self::Brick, Self::Block, Self::Ribs, Self::Tiles];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::None => "<none>",
+            Self::Brick => "Brick - Stretcher Bond",
+            Self::Block => "Block - Stretcher Bond",
+            Self::Ribs => "Profiled Sheet Ribs",
+            Self::Tiles => "Roof Tiles",
+        }
+    }
+
+    /// (course height, joint spacing, staggered); 0 means none.
+    pub fn layout(self) -> (f64, f64, bool) {
+        match self {
+            Self::None => (0.0, 0.0, false),
+            Self::Brick => (75.0, 225.0, true),
+            Self::Block => (225.0, 450.0, true),
+            Self::Ribs => (0.0, 333.0, false),
+            Self::Tiles => (250.0, 300.0, true),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MaterialDef {
     pub name: String,
@@ -58,6 +99,8 @@ pub struct MaterialDef {
     /// Colour of the cut pattern.
     #[serde(default)]
     pub pattern_color: [u8; 3],
+    #[serde(default)]
+    pub surface_pattern: SurfacePattern,
 }
 
 /// Hausit's starter materials.
@@ -72,14 +115,19 @@ pub fn default_materials() -> Vec<MaterialDef> {
         } else {
             [96, 96, 96]
         },
+        surface_pattern: SurfacePattern::None,
+    };
+    let surface = |mut m: MaterialDef, p: SurfacePattern| {
+        m.surface_pattern = p;
+        m
     };
     use FillPattern::*;
     vec![
         m("Default", [236, 236, 234], None),
         m("Concrete, Cast-in-Place", [190, 190, 186], Concrete),
         m("Concrete, Precast", [200, 200, 196], Concrete),
-        m("Masonry - Brick", [176, 98, 70], Diagonal),
-        m("Masonry - Concrete Block", [198, 196, 190], Crosshatch),
+        surface(m("Masonry - Brick", [176, 98, 70], Diagonal), SurfacePattern::Brick),
+        surface(m("Masonry - Concrete Block", [198, 196, 190], Crosshatch), SurfacePattern::Block),
         m("Insulation - Mineral Wool", [238, 222, 140], Insulation),
         m("Insulation - Rigid Board", [235, 235, 200], RigidInsulation),
         m("Air Gap", [245, 245, 245], None),
@@ -89,10 +137,10 @@ pub fn default_materials() -> Vec<MaterialDef> {
         m("Ceiling Tile - Mineral Fibre", [246, 246, 240], None),
         m("Screed", [210, 208, 202], Concrete),
         m("Steel", [150, 156, 162], Solid),
-        m("Metal Panel - Steel", [170, 178, 186], Solid),
+        surface(m("Metal Panel - Steel", [170, 178, 186], Solid), SurfacePattern::Ribs),
         m("Timber - Softwood", [214, 178, 128], Parallel),
         m("Membrane", [60, 60, 60], Solid),
-        m("Roof Tile - Clay", [168, 84, 58], Diagonal),
+        surface(m("Roof Tile - Clay", [168, 84, 58], Diagonal), SurfacePattern::Tiles),
     ]
 }
 

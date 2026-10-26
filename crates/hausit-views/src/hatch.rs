@@ -238,7 +238,7 @@ fn clip_line(poly: &[DVec2], p: DVec2, dir: DVec2) -> Vec<(DVec2, DVec2)> {
 }
 
 /// The parts of segment `a`–`b` inside `poly`.
-fn clip_segment(poly: &[DVec2], a: DVec2, b: DVec2) -> Vec<(DVec2, DVec2)> {
+pub(crate) fn clip_segment(poly: &[DVec2], a: DVec2, b: DVec2) -> Vec<(DVec2, DVec2)> {
     let d = b - a;
     let mut ts: Vec<f64> = crossings(poly, a, d).into_iter().filter(|t| *t > 0.0 && *t < 1.0).collect();
     ts.push(0.0);

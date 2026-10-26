@@ -870,6 +870,15 @@ fn materials(app: &mut HausitApp, ctx: &Context) {
                     ui.label("Pattern colour");
                     ui.color_edit_button_srgb(&mut m.pattern_color);
                     ui.end_row();
+                    ui.label("Surface pattern");
+                    egui::ComboBox::from_id_salt("surface_pattern")
+                        .selected_text(m.surface_pattern.label())
+                        .show_ui(ui, |ui| {
+                            for f in hausit_model::materials::SurfacePattern::ALL {
+                                ui.selectable_value(&mut m.surface_pattern, f, f.label());
+                            }
+                        });
+                    ui.end_row();
                 });
             }
         });

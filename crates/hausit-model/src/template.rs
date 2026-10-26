@@ -625,17 +625,21 @@ pub fn industrial_sample() -> Document {
     let mut doc = new_project();
     doc.project_info.name = "Sample Warehouse".into();
     let levels = doc.levels();
+    // Level 1 is the slab; the template's Level 2 becomes the roof level
+    // at the top of the steel (6 m eaves); the mezzanine is Level 2.
     let (l1, eaves) = (levels[0].0, levels[1].0);
+    doc.rename_level_views(eaves, "Level 2", "Roof");
     if let Some(ElementData::Level(l)) = doc.element_mut(eaves).map(|e| &mut e.data) {
-        l.name = "Eaves".into();
+        l.name = "Roof".into();
         l.elevation = 6000.0;
     }
-    let plan = doc
+    // No ceilings up there: drop the roof level's ceiling plan.
+    let rcp = doc
         .views()
-        .find(|v| matches!(v.kind, ViewKind::FloorPlan { level } if level == eaves))
+        .find(|v| matches!(v.kind, ViewKind::CeilingPlan { level } if level == eaves))
         .map(|v| v.id);
-    if let Some(v) = plan.and_then(|v| doc.view_mut(v)) {
-        v.name = "Eaves".into();
+    if let Some(v) = rcp {
+        doc.delete_view(v);
     }
     let t = |doc: &Document, c: Category, name: &str| doc.types_of(c).find(|t| t.name == name).unwrap().id;
     let (bays, bay, span) = (5, 6000.0, 15000.0);
@@ -780,7 +784,7 @@ pub fn industrial_sample() -> Document {
     }
     // A mezzanine in the last bay, on light columns and beams, reached by a
     // steel stair with guardrails along its open edges.
-    let mezz = add_level_with_plan(&mut doc, "Mezzanine", 3000.0);
+    let mezz = add_level_with_plan(&mut doc, "Level 2", 3000.0);
     let light = t(&doc, Category::StructuralColumns, "IS 203x203");
     let x0 = (bays - 1) as f64 * bay;
     let (mx1, my0, my1) = (hi - 75.0, 9000.0, yhi - 75.0);
