@@ -1,9 +1,10 @@
 //! Hausit: building information modelling with a Revit-style workflow.
 //!
 //! Usage: `hausit [PROJECT.hausit | FILE.rvt] [--sample | --sample-industrial] [--view "View Name"]
-//! [--export-pdf OUT.pdf]`
+//! [--export-pdf OUT.pdf] [--export-ifc OUT.ifc]`
 //!
-//! `--export-pdf` writes every sheet of the project to a PDF and exits.
+//! `--export-pdf` writes every sheet of the project to a PDF and exits;
+//! `--export-ifc` writes the model as IFC4 and exits.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -29,6 +30,8 @@ struct Args {
     view: Option<String>,
     /// Export every sheet to this PDF and exit, without a window.
     export_pdf: Option<std::path::PathBuf>,
+    /// Export the model to this IFC file and exit.
+    export_ifc: Option<std::path::PathBuf>,
 }
 
 fn parse_args() -> Args {
@@ -40,6 +43,7 @@ fn parse_args() -> Args {
             Some("--sample-industrial") => args.sample = Some(true),
             Some("--view") => args.view = it.next().map(|v| v.to_string_lossy().to_string()),
             Some("--export-pdf") => args.export_pdf = it.next().map(Into::into),
+            Some("--export-ifc") => args.export_ifc = it.next().map(Into::into),
             _ => args.path = Some(a.into()),
         }
     }
@@ -86,6 +90,9 @@ fn main() -> eframe::Result {
     if let Some(out) = &args.export_pdf {
         std::process::exit(export_pdf(&args, out));
     }
+    if let Some(out) = &args.export_ifc {
+        std::process::exit(export_ifc(&args, out));
+    }
     // Prefer wgpu (Vulkan/Metal/DX12); fall back to OpenGL on machines
     // without a supported GPU driver.
     match run(args.clone(), eframe::Renderer::Wgpu) {
@@ -97,19 +104,39 @@ fn main() -> eframe::Result {
     }
 }
 
-/// `--export-pdf`: every sheet of the project, in number order.
-fn export_pdf(args: &Args, out: &std::path::Path) -> i32 {
-    let doc = match (&args.path, args.sample) {
+/// The project named on the command line, or a sample.
+fn load_for_export(args: &Args) -> Option<hausit_model::Document> {
+    match (&args.path, args.sample) {
         (Some(p), _) => match hausit_io::open(p) {
-            Ok(d) => d,
+            Ok(d) => Some(d),
             Err(e) => {
                 eprintln!("{}: {e}", p.display());
-                return 1;
+                None
             }
         },
-        (None, Some(true)) => sheets::sample_warehouse(),
-        _ => sheets::sample_house(),
-    };
+        (None, Some(true)) => Some(sheets::sample_warehouse()),
+        _ => Some(sheets::sample_house()),
+    }
+}
+
+/// `--export-ifc`: the whole model.
+fn export_ifc(args: &Args, out: &std::path::Path) -> i32 {
+    let Some(doc) = load_for_export(args) else { return 1 };
+    match hausit_io::export_ifc(&doc, out) {
+        Ok(()) => {
+            println!("Wrote {}", out.display());
+            0
+        }
+        Err(e) => {
+            eprintln!("{}: {e}", out.display());
+            1
+        }
+    }
+}
+
+/// `--export-pdf`: every sheet of the project, in number order.
+fn export_pdf(args: &Args, out: &std::path::Path) -> i32 {
+    let Some(doc) = load_for_export(args) else { return 1 };
     let ids: Vec<_> = sheets::sheets_in_order(&doc).into_iter().map(|(id, _)| id).collect();
     if ids.is_empty() {
         eprintln!("The project has no sheets.");

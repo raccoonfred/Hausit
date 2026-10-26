@@ -157,7 +157,10 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
             if ui.button("Schedule as CSV…").clicked() {
                 crate::schedule_view::export_active(app);
             }
-            ui.add_enabled(false, egui::Button::new("IFC… (planned)"));
+            if ui.button("IFC…").clicked() {
+                export_ifc(app);
+                ui.close();
+            }
             ui.add_enabled(false, egui::Button::new("DWG… (planned)"));
             if ui.button("PDF…").clicked() {
                 crate::sheets::start_export(app);
@@ -735,4 +738,20 @@ fn mode_panel(app: &mut HausitApp, ui: &mut Ui) {
             app.status = app.tool.prompt().into();
         }
     });
+}
+
+/// File ▸ Export ▸ IFC: the whole model as IFC4.
+fn export_ifc(app: &mut HausitApp) {
+    let name = if app.doc.project_info.name.is_empty() {
+        "Project.ifc".to_string()
+    } else {
+        format!("{}.ifc", app.doc.project_info.name)
+    };
+    let Some(path) = rfd::FileDialog::new().add_filter("IFC", &["ifc"]).set_file_name(name).save_file() else {
+        return;
+    };
+    match hausit_io::export_ifc(&app.doc, &path) {
+        Ok(()) => app.status = format!("Exported IFC4 to {}", path.display()),
+        Err(e) => app.dialogs.error = Some(format!("Could not write the IFC file: {e}")),
+    }
 }

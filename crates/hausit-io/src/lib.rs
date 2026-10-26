@@ -4,6 +4,8 @@
 //! go through [`open`], which dispatches on the extension; Revit files are
 //! handled by `hausit-rvt`.
 
+pub mod ifc;
+
 use hausit_model::Document;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -78,6 +80,16 @@ pub fn open(path: &Path) -> Result<Document, IoError> {
         e if hausit_rvt::EXTENSIONS.contains(&e) => Ok(hausit_rvt::import(path)?),
         other => Err(IoError::UnsupportedExtension(other.to_string())),
     }
+}
+
+/// Exports the document as IFC4.
+pub fn export_ifc(doc: &Document, path: &Path) -> Result<(), IoError> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    std::fs::write(path, ifc::export(doc, now))?;
+    Ok(())
 }
 
 /// Extensions accepted by [`open`], for file dialogs.

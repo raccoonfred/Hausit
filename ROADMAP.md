@@ -187,7 +187,7 @@ in-house tools) is a large part of why practices stay on Revit.
 | Format | Status | Priority | Notes |
 |---|---|---|---|
 | `.hausit` native | Have | — | Move to a binary or SQLite container in Phase 2 for large models |
-| IFC 2x3 and IFC4 export | Missing | P0 | The open BIM standard. First route to coordination with other teams |
+| IFC 2x3 and IFC4 export | Partial | P0 | IFC4 Reference View done (File ▸ Export ▸ IFC, `--export-ifc OUT`): storeys, typed elements, layer sets, openings, spaces, grids, parameters as property sets. IFC 2x3 to come |
 | IFC import (as native elements where possible, else as reference geometry) | Missing | P0 | Also the fallback for Revit files (see section 4) |
 | PDF export | Done | P0 | File ▸ Export ▸ PDF, or `--export-pdf OUT` |
 | DWG/DXF export | Missing | P1 | DXF is documented and can be written directly. DWG needs a library (see 4.3) |
