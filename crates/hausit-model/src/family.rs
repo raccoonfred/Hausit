@@ -66,7 +66,10 @@ impl FamilyType {
 
     /// Whether the type has a layer structure to edit.
     pub fn has_structure(&self) -> bool {
-        matches!(self.category, Category::Walls | Category::Floors | Category::Roofs)
+        matches!(
+            self.category,
+            Category::Walls | Category::Floors | Category::Roofs | Category::Ceilings
+        )
     }
 
     pub fn width(&self) -> f64 {
@@ -123,6 +126,10 @@ pub fn default_type_params(category: Category) -> TypeParams {
             p.insert("Length".into(), len(1200.0));
             p.insert("Thickness".into(), len(500.0));
             p.insert("Structural Material".into(), ParamValue::Text("Concrete, Cast-in-Place".into()));
+        }
+        Category::Ceilings => {
+            p.insert("Thickness".into(), len(25.0));
+            p.insert("Grid Spacing".into(), len(600.0));
         }
         Category::Stairs => {
             p.insert("Maximum Riser Height".into(), len(180.0));

@@ -27,9 +27,34 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     let cut_z = elev + view.cut_height;
     let top_z = doc.level_above(level).map(|l| doc.level_elevation(l)).unwrap_or(f64::INFINITY);
     let scale = view.scale as f64;
+    // A reflected ceiling plan shows walls and columns cut higher up and
+    // the ceilings above, without floors, doors or stairs.
+    let reflected = matches!(view.kind, hausit_model::ViewKind::CeilingPlan { .. });
+    if reflected {
+        for e in doc.elements_of(Category::Ceilings) {
+            let ElementData::Ceiling(c) = &e.data else { continue };
+            let z = doc.level_elevation(c.level) + c.height_offset;
+            if c.level != level && !(z > cut_z && z < top_z) {
+                continue;
+            }
+            dl.push(
+                Prim::Polygon(c.boundary.clone()),
+                Some(pen(doc, Category::Ceilings, false, view.scale)),
+                Some([255, 255, 255, 0]),
+                Some(e.id),
+            );
+            let grid = doc.type_of(e.id).map(|t| t.length_or("Grid Spacing", 0.0)).unwrap_or(0.0);
+            if grid > 0.0 && view.detail_level != DetailLevel::Coarse {
+                let stroke = Stroke::new(1.0, [110, 110, 110, 255]);
+                for (a, b) in grid_lines(&c.boundary, grid) {
+                    dl.line(a, b, stroke, None);
+                }
+            }
+        }
+    }
 
     // Floors on this level, in projection.
-    for e in doc.elements_of(Category::Floors) {
+    for e in doc.elements_of(Category::Floors).filter(|_| !reflected) {
         let ElementData::Floor(f) = &e.data else { continue };
         if f.level == level {
             dl.push(
@@ -45,7 +70,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     }
 
     // Roofs based between this level and the next, in projection.
-    for e in doc.elements_of(Category::Roofs) {
+    for e in doc.elements_of(Category::Roofs).filter(|_| !reflected) {
         let ElementData::Roof(r) = &e.data else { continue };
         let z = doc.level_elevation(r.level) + r.base_offset;
         if z >= elev - 1.0 && z < top_z {
@@ -66,7 +91,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 
     // Rooms: an invisible region that can be picked, plus a room tag
     // (name, number and area, as Revit's "Room Tag With Area").
-    for e in doc.elements_of(Category::Rooms) {
+    for e in doc.elements_of(Category::Rooms).filter(|_| !reflected) {
         let ElementData::Room(r) = &e.data else { continue };
         if r.level != level {
             continue;
@@ -107,7 +132,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 
     // Foundations below the level, hidden (dashed), as Revit shows them in
     // plans whose view depth reaches them.
-    for e in doc.elements_of(Category::StructuralFoundations) {
+    for e in doc.elements_of(Category::StructuralFoundations).filter(|_| !reflected) {
         let Some((outline, z0, z1)) = foundation_extent(doc, e.id) else {
             continue;
         };
@@ -247,7 +272,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     // Structural framing: members on this level (as a structural plan
     // shows them) and members passing through the view range, as their
     // outline, or a single line at Coarse.
-    for e in doc.elements_of(Category::StructuralFraming) {
+    for e in doc.elements_of(Category::StructuralFraming).filter(|_| !reflected) {
         let ElementData::Framing(f) = &e.data else { continue };
         let (a, b) = framing_axis(doc, e.id, f);
         let depth = section_depth(doc.type_of(e.id));
@@ -290,7 +315,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 
     // Stairs: on the base level, treads up to the cut plane, a break line
     // and the UP arrow; on the top level, the rest of the stair.
-    for e in doc.elements_of(Category::Stairs) {
+    for e in doc.elements_of(Category::Stairs).filter(|_| !reflected) {
         let ElementData::Stair(st) = &e.data else { continue };
         let Some(l) = stair_layout(doc, e.id) else { continue };
         let base_cut = doc.level_elevation(st.base_level) + view.cut_height;
@@ -380,7 +405,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 
     // Railings: free-standing ones on their level; stair railings where
     // their stair is shown.
-    for e in doc.elements_of(Category::Railings) {
+    for e in doc.elements_of(Category::Railings).filter(|_| !reflected) {
         let ElementData::Railing(r) = &e.data else { continue };
         let base = RailingBase::of(doc, r);
         let stroke = pen(doc, Category::Railings, false, view.scale);
@@ -415,7 +440,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 
     // Doors and windows hosted by walls on this level.
     let mut tags: Vec<(Vec<DVec2>, String, DVec2, ElementId)> = Vec::new();
-    for e in doc.elements() {
+    for e in doc.elements().filter(|_| !reflected) {
         let is_door = match e.category() {
             Category::Doors => true,
             Category::Windows => false,
@@ -645,4 +670,17 @@ fn arrow(dl: &mut DisplayList, pts: &[DVec2], scale: f64, stroke: Stroke, id: El
     let n = perp(d);
     dl.line(tip, tip - d * len + n * half, stroke, Some(id));
     dl.line(tip, tip - d * len - n * half, stroke, Some(id));
+}
+
+/// A square ceiling grid inside `boundary`, aligned to its first corner.
+fn grid_lines(boundary: &[DVec2], spacing: f64) -> Vec<(DVec2, DVec2)> {
+    let o = boundary[0];
+    let local: Vec<DVec2> = boundary.iter().map(|p| *p - o).collect();
+    let mut out = Vec::new();
+    for dir in [DVec2::X, DVec2::Y] {
+        for (a, b) in crate::hatch::parallel_lines(&local, dir, spacing) {
+            out.push((a + o, b + o));
+        }
+    }
+    out
 }

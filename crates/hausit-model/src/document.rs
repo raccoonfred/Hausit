@@ -184,6 +184,7 @@ impl Document {
                     ElementData::Footing(f) => f.level == id,
                     ElementData::WallFooting(f) => f.wall == id,
                     ElementData::Stair(s) => s.base_level == id,
+                    ElementData::Ceiling(c) => c.level == id,
                     ElementData::Railing(r) => r.level == id || r.host == id,
                     ElementData::Room(r) => r.level == id,
                     ElementData::RoomSeparation(l) => l.level == id,
@@ -203,7 +204,7 @@ impl Document {
                 }
             }
             for v in self.views.values() {
-                if let ViewKind::FloorPlan { level } = v.kind {
+                if let Some(level) = v.kind.plan_level() {
                     if level == id && !out.contains(&v.id) {
                         out.push(v.id);
                     }
@@ -278,6 +279,7 @@ impl Document {
                 }
                 ElementData::Footing(f) => f.point += delta,
                 ElementData::Stair(s) => s.path.iter_mut().for_each(|p| *p += delta),
+                ElementData::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
                 ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
                 ElementData::Room(r) => r.point += delta,
                 ElementData::RoomSeparation(l) => {
@@ -447,6 +449,7 @@ impl Document {
                     s.path.iter_mut().for_each(|p| *p = f(*p));
                 }
                 ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p = f(*p)),
                 ElementData::Room(r) => r.point = f(r.point),
                 ElementData::RoomSeparation(l) => {
                     l.start = f(l.start);

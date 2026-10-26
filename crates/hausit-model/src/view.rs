@@ -81,6 +81,10 @@ pub enum ViewKind {
     FloorPlan {
         level: ElementId,
     },
+    /// Reflected ceiling plan: cut higher, showing ceilings above.
+    CeilingPlan {
+        level: ElementId,
+    },
     ThreeD,
     Elevation {
         direction: CardinalDirection,
@@ -99,10 +103,19 @@ impl ViewKind {
     pub fn browser_group(&self) -> &'static str {
         match self {
             ViewKind::FloorPlan { .. } => "Floor Plans",
+            ViewKind::CeilingPlan { .. } => "Ceiling Plans",
             ViewKind::ThreeD => "3D Views",
             ViewKind::Elevation { .. } => "Elevations (Building Elevation)",
             ViewKind::Section { .. } => "Sections (Building Section)",
             ViewKind::Schedule(_) => "Schedules/Quantities",
+        }
+    }
+
+    /// The level of a floor or ceiling plan.
+    pub fn plan_level(&self) -> Option<ElementId> {
+        match self {
+            ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => Some(*level),
+            _ => None,
         }
     }
 
@@ -158,6 +171,12 @@ impl View {
             ViewKind::ThreeD => VisualStyle::Shaded,
             _ => VisualStyle::HiddenLine,
         };
+        // Revit's ceiling plans cut at 2300, above door heads.
+        let cut_height = if matches!(kind, ViewKind::CeilingPlan { .. }) {
+            2300.0
+        } else {
+            1200.0
+        };
         View {
             id,
             name: name.to_string(),
@@ -165,7 +184,7 @@ impl View {
             scale: 100,
             detail_level: DetailLevel::Medium,
             visual_style,
-            cut_height: 1200.0,
+            cut_height,
             camera: OrbitCamera::default(),
         }
     }

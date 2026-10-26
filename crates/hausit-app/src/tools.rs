@@ -57,6 +57,8 @@ pub enum Tool {
     Footing,
     /// Wall foundation: pick walls.
     WallFoundation,
+    /// Automatic Ceiling: click inside walls.
+    Ceiling,
     Room,
     RoomSeparation {
         start: Option<DVec2>,
@@ -116,6 +118,7 @@ impl Tool {
             Tool::Beam { .. } => "Modify | Place Brace",
             Tool::Footing => "Modify | Place Isolated Foundation",
             Tool::Stair { .. } => "Modify | Create Stair",
+            Tool::Ceiling => "Modify | Place Ceiling",
             Tool::Railing { .. } => "Modify | Create Railing Path",
             Tool::WallFoundation => "Modify | Place Wall Foundation",
             Tool::Room => "Modify | Place Room",
@@ -155,6 +158,7 @@ impl Tool {
             Tool::Beam { .. } => "Click to enter brace end point (on the level above).",
             Tool::Footing => "Click to place an isolated foundation. Space rotates it 90°. At Columns places one under every column.",
             Tool::WallFoundation => "Click walls to add a wall foundation under them.",
+            Tool::Ceiling => "Click inside a room's walls to create a ceiling there (Automatic Ceiling).",
             Tool::Stair { pts } if pts.is_empty() => "Click to start the run at the first riser.",
             Tool::Stair { .. } => "Click the end of the run, or a point to turn at a landing. Finish (Enter) completes the last run.",
             Tool::Railing { pts } if pts.is_empty() => "Click to start the railing path.",
@@ -187,6 +191,7 @@ impl Tool {
             Tool::Beam { .. } => Some(Category::StructuralFraming),
             Tool::Footing | Tool::WallFoundation => Some(Category::StructuralFoundations),
             Tool::Stair { .. } => Some(Category::Stairs),
+            Tool::Ceiling => Some(Category::Ceilings),
             Tool::Railing { .. } => Some(Category::Railings),
             _ => None,
         }
@@ -396,6 +401,8 @@ pub struct ToolOptions {
     pub copy: bool,
     /// Picking tolerance at the current zoom, model mm.
     pub pick_tol: f64,
+    /// Ceiling height above the level.
+    pub ceiling_height: f64,
 }
 
 impl Default for ToolOptions {
@@ -415,6 +422,7 @@ impl Default for ToolOptions {
             flip: false,
             copy: false,
             pick_tol: 200.0,
+            ceiling_height: 2600.0,
         }
     }
 }
@@ -437,6 +445,7 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::WallFoundation
             | Tool::Stair { .. }
             | Tool::Railing { .. }
+            | Tool::Ceiling
             | Tool::Room
             | Tool::RoomSeparation { .. }
             | Tool::Dimension { .. }
@@ -1018,6 +1027,20 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 pts.push(p);
             }
         }
+        Tool::Ceiling => match ceiling_region(app, p) {
+            Some(boundary) => {
+                let Some(level) = app.active_level() else { return };
+                let Some(type_id) = app.type_for(Category::Ceilings) else { return };
+                let c = Ceiling {
+                    type_id,
+                    level,
+                    boundary,
+                    height_offset: app.options.ceiling_height,
+                };
+                app.transact("Create Ceiling", |doc| Ok(doc.add_element(ElementData::Ceiling(c))));
+            }
+            None => app.status = "Click inside an area enclosed by walls.".into(),
+        },
         Tool::Footing => {
             let Some(level) = app.active_level() else { return };
             let Some(type_id) = app.type_for(Category::StructuralFoundations) else {
@@ -1407,6 +1430,17 @@ pub fn columns_at_grids(app: &mut HausitApp) {
 }
 
 /// Places a room in the enclosed region at `p`, as Revit's Room tool.
+/// The smallest region bounded by walls (and room separation lines)
+/// around `p`: where Automatic Ceiling places a ceiling.
+pub fn ceiling_region(app: &HausitApp, p: DVec2) -> Option<Vec<DVec2>> {
+    let level = app.active_level()?;
+    let segs = hausit_model::rooms::bounding_segments(&app.doc, level);
+    hausit_model::rooms::regions(&segs)
+        .into_iter()
+        .filter(|f| hausit_core::geom::point_in_polygon(p, f))
+        .min_by(|a, b| hausit_core::geom::polygon_area(a).total_cmp(&hausit_core::geom::polygon_area(b)))
+}
+
 fn place_room(app: &mut HausitApp, p: DVec2) -> Option<ElementId> {
     let level = app.active_level()?;
     if !hausit_model::rooms::rooms_at(&app.doc, level, p).is_empty() {
@@ -1473,6 +1507,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::Framing(f) => pts.extend([f.start, f.end]),
             ElementData::Footing(f) => pts.push(f.point),
             ElementData::Stair(s) => pts.extend(&s.path),
+            ElementData::Ceiling(c) => pts.extend(&c.boundary),
             ElementData::Railing(r) => pts.extend(&r.path),
             ElementData::WallFooting(f) => {
                 if let Some(w) = app.doc.element(f.wall).and_then(|h| h.as_wall()) {

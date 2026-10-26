@@ -57,7 +57,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     painter.rect_filled(rect, 0.0, CANVAS_BG);
 
     let is_3d = matches!(view.kind, ViewKind::ThreeD);
-    let is_plan = matches!(view.kind, ViewKind::FloorPlan { .. });
+    let is_plan = view.kind.plan_level().is_some();
 
     // Graphics and camera.
     let bounds = app.active_graphics().and_then(|d| d.bounds());
@@ -906,6 +906,12 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                 );
             }
         }
+        Tool::Ceiling => {
+            if let Some(r) = tools::ceiling_region(app, p) {
+                let sp: Vec<Pos2> = r.iter().map(|q| xf.to_screen(*q)).collect();
+                painter.add(Shape::closed_line(sp, Stroke::new(2.0, PREVIEW)));
+            }
+        }
         Tool::Railing { pts } if !pts.is_empty() => {
             let mut line: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
             line.push(xf.to_screen(p));
@@ -1141,7 +1147,7 @@ fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: Eleme
                                 ui.selectable_value(&mut v.detail_level, d, d.label());
                             }
                         });
-                    if !matches!(v.kind, ViewKind::FloorPlan { .. }) {
+                    if v.kind.plan_level().is_none() {
                         egui::ComboBox::from_id_salt("style")
                             .selected_text(v.visual_style.label())
                             .width(110.0)

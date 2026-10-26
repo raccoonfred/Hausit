@@ -82,6 +82,7 @@ pub fn default_materials() -> Vec<MaterialDef> {
         m("Plaster", [240, 238, 232], None),
         m("Render", [232, 228, 218], None),
         m("Gypsum Board", [244, 244, 242], None),
+        m("Ceiling Tile - Mineral Fibre", [246, 246, 240], None),
         m("Screed", [210, 208, 202], Concrete),
         m("Steel", [150, 156, 162], Solid),
         m("Metal Panel - Steel", [170, 178, 186], Solid),

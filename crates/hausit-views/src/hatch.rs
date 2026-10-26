@@ -107,7 +107,7 @@ pub fn pattern_lines(poly: &[DVec2], pattern: FillPattern, along: DVec2, scale: 
 }
 
 /// Lines in direction `dir`, `spacing` apart, clipped to `poly`.
-fn parallel_lines(poly: &[DVec2], dir: DVec2, spacing: f64) -> Vec<(DVec2, DVec2)> {
+pub(crate) fn parallel_lines(poly: &[DVec2], dir: DVec2, spacing: f64) -> Vec<(DVec2, DVec2)> {
     let n = perp(dir);
     let (lo, hi) = range(poly, n);
     let mut out = Vec::new();

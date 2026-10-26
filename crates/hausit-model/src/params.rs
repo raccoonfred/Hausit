@@ -240,6 +240,18 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
                 p.push(Parameter::new("Actual Tread Depth", G::Dimensions, V::Length(g)).ro());
             }
         }
+        ElementData::Ceiling(c) => {
+            p.push(Parameter::new("Level", G::Constraints, V::Element(c.level)).kind(ParamKind::Level));
+            p.push(Parameter::new(
+                "Height Offset From Level",
+                G::Constraints,
+                V::Length(c.height_offset),
+            ));
+            let area = hausit_core::geom::polygon_area(&c.boundary).abs();
+            let perimeter = hausit_core::geom::polygon_perimeter(&c.boundary);
+            p.push(Parameter::new("Perimeter", G::Dimensions, V::Length(perimeter)).ro());
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(area)).ro());
+        }
         ElementData::Railing(r) => {
             p.push(Parameter::new("Base Level", G::Constraints, V::Element(r.level)).kind(ParamKind::Level));
             p.push(Parameter::new("Base Offset", G::Constraints, V::Length(r.base_offset)));
@@ -392,6 +404,11 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Actual Run Width", V::Length(v)) if v > 0.0 => s.width = v,
                 _ => return Err(bad()),
             },
+            ElementData::Ceiling(c) => match (name, value) {
+                ("Level", V::Element(l)) if l.is_valid() => c.level = l,
+                ("Height Offset From Level", V::Length(v)) => c.height_offset = v,
+                _ => return Err(bad()),
+            },
             ElementData::Railing(r) => match (name, value) {
                 ("Base Level", V::Element(l)) if l.is_valid() => r.level = l,
                 ("Base Offset", V::Length(v)) => r.base_offset = v,
@@ -422,7 +439,8 @@ pub fn set_type_parameter(doc: &mut Document, type_id: ElementId, name: &str, va
         return Err(ModelError::InvalidValue(name.to_string()));
     }
     if let V::Length(v) = value {
-        if v <= 0.0 && name != "Default Sill Height" {
+        // Zero is allowed where it means "none".
+        if v <= 0.0 && !matches!(name, "Default Sill Height" | "Grid Spacing") {
             return Err(ModelError::InvalidValue(name.to_string()));
         }
     }

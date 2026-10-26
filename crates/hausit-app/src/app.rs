@@ -340,10 +340,7 @@ impl HausitApp {
 
     /// Level of the active plan view, if the active view is a plan.
     pub fn active_level(&self) -> Option<ElementId> {
-        match self.doc.view(self.active_view?)?.kind {
-            ViewKind::FloorPlan { level } => Some(level),
-            _ => None,
-        }
+        self.doc.view(self.active_view?)?.kind.plan_level()
     }
 
     /// Type the next placed element of `cat` uses (first type by default).
@@ -367,6 +364,7 @@ impl HausitApp {
         let view = self.active_view.and_then(|v| self.doc.view(v)).map(|v| {
             let kind = match v.kind {
                 ViewKind::FloorPlan { .. } => "Floor Plan",
+                ViewKind::CeilingPlan { .. } => "Reflected Ceiling Plan",
                 ViewKind::ThreeD => "3D View",
                 ViewKind::Elevation { .. } => "Elevation",
                 ViewKind::Section { .. } => "Section",

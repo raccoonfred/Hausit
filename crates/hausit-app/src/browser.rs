@@ -21,6 +21,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
             CollapsingHeader::new("Views (all)").default_open(true).show(ui, |ui| {
                 for group in [
                     "Floor Plans",
+                    "Ceiling Plans",
                     "3D Views",
                     "Elevations (Building Elevation)",
                     "Sections (Building Section)",

@@ -8,6 +8,7 @@ pub enum Category {
     Walls,
     Floors,
     Roofs,
+    Ceilings,
     Doors,
     Windows,
     StructuralColumns,
@@ -21,12 +22,13 @@ pub enum Category {
 }
 
 impl Category {
-    pub const ALL: [Category; 15] = [
+    pub const ALL: [Category; 16] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
         Category::Floors,
         Category::Roofs,
+        Category::Ceilings,
         Category::Doors,
         Category::Windows,
         Category::StructuralColumns,
@@ -40,7 +42,8 @@ impl Category {
     ];
 
     /// Categories that have family types (and so appear under "Families").
-    pub const TYPED: [Category; 10] = [
+    pub const TYPED: [Category; 11] = [
+        Category::Ceilings,
         Category::Doors,
         Category::Floors,
         Category::Railings,
@@ -54,7 +57,8 @@ impl Category {
     ];
 
     /// Categories that can be scheduled.
-    pub const SCHEDULABLE: [Category; 11] = [
+    pub const SCHEDULABLE: [Category; 12] = [
+        Category::Ceilings,
         Category::Doors,
         Category::Floors,
         Category::Railings,
@@ -75,6 +79,7 @@ impl Category {
             Category::Walls => "Walls",
             Category::Floors => "Floors",
             Category::Roofs => "Roofs",
+            Category::Ceilings => "Ceilings",
             Category::Doors => "Doors",
             Category::Windows => "Windows",
             Category::StructuralColumns => "Structural Columns",
@@ -96,6 +101,7 @@ impl Category {
             Category::Walls => "Wall",
             Category::Floors => "Floor",
             Category::Roofs => "Roof",
+            Category::Ceilings => "Ceiling",
             Category::Doors => "Door",
             Category::Windows => "Window",
             Category::StructuralColumns => "Structural Column",

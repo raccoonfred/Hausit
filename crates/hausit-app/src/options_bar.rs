@@ -123,6 +123,10 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         path_finish(app, ui);
                     }
                     Tool::Railing { .. } => path_finish(app, ui),
+                    Tool::Ceiling => {
+                        ui.label("Height Offset:");
+                        length_edit(ui, "ceiling_h", &mut app.options.ceiling_height, unit);
+                    }
                     Tool::Footing => {
                         if ui.button("At Columns").on_hover_text("Place a foundation under every column on this level").clicked() {
                             crate::tools::footings_at_columns(app);

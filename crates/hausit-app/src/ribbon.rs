@@ -295,7 +295,7 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
                 sketch: Default::default(),
             },
         );
-        planned(ui, Icon::Planned, "Ceiling", "Ceiling");
+        tool_button(app, ui, Icon::Ceiling, "Ceiling", "Ceiling: Automatic", Tool::Ceiling);
         tool_button(
             app,
             ui,

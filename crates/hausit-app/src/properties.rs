@@ -288,6 +288,7 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
     let Some(view) = app.doc.view(view_id).cloned() else { return };
     let kind = match &view.kind {
         ViewKind::FloorPlan { .. } => "Floor Plan",
+        ViewKind::CeilingPlan { .. } => "Reflected Ceiling Plan",
         ViewKind::ThreeD => "3D View",
         ViewKind::Elevation { .. } => "Elevation",
         ViewKind::Section { .. } => "Section",
@@ -316,7 +317,7 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                         });
                     ui.end_row();
                 }
-                if matches!(v.kind, ViewKind::FloorPlan { .. }) {
+                if v.kind.plan_level().is_some() {
                     ui.label("Cut Plane (View Range)");
                     length_edit(ui, "vp_cut", &mut v.cut_height, unit);
                     ui.end_row();

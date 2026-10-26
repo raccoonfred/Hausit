@@ -33,6 +33,7 @@ impl Element {
             ElementData::WallFooting(f) => Some(f.type_id),
             ElementData::Stair(s) => Some(s.type_id),
             ElementData::Railing(r) => Some(r.type_id),
+            ElementData::Ceiling(c) => Some(c.type_id),
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -53,6 +54,7 @@ impl Element {
             ElementData::WallFooting(f) => f.type_id = t,
             ElementData::Stair(s) => s.type_id = t,
             ElementData::Railing(r) => r.type_id = t,
+            ElementData::Ceiling(c) => c.type_id = t,
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -98,6 +100,7 @@ pub enum ElementData {
     WallFooting(WallFooting),
     Stair(Stair),
     Railing(Railing),
+    Ceiling(Ceiling),
     Room(Room),
     RoomSeparation(SketchedLine),
     Dimension(Dimension),
@@ -118,6 +121,7 @@ impl ElementData {
             ElementData::Footing(_) | ElementData::WallFooting(_) => Category::StructuralFoundations,
             ElementData::Stair(_) => Category::Stairs,
             ElementData::Railing(_) => Category::Railings,
+            ElementData::Ceiling(_) => Category::Ceilings,
             ElementData::Room(_) => Category::Rooms,
             ElementData::RoomSeparation(_) => Category::RoomSeparation,
             ElementData::Dimension(_) => Category::Dimensions,
@@ -396,6 +400,16 @@ pub struct Stair {
     pub path: Vec<DVec2>,
     /// Actual Run Width, mm.
     pub width: f64,
+}
+
+/// A ceiling: a boundary at a height above its level.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Ceiling {
+    pub type_id: ElementId,
+    pub level: ElementId,
+    pub boundary: Vec<DVec2>,
+    /// Height of its underside above the level.
+    pub height_offset: f64,
 }
 
 /// A railing along a path. Railings hosted by a stair follow its slope.

@@ -47,6 +47,7 @@ pub enum Icon {
     WallFoundation,
     Stair,
     Railing,
+    Ceiling,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -479,6 +480,21 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             for x in [5.0, 11.0, 17.0, 23.0, 28.0] {
                 seg((x, 9.0), (x, 27.0), line(1.2, BLUE));
             }
+        }
+        Icon::Ceiling => {
+            poly(
+                &[(3.0, 8.0), (12.0, 3.0), (29.0, 3.0), (20.0, 8.0)],
+                Color32::from_rgb(235, 235, 230),
+                ink,
+            );
+            for (a, b) in [((7.5, 5.5), (24.5, 5.5)), ((7.7, 3.0), (16.0, 8.0)), ((16.0, 3.0), (24.0, 8.0))] {
+                seg(a, b, line(0.8, INK));
+            }
+            seg((6.0, 14.0), (6.0, 29.0), line(1.4, INK));
+            seg((26.0, 10.0), (26.0, 29.0), line(1.4, INK));
+            seg((16.0, 10.0), (16.0, 16.0), line(1.4, BLUE));
+            seg((16.0, 10.0), (13.0, 13.0), line(1.4, BLUE));
+            seg((16.0, 10.0), (19.0, 13.0), line(1.4, BLUE));
         }
         Icon::Planned => {
             p.circle_stroke(at(16.0, 16.0), 11.0 * s, line(1.5, INK));

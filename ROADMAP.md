@@ -58,7 +58,7 @@ needed for full parity, **P3** is long-tail.
 | Floors (sketch, slope arrows, shape editing, sub-elements) | Partial | P0 | Shape editing for falls is P1 |
 | Roofs by footprint | Have | — | |
 | Roof by extrusion, soffits, fascia, gutters, dormers, join/unjoin roof | Missing | P1 | |
-| Ceilings (automatic and sketch, ceiling grids, reflected ceiling plans) | Missing | P0 | |
+| Ceilings (automatic and sketch, ceiling grids, reflected ceiling plans) | Partial | P0 | Automatic ceilings, layered types with a square grid, ceiling plans for every level; sketched ceilings still to do |
 | Stairs by component and by sketch, landings, supports | Partial | P0 | Runs with landings at turns, risers from the level heights, plan cut line and UP arrow; sketch-based stairs, winders and supports still to do |
 | Railings (path, host to stairs, balusters, top rails) | Partial | P0 | Sketched or hosted on stairs (created with them), balusters, top and intermediate rails |
 | Ramps | Missing | P1 | |

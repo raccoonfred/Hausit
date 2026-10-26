@@ -460,7 +460,7 @@ fn layer_polys<'a>(
             let scaled: Vec<(&str, f64)> = layers.map(|(m, d)| (m, d / k.abs())).collect();
             layer_bands(poly, origin, DVec2::Y, out, half, scaled)
         }
-        Some(ElementData::Floor(_)) => {
+        Some(ElementData::Floor(_) | ElementData::Ceiling(_)) => {
             let top = poly.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
             layer_bands(poly, DVec2::new(0.0, top), DVec2::X, DVec2::Y, 0.0, layers)
         }

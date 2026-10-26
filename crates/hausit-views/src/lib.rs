@@ -169,7 +169,7 @@ impl DisplayList {
 /// Builds the graphics of a view. Schedules have none.
 pub fn build(doc: &Document, view: &View) -> DisplayList {
     match &view.kind {
-        ViewKind::FloorPlan { level } => plan::floor_plan(doc, view, *level),
+        ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => plan::floor_plan(doc, view, *level),
         ViewKind::ThreeD | ViewKind::Elevation { .. } | ViewKind::Section { .. } => {
             let Some(frame) = ViewFrame::for_view(doc, view) else {
                 return DisplayList::default();
@@ -222,6 +222,19 @@ mod plan_tests {
                 .any(|it| it.element == Some(w.id) && matches!(it.prim, Prim::Polygon(_)) && it.fill.is_some());
             assert!(cut, "wall {} is not cut", w.id);
         }
+    }
+
+    #[test]
+    fn ceiling_plan_shows_ceilings_not_doors() {
+        let doc = hausit_model::template::sample_project();
+        let rcp = doc.views().find(|v| matches!(v.kind, ViewKind::CeilingPlan { .. })).unwrap();
+        let dl = build(&doc, rcp);
+        let ids: std::collections::HashSet<_> = dl.items.iter().filter_map(|i| i.element).collect();
+        let cat = |c: Category| doc.elements_of(c).any(|e| ids.contains(&e.id));
+        assert!(cat(Category::Ceilings));
+        assert!(cat(Category::Walls));
+        assert!(!cat(Category::Doors));
+        assert!(!cat(Category::Floors));
     }
 }
 

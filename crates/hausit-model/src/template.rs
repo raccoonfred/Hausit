@@ -328,6 +328,24 @@ pub fn load_default_types(doc: &mut Document) {
         railing(1100.0, 1500.0, 50.0, 48.0, 2),
     );
 
+    let ceiling = |t: f64, grid: f64| with(Ceilings, &[("Thickness", len(t)), ("Grid Spacing", len(grid))]);
+    layered(
+        doc,
+        Ceilings,
+        "Compound Ceiling",
+        "600 x 600mm Grid",
+        ceiling(20.0, 600.0),
+        vec![l(F::Finish1, "Ceiling Tile - Mineral Fibre", 20.0)],
+    );
+    layered(
+        doc,
+        Ceilings,
+        "Compound Ceiling",
+        "Plasterboard 12.5mm",
+        ceiling(12.5, 0.0),
+        vec![l(F::Finish1, "Gypsum Board", 12.5)],
+    );
+
     let wf = crate::family::WALL_FOUNDATION;
     doc.add_type(StructuralFoundations, wf, "Bearing Footing - 600 x 300", strip(600.0, 300.0));
     doc.add_type(StructuralFoundations, wf, "Bearing Footing - 900 x 400", strip(900.0, 400.0));
@@ -341,6 +359,7 @@ pub fn add_level_with_plan(doc: &mut Document, name: &str, elevation: f64) -> cr
         building_story: true,
     }));
     doc.add_view(name, ViewKind::FloorPlan { level: id });
+    doc.add_view(name, ViewKind::CeilingPlan { level: id });
     id
 }
 
@@ -493,6 +512,22 @@ pub fn sample_project() -> Document {
         if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {
             w.attached_top = vec![roof];
         }
+    }
+
+    // Ceilings in both rooms, 2600 above the floor.
+    let ceiling_t = t(&doc, Category::Ceilings, "600 x 600mm Grid");
+    for (x0, x1) in [(175.0, 6000.0 - 67.5), (6000.0 + 67.5, 11825.0)] {
+        doc.add_element(ElementData::Ceiling(Ceiling {
+            type_id: ceiling_t,
+            level: l1,
+            boundary: vec![
+                DVec2::new(x0, 175.0),
+                DVec2::new(x1, 175.0),
+                DVec2::new(x1, 7825.0),
+                DVec2::new(x0, 7825.0),
+            ],
+            height_offset: 2600.0,
+        }));
     }
 
     let strip = doc

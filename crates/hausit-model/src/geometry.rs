@@ -215,6 +215,14 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             vec![Part::prism(Material::Default, Prism::new(outline, z0, z1))]
         }
         ElementData::Stair(_) => stair_parts(doc, id)?,
+        ElementData::Ceiling(c) => {
+            let t = doc.type_of(id).map(|t| t.thickness()).unwrap_or(25.0);
+            let z = doc.level_elevation(c.level) + c.height_offset;
+            if c.boundary.len() < 3 {
+                return None;
+            }
+            vec![Part::prism(Material::Default, Prism::new(c.boundary.clone(), z, z + t))]
+        }
         ElementData::Railing(r) => railing_parts(doc, id, r),
         ElementData::Level(_)
         | ElementData::Grid(_)
