@@ -31,8 +31,10 @@ impl BasicFileInfo {
 /// printable characters and line breaks.
 fn decode_utf16(bytes: &[u8], offset: usize) -> String {
     let units: Vec<u16> = bytes[offset.min(bytes.len())..]
-        .chunks_exact(2)
-        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
         .collect();
     char::decode_utf16(units)
         .map(|r| r.unwrap_or('\u{FFFD}'))
