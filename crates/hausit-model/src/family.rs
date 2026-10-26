@@ -16,6 +16,10 @@ pub struct FamilyType {
     pub family: String,
     pub name: String,
     pub params: TypeParams,
+    /// Compound walls, floors and roofs: the layers, exterior (or top)
+    /// first. Empty for a plain type with one unnamed material.
+    #[serde(default)]
+    pub layers: Vec<crate::materials::Layer>,
 }
 
 impl FamilyType {
@@ -41,6 +45,22 @@ impl FamilyType {
             Category::Doors | Category::Windows => self.length_or("Thickness", 50.0),
             _ => self.length_or("Thickness", 200.0),
         }
+    }
+
+    /// Sets the layers and keeps the type's Width/Thickness equal to
+    /// their total.
+    pub fn set_layers(&mut self, layers: Vec<crate::materials::Layer>) {
+        let total: f64 = layers.iter().map(|l| l.thickness).sum();
+        if total > 0.0 {
+            let key = if self.category == Category::Walls { "Width" } else { "Thickness" };
+            self.params.insert(key.into(), ParamValue::Length(total));
+        }
+        self.layers = layers;
+    }
+
+    /// Whether the type has a layer structure to edit.
+    pub fn has_structure(&self) -> bool {
+        matches!(self.category, Category::Walls | Category::Floors | Category::Roofs)
     }
 
     pub fn width(&self) -> f64 {

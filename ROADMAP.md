@@ -51,7 +51,7 @@ needed for full parity, **P3** is long-tail.
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
 | Walls (basic, joins, attach) | Have | — | |
-| Compound wall layers, wrapping, layer joins | Missing | P0 | Needed for correct plan poché and quantities |
+| Compound wall layers, wrapping, layer joins | Partial | P0 | Layers with plan and section poché and an assembly editor; wrapping at ends and layer joins still to do |
 | Stacked walls, curtain walls, curtain grids, mullions, panels | Missing | P1 | Curtain walls are on almost every commercial job |
 | Wall sweeps and reveals, profile edits, wall openings | Missing | P1 | |
 | Arc, ellipse and spline walls | Missing | P1 | Arc walls are P0 for many users |
@@ -133,7 +133,7 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Object styles, line styles, line weights by scale, line patterns, fill patterns | Missing | P0 | Drawing quality depends on this |
 | View templates, visibility/graphics overrides, filters | Missing | P0 | |
 | View range, underlay, crop regions, scope boxes, detail levels | Partial | P0 | |
-| Materials with graphics, appearance, cut/surface patterns | Missing | P0 | |
+| Materials with graphics, appearance, cut/surface patterns | Partial | P0 | Material Browser with colour and cut patterns; surface patterns and appearance still to do |
 | Schedules (quantities, material takeoff, sheet list, view list, note blocks, key schedules, calculated values, conditional formatting) | Partial | P1 | |
 
 ### 2.6 Sheets and printing

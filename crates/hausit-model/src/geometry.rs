@@ -790,11 +790,11 @@ mod tests {
         let doc = sample_project();
         let wall = doc.elements_of(Category::Walls).next().unwrap().id;
         let o = wall_outline(&doc, wall).unwrap();
-        // First wall goes (0,0)→(0,8000), 300 thick. Its exterior (left,
-        // x<0) face should extend to the outer corners at y=-150 / 8150.
-        assert!((o[0] - DVec2::new(-150.0, -150.0)).length() < 1e-6, "{o:?}");
-        assert!((o[1] - DVec2::new(-150.0, 8150.0)).length() < 1e-6, "{o:?}");
-        assert!((o[3] - DVec2::new(150.0, 150.0)).length() < 1e-6, "{o:?}");
+        // First wall goes (0,0)→(0,8000), 350 thick. Its exterior (left,
+        // x<0) face should extend to the outer corners at y=-175 / 8175.
+        assert!((o[0] - DVec2::new(-175.0, -175.0)).length() < 1e-6, "{o:?}");
+        assert!((o[1] - DVec2::new(-175.0, 8175.0)).length() < 1e-6, "{o:?}");
+        assert!((o[3] - DVec2::new(175.0, 175.0)).length() < 1e-6, "{o:?}");
     }
 
     #[test]
@@ -813,8 +813,8 @@ mod tests {
             .iter()
             .map(|p| if let Shape::Prism(p) = &p.shape { p.volume() } else { 0.0 })
             .sum();
-        let gross = w.length() * 300.0 * 4000.0; // a square mitre keeps centreline length × thickness
-        let holes = 915.0 * 2134.0 * 300.0 + 1200.0 * 1500.0 * 300.0;
+        let gross = w.length() * 350.0 * 4000.0; // a square mitre keeps centreline length × thickness
+        let holes = 915.0 * 2134.0 * 350.0 + 1200.0 * 1500.0 * 350.0;
         assert!((vol - (gross - holes)).abs() < 1.0, "vol {vol} expected {}", gross - holes);
     }
 

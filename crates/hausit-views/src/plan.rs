@@ -3,12 +3,13 @@
 //! symbols, grids, and section/elevation marks.
 
 use crate::annotate::{grid_bubble, view_marks};
+use crate::hatch::{draw_band, layer_bands};
 use crate::{pen, Anchor, DisplayList, Prim, Rgba, Stroke, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, ElementId, LengthUnit};
 use hausit_model::geometry::{column_extent, column_outline, element_geometry, opening_frame, roof_plan_lines, Material, Shape};
 use hausit_model::rooms::room_info;
-use hausit_model::{Category, Document, ElementData, ParamValue, View};
+use hausit_model::{Category, DetailLevel, Document, ElementData, ParamValue, View};
 
 /// Paper height of tag text, mm.
 const TAG_TEXT: f64 = 2.5;
@@ -104,6 +105,11 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     let mut cut_edges: Vec<(DVec2, DVec2, ElementId)> = Vec::new();
     for e in doc.elements_of(Category::Walls) {
         let Some(g) = element_geometry(doc, e.id) else { continue };
+        // Compound types show their layers at Medium and Fine detail.
+        let layered = match (&e.data, doc.type_of(e.id)) {
+            (ElementData::Wall(w), Some(t)) if !t.layers.is_empty() && view.detail_level != DetailLevel::Coarse => Some((w, t)),
+            _ => None,
+        };
         for part in &g.parts {
             // Straight pieces and pieces attached to a roof above.
             let Some((footprint, z0, z1)) = part.vertical_extent() else {
@@ -111,6 +117,24 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             };
             if z0 <= cut_z && cut_z < z1 {
                 dl.push(Prim::Polygon(footprint.clone()), None, Some(CUT_FILL_LIGHT), Some(e.id));
+                if let Some((w, t)) = layered {
+                    let dir = w.direction();
+                    let half = t.layers.iter().map(|l| l.thickness).sum::<f64>() * 0.5;
+                    let (bands, lines) = layer_bands(
+                        &footprint,
+                        w.start,
+                        dir,
+                        perp(dir),
+                        half,
+                        t.layers.iter().map(|l| (l.material.as_str(), l.thickness)),
+                    );
+                    for band in &bands {
+                        draw_band(&mut dl, doc, band, view.scale as f64, None);
+                    }
+                    for (a, b) in lines {
+                        dl.line(a, b, THIN, None);
+                    }
+                }
                 let n = footprint.len();
                 for i in 0..n {
                     cut_edges.push((footprint[i], footprint[(i + 1) % n], e.id));

@@ -111,11 +111,11 @@ mod tests {
         };
         let l = layout(&doc, &d).unwrap();
         assert!((l.values[0].abs() - 6000.0).abs() < 1e-6, "{:?}", l.values);
-        // Exterior face of the west wall is 150 mm further out.
+        // Exterior face of the west wall is 175 mm further out.
         let d2 = Dimension {
             refs: vec![DimRef::Wall { wall: west, side: 1 }, DimRef::Wall { wall: part, side: 0 }],
             ..d
         };
-        assert!((layout(&doc, &d2).unwrap().values[0].abs() - 6150.0).abs() < 1e-6);
+        assert!((layout(&doc, &d2).unwrap().values[0].abs() - 6175.0).abs() < 1e-6);
     }
 }

@@ -5,6 +5,7 @@ use crate::icons::{self, Icon};
 use crate::options_bar::length_edit;
 use egui::{vec2, Color32, Context, RichText, Sense, Ui};
 use hausit_core::{ElementId, LengthUnit};
+use hausit_model::materials::{FillPattern, Layer, LayerFunction, MaterialDef};
 use hausit_model::params::set_type_parameter;
 use hausit_model::{Category, Document, ParamValue, ScheduleDef, TypeParams, ViewKind};
 use std::path::PathBuf;
@@ -17,6 +18,14 @@ pub struct RevitFileDialog {
 pub struct TypeProps {
     pub type_id: ElementId,
     pub params: TypeParams,
+    /// Compound structure, exterior (walls) or top (floors, roofs) first.
+    pub layers: Vec<Layer>,
+}
+
+/// Manage ▸ Materials: (name when opened, material) pairs and the row shown.
+pub struct MaterialsDialog {
+    pub rows: Vec<(String, MaterialDef)>,
+    pub selected: usize,
 }
 
 pub struct NewSchedule {
@@ -49,6 +58,7 @@ pub struct Dialogs {
     pub attach_walls: Option<(ElementId, Vec<ElementId>)>,
     /// Object Styles dialog: the settings being edited.
     pub object_styles: Option<(hausit_model::styles::ObjectStyles, hausit_model::styles::LineWeights)>,
+    pub materials: Option<MaterialsDialog>,
 }
 
 impl Dialogs {
@@ -57,6 +67,7 @@ impl Dialogs {
             self.type_props = Some(TypeProps {
                 type_id,
                 params: t.params.clone(),
+                layers: t.layers.clone(),
             });
         }
     }
@@ -84,6 +95,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     roof_level(app, ctx);
     attach_walls(app, ctx);
     object_styles(app, ctx);
+    materials(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;
@@ -162,7 +174,12 @@ fn type_properties(app: &mut HausitApp, ctx: &Context) {
                 ui.end_row();
                 for (name, value) in tp.params.iter_mut() {
                     ui.label(name);
+                    let from_layers = !tp.layers.is_empty() && (name == "Width" || name == "Thickness");
                     match value {
+                        ParamValue::Length(v) if from_layers => {
+                            ui.label(hausit_core::units::format_length(*v, unit))
+                                .on_hover_text("Set by the layers below");
+                        }
                         ParamValue::Length(v) => {
                             length_edit(ui, &format!("tp-{}-{name}", ft.id), v, unit);
                         }
@@ -182,6 +199,19 @@ fn type_properties(app: &mut HausitApp, ctx: &Context) {
                     ui.end_row();
                 }
             });
+        if ft.has_structure() {
+            let side = if ft.category == Category::Walls {
+                "exterior side first"
+            } else {
+                "top first"
+            };
+            egui::CollapsingHeader::new(format!("Structure ({side})"))
+                .default_open(!tp.layers.is_empty())
+                .show(ui, |ui| {
+                    let names: Vec<String> = app.doc.materials.iter().map(|m| m.name.clone()).collect();
+                    edit_layers(ui, &mut tp.layers, &names, unit, ft.id);
+                });
+        }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -203,16 +233,29 @@ fn type_properties(app: &mut HausitApp, ctx: &Context) {
     }
     let apply = |app: &mut HausitApp| {
         let Some(tp) = app.dialogs.type_props.as_ref() else { return };
-        let (id, params) = (tp.type_id, tp.params.clone());
-        if app.doc.family_type(id).map(|t| t.params == params).unwrap_or(true) {
+        let (id, params, layers) = (tp.type_id, tp.params.clone(), tp.layers.clone());
+        if app
+            .doc
+            .family_type(id)
+            .map(|t| t.params == params && t.layers == layers)
+            .unwrap_or(true)
+        {
             return;
         }
         app.transact("Modify Type", |doc| {
             for (k, v) in params {
                 set_type_parameter(doc, id, &k, v)?;
             }
+            if let Some(t) = doc.family_type_mut(id) {
+                if t.layers != layers {
+                    t.set_layers(layers);
+                }
+            }
+            doc.touch();
             Ok(())
         });
+        // Show the width the layers add up to.
+        app.dialogs.open_type_properties(&app.doc, id);
     };
     match action {
         Some("ok") => {
@@ -687,4 +730,173 @@ fn card(ui: &mut Ui, icon: Icon, title: &str, text: &str) -> bool {
     );
     p.galley(rect.left_top() + vec2(10.0, 98.0), galley, Color32::DARK_GRAY);
     resp.clicked()
+}
+
+/// The layer table of Type Properties ▸ Structure (Revit's Edit Assembly).
+fn edit_layers(ui: &mut Ui, layers: &mut Vec<Layer>, materials: &[String], unit: LengthUnit, salt: ElementId) {
+    let mut op: Option<(&str, usize)> = None;
+    egui::Grid::new(("layers", salt)).striped(true).num_columns(5).show(ui, |ui| {
+        for h in ["", "Function", "Material", "Thickness", ""] {
+            ui.label(RichText::new(h).strong());
+        }
+        ui.end_row();
+        for (i, l) in layers.iter_mut().enumerate() {
+            ui.label((i + 1).to_string());
+            egui::ComboBox::from_id_salt(("lf", salt, i))
+                .selected_text(l.function.label())
+                .width(150.0)
+                .show_ui(ui, |ui| {
+                    for f in LayerFunction::ALL {
+                        ui.selectable_value(&mut l.function, f, f.label());
+                    }
+                });
+            egui::ComboBox::from_id_salt(("lm", salt, i))
+                .selected_text(&l.material)
+                .width(190.0)
+                .show_ui(ui, |ui| {
+                    for m in materials {
+                        if ui.selectable_label(&l.material == m, m).clicked() {
+                            l.material = m.clone();
+                        }
+                    }
+                });
+            length_edit(ui, &format!("layer-{salt}-{i}"), &mut l.thickness, unit);
+            ui.horizontal(|ui| {
+                if ui.small_button("⬆").on_hover_text("Up").clicked() {
+                    op = Some(("up", i));
+                }
+                if ui.small_button("⬇").on_hover_text("Down").clicked() {
+                    op = Some(("down", i));
+                }
+                if ui.small_button("✕").on_hover_text("Delete").clicked() {
+                    op = Some(("delete", i));
+                }
+            });
+            ui.end_row();
+        }
+    });
+    let total: f64 = layers.iter().map(|l| l.thickness).sum();
+    ui.horizontal(|ui| {
+        if ui.button("Insert").clicked() {
+            op = Some(("insert", layers.len()));
+        }
+        ui.label(format!("Total thickness: {}", hausit_core::units::format_length(total, unit)));
+    });
+    match op {
+        Some(("up", i)) if i > 0 => layers.swap(i, i - 1),
+        Some(("down", i)) if i + 1 < layers.len() => layers.swap(i, i + 1),
+        Some(("delete", i)) => {
+            layers.remove(i);
+        }
+        Some(("insert", i)) => {
+            let material = materials.first().cloned().unwrap_or_default();
+            layers.insert(
+                i,
+                Layer {
+                    function: LayerFunction::Structure,
+                    material,
+                    thickness: 100.0,
+                },
+            );
+        }
+        _ => {}
+    }
+    for l in layers.iter_mut() {
+        l.thickness = l.thickness.max(0.0);
+    }
+}
+
+fn materials(app: &mut HausitApp, ctx: &Context) {
+    let Some(md) = app.dialogs.materials.as_mut() else { return };
+    let mut result = None;
+    window("Material Browser").show(ctx, |ui| {
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(220.0);
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    for (i, (_, m)) in md.rows.iter().enumerate() {
+                        ui.horizontal(|ui| {
+                            let [r, g, b] = m.color;
+                            let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+                            ui.painter().rect_filled(rect, 2.0, Color32::from_rgb(r, g, b));
+                            if ui.selectable_label(md.selected == i, &m.name).clicked() {
+                                md.selected = i;
+                            }
+                        });
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if ui.button("Duplicate").clicked() {
+                        if let Some((_, m)) = md.rows.get(md.selected) {
+                            let mut copy = m.clone();
+                            copy.name = format!("{} (1)", m.name);
+                            md.rows.push((String::new(), copy));
+                            md.selected = md.rows.len() - 1;
+                        }
+                    }
+                    if ui.button("Delete").clicked() && md.rows.len() > 1 {
+                        md.rows.remove(md.selected);
+                        md.selected = md.selected.min(md.rows.len() - 1);
+                    }
+                });
+            });
+            ui.add_space(12.0);
+            if let Some((_, m)) = md.rows.get_mut(md.selected) {
+                egui::Grid::new("material").num_columns(2).show(ui, |ui| {
+                    ui.label("Name");
+                    ui.text_edit_singleline(&mut m.name);
+                    ui.end_row();
+                    ui.label("Shading colour");
+                    ui.color_edit_button_srgb(&mut m.color);
+                    ui.end_row();
+                    ui.label("Cut pattern");
+                    egui::ComboBox::from_id_salt("cut_pattern")
+                        .selected_text(m.cut_pattern.label())
+                        .show_ui(ui, |ui| {
+                            for f in FillPattern::ALL {
+                                ui.selectable_value(&mut m.cut_pattern, f, f.label());
+                            }
+                        });
+                    ui.end_row();
+                    ui.label("Pattern colour");
+                    ui.color_edit_button_srgb(&mut m.pattern_color);
+                    ui.end_row();
+                });
+            }
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button("   OK   ").clicked() {
+                result = Some(true);
+            }
+            if ui.button(" Cancel ").clicked() {
+                result = Some(false);
+            }
+        });
+    });
+    match result {
+        Some(true) => {
+            let md = app.dialogs.materials.take().unwrap();
+            app.transact("Materials", |doc| {
+                // Layers follow renamed materials.
+                for (old, m) in &md.rows {
+                    if !old.is_empty() && *old != m.name {
+                        let ids: Vec<ElementId> = doc.family_types().map(|t| t.id).collect();
+                        for id in ids {
+                            if let Some(t) = doc.family_type_mut(id) {
+                                for l in t.layers.iter_mut().filter(|l| l.material == *old) {
+                                    l.material = m.name.clone();
+                                }
+                            }
+                        }
+                    }
+                }
+                doc.materials = md.rows.into_iter().map(|(_, m)| m).collect();
+                doc.touch();
+                Ok(())
+            });
+        }
+        Some(false) => app.dialogs.materials = None,
+        None => {}
+    }
 }

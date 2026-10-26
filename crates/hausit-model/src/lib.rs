@@ -18,6 +18,7 @@ pub mod family;
 pub mod geometry;
 pub mod history;
 pub mod index;
+pub mod materials;
 pub mod params;
 pub mod rooms;
 pub mod schedule;

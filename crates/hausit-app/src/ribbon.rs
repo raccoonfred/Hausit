@@ -496,7 +496,12 @@ fn manage(app: &mut HausitApp, ui: &mut Ui) {
         if big(ui, Icon::Units, "Units", "Project Units", false, true) {
             app.dialogs.units = true;
         }
-        planned(ui, Icon::Planned, "Materials", "Materials");
+        if big(ui, Icon::TypeProps, "Materials", "Materials: colours and cut patterns", false, true) {
+            app.dialogs.materials = Some(crate::dialogs::MaterialsDialog {
+                rows: app.doc.materials.iter().map(|m| (m.name.clone(), m.clone())).collect(),
+                selected: 0,
+            });
+        }
         if big(
             ui,
             Icon::TypeProps,

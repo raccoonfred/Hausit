@@ -4,11 +4,12 @@
 
 use crate::bsp::{Bsp, Poly};
 use crate::frame::ViewFrame;
+use crate::hatch::{draw_band, layer_bands, Band};
 use crate::{DisplayList, Prim, Rgba, Stroke, BLACK, CUT_FILL};
-use hausit_core::geom::{clip_polygon_2d, polygon_area};
+use hausit_core::geom::{clip_polygon_2d, perp, polygon_area};
 use hausit_core::{DVec2, DVec3, ElementId, Plane};
 use hausit_model::geometry::{model_geometry, Material, Shape};
-use hausit_model::{Category, Document, View, VisualStyle};
+use hausit_model::{Category, Document, ElementData, View, VisualStyle};
 
 /// Base colour of each category in shaded views.
 pub fn category_color(cat: Category, material: Material) -> Rgba {
@@ -344,16 +345,22 @@ fn section_caps(
                         };
                         let rect = vec![DVec2::new(a, p.z0), DVec2::new(b, p.z0), DVec2::new(b, p.z1), DVec2::new(a, p.z1)];
                         let rect = clip_polygon_2d(&rect, DVec2::X, u1);
-                        dl.push(
-                            Prim::Polygon(rect),
-                            Some(crate::pen(doc, g.category, true, view.scale)),
-                            Some(fill),
-                            Some(g.id),
-                        );
+                        let edge = crate::pen(doc, g.category, true, view.scale);
+                        let (bands, lines) = if part.material == Material::Glass {
+                            (vec![], vec![])
+                        } else {
+                            layer_polys(doc, view, g, &rect, o, r2)
+                        };
+                        if bands.is_empty() {
+                            dl.push(Prim::Polygon(rect), Some(edge), Some(fill), Some(g.id));
+                            continue;
+                        }
+                        draw_layers(dl, doc, view, g.id, rect, &bands, &lines, edge);
                     }
                 }
                 Shape::Faces(faces) => {
                     let plane = Plane::from_point_normal(frame.origin, frame.forward);
+                    let mut segs = Vec::new();
                     for face in faces {
                         let mut hits = Vec::new();
                         let m = face.pts.len();
@@ -366,11 +373,133 @@ fn section_caps(
                             }
                         }
                         if hits.len() == 2 && hits.iter().all(|h| h.x >= u0 - 1e-6 && h.x <= u1 + 1e-6) {
-                            dl.line(hits[0], hits[1], crate::pen(doc, g.category, true, view.scale), Some(g.id));
+                            segs.push((hits[0], hits[1]));
+                        }
+                    }
+                    // A layered solid cut whole gets its layers too.
+                    let edge = crate::pen(doc, g.category, true, view.scale);
+                    let loops = chain_loops(segs.clone());
+                    let layered: Vec<_> = loops
+                        .into_iter()
+                        .map(|l| {
+                            let (b, lines) = layer_polys(doc, view, g, &l, o, r2);
+                            (l, b, lines)
+                        })
+                        .filter(|(_, b, _)| !b.is_empty())
+                        .collect();
+                    if layered.is_empty() {
+                        for (a, b) in segs {
+                            dl.line(a, b, edge, Some(g.id));
+                        }
+                    } else {
+                        for (l, bands, lines) in layered {
+                            draw_layers(dl, doc, view, g.id, l, &bands, &lines, edge);
                         }
                     }
                 }
             }
         }
     }
+}
+
+/// A layered wall or floor cut in section: `poly` (view coordinates) split
+/// into its layers, and the thin lines between them. Empty when the
+/// element's type has no layers, the view is Coarse, or the cut runs along
+/// a wall.
+fn layer_polys<'a>(
+    doc: &'a Document,
+    view: &View,
+    g: &hausit_model::geometry::ElementGeometry,
+    poly: &[DVec2],
+    o: DVec2,
+    r2: DVec2,
+) -> (Vec<Band<'a>>, Vec<(DVec2, DVec2)>) {
+    let none = (vec![], vec![]);
+    if view.detail_level == hausit_model::DetailLevel::Coarse {
+        return none;
+    }
+    let Some(t) = doc.type_of(g.id).filter(|t| !t.layers.is_empty()) else {
+        return none;
+    };
+    let total: f64 = t.layers.iter().map(|l| l.thickness).sum();
+    let layers = t.layers.iter().map(|l| (l.material.as_str(), l.thickness));
+    match doc.element(g.id).map(|e| &e.data) {
+        Some(ElementData::Wall(w)) => {
+            // Distance s from the wall line towards the exterior is linear
+            // along the cut: s(u) = s0 + k·u, so layers are vertical bands.
+            let nrm = perp(w.direction());
+            let k = r2.dot(nrm);
+            if k.abs() < 1e-6 {
+                return none;
+            }
+            let s0 = (o - w.start).dot(nrm);
+            // In u, the exterior face is at (total/2 - s0)/k, running
+            // towards decreasing s.
+            let out = DVec2::new(k.signum(), 0.0);
+            let origin = DVec2::new(-s0 / k, 0.0);
+            let half = total / 2.0 / k.abs();
+            let scaled: Vec<(&str, f64)> = layers.map(|(m, d)| (m, d / k.abs())).collect();
+            layer_bands(poly, origin, DVec2::Y, out, half, scaled)
+        }
+        Some(ElementData::Floor(_)) => {
+            let top = poly.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max);
+            layer_bands(poly, DVec2::new(0.0, top), DVec2::X, DVec2::Y, 0.0, layers)
+        }
+        _ => none,
+    }
+}
+
+/// Joins cut segments end to end into closed loops.
+fn chain_loops(mut segs: Vec<(DVec2, DVec2)>) -> Vec<Vec<DVec2>> {
+    let mut loops = Vec::new();
+    while let Some((a, b)) = segs.pop() {
+        let mut pts = vec![a, b];
+        loop {
+            let end = *pts.last().unwrap();
+            if end.distance(pts[0]) < 0.5 && pts.len() > 2 {
+                pts.pop();
+                break;
+            }
+            let Some(i) = segs.iter().position(|(p, q)| p.distance(end) < 0.5 || q.distance(end) < 0.5) else {
+                break;
+            };
+            let (p, q) = segs.swap_remove(i);
+            pts.push(if p.distance(end) < 0.5 { q } else { p });
+        }
+        if pts.len() >= 3 {
+            loops.push(pts);
+        }
+    }
+    loops
+}
+
+/// Fills a cut region layer by layer, with thin lines between layers and
+/// the heavy cut outline on top.
+#[allow(clippy::too_many_arguments)]
+fn draw_layers(
+    dl: &mut DisplayList,
+    doc: &Document,
+    view: &View,
+    id: ElementId,
+    outline: Vec<DVec2>,
+    bands: &[Band],
+    lines: &[(DVec2, DVec2)],
+    edge: Stroke,
+) {
+    dl.push(Prim::Polygon(outline.clone()), None, Some(CUT_FILL), Some(id));
+    for band in bands {
+        draw_band(dl, doc, band, view.scale as f64, None);
+    }
+    for (a, b) in lines {
+        dl.line(*a, *b, crate::THIN, None);
+    }
+    dl.push(
+        Prim::Polyline {
+            pts: outline,
+            closed: true,
+        },
+        Some(edge),
+        None,
+        Some(id),
+    );
 }

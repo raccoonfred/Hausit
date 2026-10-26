@@ -9,6 +9,7 @@ mod annotate;
 mod bsp;
 mod dims;
 pub mod frame;
+mod hatch;
 mod plan;
 mod project;
 

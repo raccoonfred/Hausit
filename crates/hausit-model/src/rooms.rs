@@ -219,9 +219,9 @@ mod tests {
             .filter(|f| point_in_polygon(p, f))
             .min_by(|a, b| polygon_area(a).total_cmp(&polygon_area(b)));
         let room = room.expect("room around the left half");
-        // 300 mm exterior walls, 135 mm partition at x = 6000.
+        // 350 mm exterior walls, 135 mm partition at x = 6000.
         let a = polygon_area(room) / 1e6;
-        let expect = (6000.0 - 67.5 - 150.0) * (8000.0 - 300.0) / 1e6;
+        let expect = (6000.0 - 67.5 - 175.0) * (8000.0 - 350.0) / 1e6;
         assert!((a - expect).abs() < 1e-6, "area {a}, expected {expect}");
     }
 }

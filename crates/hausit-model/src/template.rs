@@ -28,25 +28,128 @@ fn text(s: &str) -> ParamValue {
 
 /// Adds the default type library to a document.
 pub fn load_default_types(doc: &mut Document) {
+    use crate::materials::{Layer, LayerFunction as F};
     use Category::*;
     let wall = |w: f64, f: &str| with(Walls, &[("Width", len(w)), ("Function", text(f))]);
+    // A compound type: the layers set its width or thickness.
+    let layered = |doc: &mut Document, cat: Category, family: &str, name: &str, params: TypeParams, layers: Vec<Layer>| {
+        let id = doc.add_type(cat, family, name, params);
+        if let Some(t) = doc.family_type_mut(id) {
+            t.set_layers(layers);
+        }
+        id
+    };
+    let l = Layer::new;
     doc.add_type(Walls, "Basic Wall", "Generic - 200mm", wall(200.0, "Exterior"));
     doc.add_type(Walls, "Basic Wall", "Generic - 300mm", wall(300.0, "Exterior"));
-    doc.add_type(Walls, "Basic Wall", "Exterior - Brick on Block", wall(350.0, "Exterior"));
-    doc.add_type(Walls, "Basic Wall", "Interior - 135mm Partition", wall(135.0, "Interior"));
-    doc.add_type(Walls, "Basic Wall", "Interior - 100mm Partition", wall(100.0, "Interior"));
+    layered(
+        doc,
+        Walls,
+        "Basic Wall",
+        "Exterior - Brick on Block",
+        wall(350.0, "Exterior"),
+        vec![
+            l(F::Finish1, "Masonry - Brick", 102.5),
+            l(F::Thermal, "Air Gap", 50.0),
+            l(F::Thermal, "Insulation - Rigid Board", 50.0),
+            l(F::Structure, "Masonry - Concrete Block", 140.0),
+            l(F::Finish2, "Plaster", 7.5),
+        ],
+    );
+    layered(
+        doc,
+        Walls,
+        "Basic Wall",
+        "Exterior - Rendered Concrete 310mm",
+        wall(310.0, "Exterior"),
+        vec![
+            l(F::Finish1, "Render", 10.0),
+            l(F::Thermal, "Insulation - Rigid Board", 100.0),
+            l(F::Structure, "Concrete, Cast-in-Place", 200.0),
+        ],
+    );
+    layered(
+        doc,
+        Walls,
+        "Basic Wall",
+        "Exterior - Insulated Metal Panel 150mm",
+        wall(150.0, "Exterior"),
+        vec![
+            l(F::Finish1, "Metal Panel - Steel", 2.0),
+            l(F::Thermal, "Insulation - Mineral Wool", 146.0),
+            l(F::Finish2, "Metal Panel - Steel", 2.0),
+        ],
+    );
+    layered(
+        doc,
+        Walls,
+        "Basic Wall",
+        "Interior - 135mm Partition",
+        wall(135.0, "Interior"),
+        vec![
+            l(F::Finish1, "Gypsum Board", 12.5),
+            l(F::Structure, "Insulation - Mineral Wool", 110.0),
+            l(F::Finish2, "Gypsum Board", 12.5),
+        ],
+    );
+    layered(
+        doc,
+        Walls,
+        "Basic Wall",
+        "Interior - 100mm Partition",
+        wall(100.0, "Interior"),
+        vec![
+            l(F::Finish1, "Gypsum Board", 12.5),
+            l(F::Structure, "Insulation - Mineral Wool", 75.0),
+            l(F::Finish2, "Gypsum Board", 12.5),
+        ],
+    );
+    layered(
+        doc,
+        Walls,
+        "Basic Wall",
+        "Interior - 200mm Blockwork",
+        wall(200.0, "Interior"),
+        vec![l(F::Structure, "Masonry - Concrete Block", 200.0)],
+    );
 
     doc.add_type(Floors, "Floor", "Generic 150mm", with(Floors, &[("Thickness", len(150.0))]));
     doc.add_type(Floors, "Floor", "Generic 300mm", with(Floors, &[("Thickness", len(300.0))]));
-    doc.add_type(
+    layered(
+        doc,
         Floors,
         "Floor",
         "Concrete - Domestic 425mm",
         with(Floors, &[("Thickness", len(425.0))]),
+        vec![
+            l(F::Finish1, "Screed", 65.0),
+            l(F::Thermal, "Insulation - Rigid Board", 100.0),
+            l(F::Structure, "Concrete, Cast-in-Place", 260.0),
+        ],
+    );
+    layered(
+        doc,
+        Floors,
+        "Floor",
+        "Concrete Slab - Industrial 250mm",
+        with(Floors, &[("Thickness", len(250.0))]),
+        vec![l(F::Structure, "Concrete, Cast-in-Place", 250.0)],
     );
 
     doc.add_type(Roofs, "Basic Roof", "Generic - 400mm", with(Roofs, &[("Thickness", len(400.0))]));
     doc.add_type(Roofs, "Basic Roof", "Generic - 125mm", with(Roofs, &[("Thickness", len(125.0))]));
+    layered(
+        doc,
+        Roofs,
+        "Basic Roof",
+        "Insulated Metal Sheet 200mm",
+        with(Roofs, &[("Thickness", len(200.0))]),
+        vec![
+            l(F::Finish1, "Metal Panel - Steel", 2.0),
+            l(F::Thermal, "Insulation - Mineral Wool", 196.0),
+            l(F::Finish2, "Metal Panel - Steel", 2.0),
+        ],
+    );
 
     let door = |w: f64, h: f64, leaves: i64| {
         with(
@@ -115,7 +218,7 @@ pub fn sample_project() -> Document {
     let levels = doc.levels();
     let (l1, l2) = (levels[0].0, levels[1].0);
     let t = |doc: &Document, c: Category, name: &str| doc.types_of(c).find(|t| t.name == name).unwrap().id;
-    let ext = t(&doc, Category::Walls, "Generic - 300mm");
+    let ext = t(&doc, Category::Walls, "Exterior - Brick on Block");
     let int = t(&doc, Category::Walls, "Interior - 135mm Partition");
 
     // Grids
@@ -199,7 +302,7 @@ pub fn sample_project() -> Document {
     doc.add_element(ElementData::Window(opening(win, walls[0], 4000.0, 800.0)));
     doc.add_element(ElementData::Window(opening(win, walls[2], 4000.0, 800.0)));
 
-    let floor_t = t(&doc, Category::Floors, "Generic 300mm");
+    let floor_t = t(&doc, Category::Floors, "Concrete - Domestic 425mm");
     let outer = vec![
         DVec2::new(-150.0, -150.0),
         DVec2::new(12150.0, -150.0),

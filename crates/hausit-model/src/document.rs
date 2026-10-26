@@ -42,6 +42,8 @@ pub struct Document {
     pub object_styles: crate::styles::ObjectStyles,
     #[serde(default)]
     pub line_weights: crate::styles::LineWeights,
+    #[serde(default = "crate::materials::default_materials")]
+    pub materials: Vec<crate::materials::MaterialDef>,
     elements: IndexMap<ElementId, Element>,
     types: IndexMap<ElementId, FamilyType>,
     views: IndexMap<ElementId, View>,
@@ -71,6 +73,7 @@ impl Document {
             length_unit: LengthUnit::Millimeters,
             object_styles: Default::default(),
             line_weights: Default::default(),
+            materials: crate::materials::default_materials(),
             elements: IndexMap::new(),
             types: IndexMap::new(),
             views: IndexMap::new(),
@@ -529,6 +532,10 @@ impl Document {
 
     // ----- types ------------------------------------------------------------
 
+    pub fn material(&self, name: &str) -> Option<&crate::materials::MaterialDef> {
+        self.materials.iter().find(|m| m.name == name)
+    }
+
     pub fn family_types(&self) -> impl Iterator<Item = &FamilyType> {
         self.types.values()
     }
@@ -561,6 +568,7 @@ impl Document {
                 family: family.into(),
                 name: name.into(),
                 params,
+                layers: vec![],
             },
         );
         self.touch();
