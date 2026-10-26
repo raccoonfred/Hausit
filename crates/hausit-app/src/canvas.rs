@@ -362,6 +362,12 @@ pub fn paint_list(painter: &egui::Painter, xf: &Xform, dl: &DisplayList, highlig
                 }
                 if let Some(f) = fill {
                     fill_polygon(&p, f, &mut shapes);
+                    // A hairline in the fill colour seals the pixel cracks
+                    // between neighbouring pieces (T-junctions left by
+                    // hidden-surface splitting) so joined faces read as one.
+                    if f.a() == 255 && highlight.is_none() {
+                        shapes.push(Shape::closed_line(p.clone(), Stroke::new(1.0, f)));
+                    }
                 }
                 if let Some(s) = stroke {
                     p.push(p[0]);
