@@ -188,3 +188,39 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod orbit_tests {
+    use super::*;
+    use hausit_model::template::sample_project;
+    use hausit_model::{Category, ElementData};
+
+    #[test]
+    fn orbit_stays_bounded() {
+        let mut doc = sample_project();
+        let roof = doc.elements_of(Category::Roofs).next().unwrap().id;
+        if let Some(ElementData::Roof(r)) = doc.element_mut(roof).map(|e| &mut e.data) {
+            r.defines_slope = vec![true, false, true, false];
+        }
+        let v3 = doc.views().find(|v| matches!(v.kind, ViewKind::ThreeD)).unwrap().id;
+        let mut bad = vec![];
+        for yaw in (0..360).step_by(5) {
+            for pitch in (-80..=80).step_by(5) {
+                let v = doc.view_mut(v3).unwrap();
+                v.camera.yaw = yaw as f64;
+                v.camera.pitch = pitch as f64;
+                let v = doc.view(v3).unwrap().clone();
+                let dl = build(&doc, &v);
+                for it in &dl.items {
+                    if let Prim::Polygon(pts) = &it.prim {
+                        if pts.iter().any(|p| p.length() > 60000.0 || !p.is_finite()) {
+                            bad.push((yaw, pitch, pts.len()));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "{} bad views, e.g. {:?}", bad.len(), &bad[..bad.len().min(5)]);
+    }
+}

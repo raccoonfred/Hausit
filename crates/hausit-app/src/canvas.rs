@@ -275,9 +275,21 @@ fn navigate(app: &mut HausitApp, ui: &Ui, response: &egui::Response, rect: Rect,
     let orbit =
         is_3d && (response.dragged_by(egui::PointerButton::Secondary) || (shift && response.dragged_by(egui::PointerButton::Middle)));
     if orbit {
+        // Orbit about the model's centre, keeping it where it is on
+        // screen (Revit orbits about the model or selection).
+        let pivot = hausit_model::geometry::model_bounds(&app.doc).map(|b| b.center());
+        let at = |app: &HausitApp| {
+            let v = app.doc.view(view_id)?;
+            let f = hausit_views::ViewFrame::for_view(&app.doc, v)?;
+            Some(f.to_view(pivot?).0)
+        };
+        let before = at(app);
         if let Some(v) = app.doc.view_mut(view_id) {
             v.camera.yaw += delta.x as f64 * 0.4;
             v.camera.pitch = (v.camera.pitch + delta.y as f64 * 0.4).clamp(-89.0, 89.0);
+        }
+        if let (Some(b), Some(a)) = (before, at(app)) {
+            app.cameras.get_mut(&view_id).unwrap().center += a - b;
         }
     } else if response.dragged_by(egui::PointerButton::Middle) || response.dragged_by(egui::PointerButton::Secondary) {
         cam.center -= DVec2::new(delta.x as f64, -delta.y as f64) / cam.zoom;
@@ -288,7 +300,9 @@ fn navigate(app: &mut HausitApp, ui: &Ui, response: &egui::Response, rect: Rect,
 
 fn dash_shapes(pts: &[Pos2], stroke: Stroke, dash: Dash, out: &mut Vec<Shape>) {
     match dash {
-        Dash::Solid => out.push(Shape::line(pts.to_vec(), stroke)),
+        // Separate segments: a joined path mitres sharp turns, and the
+        // near-reversals of thin slivers seen edge-on became huge spikes.
+        Dash::Solid => out.extend(pts.windows(2).map(|w| Shape::line_segment([w[0], w[1]], stroke))),
         Dash::Dashed => out.extend(Shape::dashed_line(pts, stroke, 8.0, 4.0)),
         Dash::DashDot => out.extend(Shape::dashed_line_with_offset(pts, stroke, &[14.0, 2.0], &[3.0, 3.0], 0.0)),
     }
@@ -362,12 +376,6 @@ pub fn paint_list(painter: &egui::Painter, xf: &Xform, dl: &DisplayList, highlig
                 }
                 if let Some(f) = fill {
                     fill_polygon(&p, f, &mut shapes);
-                    // A hairline in the fill colour seals the pixel cracks
-                    // between neighbouring pieces (T-junctions left by
-                    // hidden-surface splitting) so joined faces read as one.
-                    if f.a() == 255 && highlight.is_none() {
-                        shapes.push(Shape::closed_line(p.clone(), Stroke::new(1.0, f)));
-                    }
                 }
                 if let Some(s) = stroke {
                     p.push(p[0]);
