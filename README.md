@@ -42,8 +42,8 @@ and status bar.
 | Selection | Click, Ctrl/Shift to add/remove, window (left→right) and crossing (right→left) selection, pre-highlight on hover |
 | Snapping | Endpoints, midpoints, intersections, perpendicular, nearest, dashed alignment lines, 15° angle and zoom-based length increments, with Revit's snap glyphs and tooltips. Temporary dimensions show length and angle |
 | Schedules | Door, window, wall, floor, roof, room and structural column schedules with field selection, sorting, grouping, grand totals and CSV export |
-| Files | Native `.hausit` project format (versioned JSON) |
-| Revit files | `.rvt/.rfa/.rte/.rft` files can be opened to show the Revit version, build and preview image. See below |
+| Files | Native `.hausit` project format (versioned JSON). IFC2x3 and IFC4 files open as projects, with walls, floors, columns, doors, windows, rooms, grids and levels as native elements; IFC4 export. See [docs/ifc.md](docs/ifc.md) |
+| Revit files | `.rvt/.rfa/.rte/.rft` files can be opened to show the Revit version, build and preview image. To bring in a Revit project's model, export it to IFC from Revit and open that. See below |
 
 Revit keyboard shortcuts work: `WA` wall, `DR` door, `WN` window, `FL` floor,
 `RF` roof, `CL` column, `RM` room, `DI` dimension, `LL` level, `GR` grid,

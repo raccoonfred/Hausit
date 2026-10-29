@@ -5,6 +5,8 @@
 //! handled by `hausit-rvt`.
 
 pub mod ifc;
+pub mod ifc_import;
+pub mod step;
 
 use hausit_model::Document;
 use serde::{Deserialize, Serialize};
@@ -24,6 +26,8 @@ pub enum IoError {
     NewerFormat(u32),
     #[error("unsupported file type \".{0}\"")]
     UnsupportedExtension(String),
+    #[error("could not read the IFC file: {0}")]
+    Ifc(String),
     #[error(transparent)]
     Revit(#[from] hausit_rvt::RvtError),
 }
@@ -77,9 +81,20 @@ pub fn open(path: &Path) -> Result<Document, IoError> {
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     match ext.as_str() {
         EXTENSION => load(path),
+        "ifc" => Ok(import_ifc(path)?.0),
         e if hausit_rvt::EXTENSIONS.contains(&e) => Ok(hausit_rvt::import(path)?),
         other => Err(IoError::UnsupportedExtension(other.to_string())),
     }
+}
+
+/// Imports an IFC file (IFC2x3 or IFC4) as a new project, with a report
+/// of what came in.
+pub fn import_ifc(path: &Path) -> Result<(Document, ifc_import::ImportReport), IoError> {
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8_lossy(&bytes);
+    let (mut doc, report) = ifc_import::import(&text).map_err(IoError::Ifc)?;
+    doc.touch();
+    Ok((doc, report))
 }
 
 /// Exports the document as IFC4.
@@ -94,7 +109,7 @@ pub fn export_ifc(doc: &Document, path: &Path) -> Result<(), IoError> {
 
 /// Extensions accepted by [`open`], for file dialogs.
 pub fn openable_extensions() -> Vec<&'static str> {
-    let mut v = vec![EXTENSION];
+    let mut v = vec![EXTENSION, "ifc"];
     v.extend(hausit_rvt::EXTENSIONS);
     v
 }

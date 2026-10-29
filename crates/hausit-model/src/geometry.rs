@@ -230,6 +230,21 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         }
         ElementData::Railing(r) => railing_parts(doc, id, r),
         ElementData::Component(c) => crate::component::component_parts(doc, c),
+        ElementData::DirectShape(d) => d
+            .solids
+            .iter()
+            .map(|s| Part {
+                material: match &s.material {
+                    Some(m) if m.to_ascii_lowercase().contains("glass") => Material::Glass,
+                    _ => Material::Default,
+                },
+                material_name: s.material.clone(),
+                shape: match &s.geometry {
+                    ShapeGeometry::Prism { footprint, z0, z1 } => Shape::Prism(Prism::new(footprint.clone(), *z0, *z1)),
+                    ShapeGeometry::Faces(faces) => Shape::Faces(faces.iter().map(|f| Face { pts: f.clone() }).collect()),
+                },
+            })
+            .collect(),
         ElementData::Level(_)
         | ElementData::Grid(_)
         | ElementData::Room(_)
@@ -501,6 +516,23 @@ fn attach_surfaces(doc: &Document, target: ElementId) -> Vec<(Vec<DVec2>, DVec3)
             let top = doc.level_elevation(f.level) + f.height_offset;
             vec![(f.boundary.clone(), DVec3::new(0.0, 0.0, top - t))]
         }
+        // Imported roofs: the faces looking down.
+        ElementData::DirectShape(d) => d
+            .solids
+            .iter()
+            .flat_map(|s| match &s.geometry {
+                ShapeGeometry::Faces(f) => f.clone(),
+                ShapeGeometry::Prism { footprint, z0, .. } => {
+                    let mut f: Vec<DVec3> = footprint.iter().map(|p| DVec3::new(p.x, p.y, *z0)).collect();
+                    if polygon_area(footprint) > 0.0 {
+                        f.reverse();
+                    }
+                    vec![f]
+                }
+            })
+            .filter(|f| f.len() >= 3 && polygon_normal(f).normalize_or_zero().z < -0.05)
+            .filter_map(|f| plane_of(&f).map(|pl| (f.iter().map(|p| p.truncate()).collect(), pl)))
+            .collect(),
         _ => vec![],
     }
 }

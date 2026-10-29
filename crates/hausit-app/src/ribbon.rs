@@ -421,7 +421,19 @@ fn insert(app: &mut HausitApp, ui: &mut Ui) {
                 app.open_path(&p);
             }
         }
-        planned(ui, Icon::Import, "Link IFC", "Link IFC");
+        if big(
+            ui,
+            Icon::Import,
+            "Open IFC",
+            "Open an IFC file (IFC2x3 or IFC4) as a new project.\nWalls, floors, columns, doors, windows, rooms, grids and levels become Hausit elements; everything else comes in as imported geometry.\nThis is also how to bring in a Revit project: export it to IFC from Revit.",
+            false,
+            true,
+        ) {
+            let picked = rfd::FileDialog::new().add_filter("IFC", &["ifc"]).pick_file();
+            if let Some(p) = picked {
+                app.open_path(&p);
+            }
+        }
         planned(ui, Icon::Import, "Link CAD", "Link CAD");
     });
     panel(ui, "Load from Library", |ui| {

@@ -190,6 +190,7 @@ impl Document {
                     ElementData::Stair(s) => s.base_level == id,
                     ElementData::Ceiling(c) => c.level == id,
                     ElementData::Component(c) => c.level == id,
+                    ElementData::DirectShape(d) => d.level == id,
                     ElementData::Railing(r) => r.level == id || r.host == id,
                     ElementData::Room(r) => r.level == id,
                     ElementData::RoomSeparation(l) => l.level == id,
@@ -284,6 +285,10 @@ impl Document {
                 }
                 ElementData::Footing(f) => f.point += delta,
                 ElementData::Component(c) => c.point += delta,
+                ElementData::DirectShape(d) => d.points_mut().for_each(|(x, y)| {
+                    *x += delta.x;
+                    *y += delta.y;
+                }),
                 ElementData::Stair(s) => s.path.iter_mut().for_each(|p| *p += delta),
                 ElementData::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
                 ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
@@ -451,6 +456,7 @@ impl Document {
                     ft.point = f(ft.point);
                     ft.rotation = if mirror { 2.0 * angle - ft.rotation } else { ft.rotation + angle };
                 }
+                ElementData::DirectShape(d) => d.transform(f, mirror),
                 ElementData::Component(c) => {
                     c.point = f(c.point);
                     c.rotation = if mirror { 2.0 * angle - c.rotation } else { c.rotation + angle };

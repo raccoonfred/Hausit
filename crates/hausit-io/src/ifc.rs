@@ -212,6 +212,30 @@ fn class_of(doc: &Document, id: ElementId) -> Option<Class> {
                 "Pset_BuildingElementProxyCommon",
             ),
         },
+        // Imported geometry goes back out as the class its category
+        // stands for.
+        ElementData::DirectShape(d) => match d.category {
+            Category::Walls => c("IFCWALL", "IFCWALLTYPE", "NOTDEFINED", "NOTDEFINED", "Pset_WallCommon"),
+            Category::Floors => c("IFCSLAB", "IFCSLABTYPE", "FLOOR", "FLOOR", "Pset_SlabCommon"),
+            Category::Roofs => c("IFCROOF", "IFCROOFTYPE", "NOTDEFINED", "NOTDEFINED", "Pset_RoofCommon"),
+            Category::Ceilings => c("IFCCOVERING", "IFCCOVERINGTYPE", "CEILING", "CEILING", "Pset_CoveringCommon"),
+            Category::Doors => c("IFCDOOR", "IFCDOORTYPE", "DOOR", "DOOR", "Pset_DoorCommon"),
+            Category::Windows => c("IFCWINDOW", "IFCWINDOWTYPE", "WINDOW", "WINDOW", "Pset_WindowCommon"),
+            Category::StructuralColumns => c("IFCCOLUMN", "IFCCOLUMNTYPE", "COLUMN", "COLUMN", "Pset_ColumnCommon"),
+            Category::StructuralFraming => c("IFCBEAM", "IFCBEAMTYPE", "BEAM", "BEAM", "Pset_BeamCommon"),
+            Category::StructuralFoundations => c("IFCFOOTING", "IFCFOOTINGTYPE", "NOTDEFINED", "NOTDEFINED", "Pset_FootingCommon"),
+            Category::Stairs => c("IFCSTAIR", "IFCSTAIRTYPE", "NOTDEFINED", "NOTDEFINED", "Pset_StairCommon"),
+            Category::Railings => c("IFCRAILING", "IFCRAILINGTYPE", "NOTDEFINED", "NOTDEFINED", "Pset_RailingCommon"),
+            Category::Furniture | Category::Casework => c("IFCFURNITURE", "IFCFURNITURETYPE", "NOTDEFINED", "NOTDEFINED", ""),
+            Category::PlumbingFixtures => c("IFCSANITARYTERMINAL", "IFCSANITARYTERMINALTYPE", "NOTDEFINED", "NOTDEFINED", ""),
+            _ => c(
+                "IFCBUILDINGELEMENTPROXY",
+                "IFCBUILDINGELEMENTPROXYTYPE",
+                "NOTDEFINED",
+                "NOTDEFINED",
+                "Pset_BuildingElementProxyCommon",
+            ),
+        },
         _ => return None,
     })
 }
@@ -234,6 +258,7 @@ fn element_level(doc: &Document, id: ElementId) -> ElementId {
         ElementData::Railing(r) => r.level,
         ElementData::Ceiling(c) => c.level,
         ElementData::Component(c) => c.level,
+        ElementData::DirectShape(d) => d.level,
         ElementData::Room(r) => r.level,
         _ => ElementId::INVALID,
     }

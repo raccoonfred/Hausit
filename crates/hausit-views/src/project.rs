@@ -454,7 +454,8 @@ fn split_t_junctions(polys: &mut [Poly<FaceData>]) {
 
 /// Hides edges shared by two coplanar faces (e.g. wall pieces either side
 /// of a window, or the mitre on top of a wall corner), so joined geometry
-/// reads as one surface, as in Revit.
+/// reads as one surface, as in Revit. Triangles of a mesh that bend by
+/// less than about 10° count as one smooth surface.
 fn hide_coplanar_seams(polys: &mut [Poly<FaceData>]) {
     use std::collections::HashMap;
     let q = |p: DVec3| {
@@ -481,7 +482,11 @@ fn hide_coplanar_seams(polys: &mut [Poly<FaceData>]) {
     for uses in map.values() {
         for (k, &(pa, ea)) in uses.iter().enumerate() {
             for &(pb, eb) in &uses[k + 1..] {
-                if pa != pb && normals[pa].dot(normals[pb]) > 0.9999 {
+                // Imported meshes approximate curved surfaces with
+                // triangles: hide the seams between gently bending ones too.
+                let mesh = polys[pa].pts.len() == 3 || polys[pb].pts.len() == 3;
+                let limit = if mesh { 0.985 } else { 0.9999 };
+                if pa != pb && normals[pa].dot(normals[pb]) > limit {
                     polys[pa].edges[ea] = false;
                     polys[pb].edges[eb] = false;
                 }

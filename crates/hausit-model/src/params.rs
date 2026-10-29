@@ -223,6 +223,10 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Rotation", G::Constraints, V::Angle(f.rotation)));
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(foundation_volume(doc, id))).ro());
         }
+        ElementData::DirectShape(d) => {
+            p.push(Parameter::new("Level", G::Constraints, V::Element(d.level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Source", G::IdentityData, V::Text(d.name.clone())).ro());
+        }
         ElementData::Component(c) => {
             p.push(Parameter::new("Level", G::Constraints, V::Element(c.level)).kind(ParamKind::Level));
             p.push(Parameter::new("Offset", G::Constraints, V::Length(c.offset)));
@@ -408,6 +412,10 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 _ => return Err(bad()),
             },
             ElementData::WallFooting(_) => return Err(bad()),
+            ElementData::DirectShape(d) => match (name, value) {
+                ("Level", V::Element(l)) if l.is_valid() => d.level = l,
+                _ => return Err(bad()),
+            },
             ElementData::Component(c) => match (name, value) {
                 ("Level", V::Element(l)) if l.is_valid() => c.level = l,
                 ("Offset", V::Length(v)) => c.offset = v,

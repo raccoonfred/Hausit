@@ -1,5 +1,5 @@
 use crate::category::Category;
-use hausit_core::{DVec2, ElementId};
+use hausit_core::{DVec2, DVec3, ElementId};
 use serde::{Deserialize, Serialize};
 
 /// An element instance in the model.
@@ -35,6 +35,7 @@ impl Element {
             ElementData::Railing(r) => Some(r.type_id),
             ElementData::Ceiling(c) => Some(c.type_id),
             ElementData::Component(c) => Some(c.type_id),
+            ElementData::DirectShape(_) => None,
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -57,6 +58,7 @@ impl Element {
             ElementData::Railing(r) => r.type_id = t,
             ElementData::Ceiling(c) => c.type_id = t,
             ElementData::Component(c) => c.type_id = t,
+            ElementData::DirectShape(_) => {}
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -104,6 +106,7 @@ pub enum ElementData {
     Railing(Railing),
     Ceiling(Ceiling),
     Component(Component),
+    DirectShape(DirectShape),
     Room(Room),
     RoomSeparation(SketchedLine),
     Dimension(Dimension),
@@ -126,6 +129,7 @@ impl ElementData {
             ElementData::Railing(_) => Category::Railings,
             ElementData::Ceiling(_) => Category::Ceilings,
             ElementData::Component(c) => c.category,
+            ElementData::DirectShape(d) => d.category,
             ElementData::Room(_) => Category::Rooms,
             ElementData::RoomSeparation(_) => Category::RoomSeparation,
             ElementData::Dimension(_) => Category::Dimensions,
@@ -444,6 +448,84 @@ pub struct Component {
     /// Offset of its base above the level, mm.
     #[serde(default)]
     pub offset: f64,
+}
+
+/// Geometry kept as it is, like Revit's DirectShape: what an import could
+/// not turn into a native element, in any model category.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DirectShape {
+    pub category: Category,
+    pub level: ElementId,
+    /// Where it came from, such as the IFC element's name.
+    #[serde(default)]
+    pub name: String,
+    pub solids: Vec<ShapeSolid>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ShapeSolid {
+    #[serde(default)]
+    pub material: Option<String>,
+    pub geometry: ShapeGeometry,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum ShapeGeometry {
+    /// A plan polygon extruded between two heights.
+    Prism { footprint: Vec<DVec2>, z0: f64, z1: f64 },
+    /// Planar faces, each counter-clockwise seen from outside.
+    Faces(Vec<Vec<DVec3>>),
+}
+
+impl DirectShape {
+    /// Every point of the shape, for moving and bounds.
+    pub fn points_mut(&mut self) -> impl Iterator<Item = (&mut f64, &mut f64)> {
+        self.solids
+            .iter_mut()
+            .flat_map(|s| -> Box<dyn Iterator<Item = (&mut f64, &mut f64)>> {
+                match &mut s.geometry {
+                    ShapeGeometry::Prism { footprint, .. } => Box::new(footprint.iter_mut().map(|p| (&mut p.x, &mut p.y))),
+                    ShapeGeometry::Faces(faces) => Box::new(faces.iter_mut().flatten().map(|p| (&mut p.x, &mut p.y))),
+                }
+            })
+    }
+
+    /// Plan points of the shape.
+    pub fn plan_points(&self) -> Vec<DVec2> {
+        self.solids
+            .iter()
+            .flat_map(|s| match &s.geometry {
+                ShapeGeometry::Prism { footprint, .. } => footprint.clone(),
+                ShapeGeometry::Faces(faces) => faces.iter().flatten().map(|p| p.truncate()).collect(),
+            })
+            .collect()
+    }
+
+    /// Applies a plan transform; `mirror` reverses faces so they still
+    /// face outwards.
+    pub fn transform(&mut self, f: impl Fn(DVec2) -> DVec2, mirror: bool) {
+        for s in &mut self.solids {
+            match &mut s.geometry {
+                ShapeGeometry::Prism { footprint, .. } => {
+                    footprint.iter_mut().for_each(|p| *p = f(*p));
+                    if mirror {
+                        footprint.reverse();
+                    }
+                }
+                ShapeGeometry::Faces(faces) => {
+                    for face in faces.iter_mut() {
+                        for p in face.iter_mut() {
+                            let q = f(p.truncate());
+                            *p = DVec3::new(q.x, q.y, p.z);
+                        }
+                        if mirror {
+                            face.reverse();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// A room, placed at a point; its boundary comes from the room-bounding

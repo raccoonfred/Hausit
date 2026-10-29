@@ -1579,6 +1579,8 @@ dependencies = [
 name = "hausit-io"
 version = "0.1.0"
 dependencies = [
+ "glam",
+ "hausit-core",
  "hausit-model",
  "hausit-rvt",
  "serde",

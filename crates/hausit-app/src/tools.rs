@@ -1590,6 +1590,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::Framing(f) => pts.extend([f.start, f.end]),
             ElementData::Footing(f) => pts.push(f.point),
             ElementData::Component(c) => pts.push(c.point),
+            ElementData::DirectShape(d) => pts.extend(d.plan_points()),
             ElementData::Stair(s) => pts.extend(&s.path),
             ElementData::Ceiling(c) => pts.extend(&c.boundary),
             ElementData::Railing(r) => pts.extend(&r.path),

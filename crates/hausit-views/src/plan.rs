@@ -308,6 +308,57 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    // Imported geometry (direct shapes): heavy where the cut plane passes
+    // through it; on its own level, what lies below the cut in projection
+    // (the outlines of its upward faces).
+    for e in doc.elements().filter(|_| !reflected) {
+        let ElementData::DirectShape(d) = &e.data else { continue };
+        let Some(g) = element_geometry(doc, e.id) else { continue };
+        let cut_pen = pen(doc, d.category, true, view.scale);
+        let proj_pen = pen(doc, d.category, false, view.scale);
+        let on_level = d.level == level;
+        for part in &g.parts {
+            match &part.shape {
+                Shape::Prism(p) => {
+                    let stroke = if p.z0 <= cut_z && cut_z < p.z1 {
+                        cut_pen
+                    } else if on_level && p.z1 <= cut_z {
+                        proj_pen
+                    } else {
+                        continue;
+                    };
+                    dl.push(
+                        Prim::Polyline {
+                            pts: p.footprint.clone(),
+                            closed: true,
+                        },
+                        Some(stroke),
+                        None,
+                        Some(e.id),
+                    );
+                }
+                Shape::Faces(faces) => {
+                    let zs = faces.iter().flat_map(|f| f.pts.iter().map(|p| p.z));
+                    let (z0, z1) = zs.fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), z| (a.min(z), b.max(z)));
+                    if z0 <= cut_z && cut_z < z1 {
+                        for f in faces {
+                            for (a, b) in face_cut(&f.pts, cut_z) {
+                                dl.line(a, b, cut_pen, Some(e.id));
+                            }
+                        }
+                    } else if on_level && z1 <= cut_z {
+                        for f in faces.iter().filter(|f| f.normal().z > 0.3) {
+                            let n = f.pts.len();
+                            for i in 0..n {
+                                dl.line(f.pts[i].truncate(), f.pts[(i + 1) % n].truncate(), proj_pen, Some(e.id));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Structural framing: members on this level (as a structural plan
     // shows them) and members passing through the view range, as their
     // outline, or a single line at Coarse.
@@ -667,6 +718,28 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 }
 
 /// Areas as Revit's default tag shows them.
+/// Where a planar face crosses the horizontal plane at `z`: segments in
+/// plan.
+fn face_cut(pts: &[hausit_core::DVec3], z: f64) -> Vec<(DVec2, DVec2)> {
+    let n = pts.len();
+    let mut hits: Vec<DVec2> = Vec::new();
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (da, db) = (a.z - z, b.z - z);
+        if (da < 0.0) != (db < 0.0) {
+            let t = da / (da - db);
+            hits.push((a + (b - a) * t).truncate());
+        }
+    }
+    if hits.len() < 2 {
+        return vec![];
+    }
+    // Order the crossings along the line and pair them up.
+    let dir = (hits[1] - hits[0]).normalize_or_zero();
+    hits.sort_by(|p, q| p.dot(dir).total_cmp(&q.dot(dir)));
+    hits.chunks(2).filter(|c| c.len() == 2).map(|c| (c[0], c[1])).collect()
+}
+
 fn format_area(mm2: f64, unit: LengthUnit) -> String {
     match unit {
         LengthUnit::FeetInches => format!("{:.0} SF", mm2 / (304.8 * 304.8)),
