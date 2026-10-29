@@ -145,7 +145,7 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Schedules and legends on sheets | Partial | P0 | Schedules done; legends to come |
 | Print and export to PDF (vector, line weights, halftone) | Partial | P0 | Vector PDF with line weights; halftone and direct printing to come |
 | Print sets, batch printing | Missing | P1 | |
-| Export sheets to DWG | Missing | P1 | See 2.11 |
+| Export sheets to DWG | Partial | P1 | Sheets export to DXF; DWG see 2.11 |
 
 ### 2.7 Worksharing and collaboration
 
@@ -190,7 +190,7 @@ in-house tools) is a large part of why practices stay on Revit.
 | IFC 2x3 and IFC4 export | Partial | P0 | IFC4 Reference View done (File ▸ Export ▸ IFC, `--export-ifc OUT`): storeys, typed elements, layer sets, openings, spaces, grids, parameters as property sets. IFC 2x3 to come |
 | IFC import (as native elements where possible, else as reference geometry) | Partial | P0 | Done for IFC2x3 and IFC4 (File ▸ Open, Insert ▸ Open IFC): storeys become levels; straight walls, slabs, rectangular and I-section columns, hosted doors and windows, spaces and grids become native elements with their types and layers; everything else becomes imported geometry with its colour and category. Walls under a roof attach to it. Next: curved walls, roofs and stairs as native elements, linking instead of opening. Also the fallback for Revit files (see section 4) |
 | PDF export | Done | P0 | File ▸ Export ▸ PDF, or `--export-pdf OUT` |
-| DWG/DXF export | Missing | P1 | DXF is documented and can be written directly. DWG needs a library (see 4.3) |
+| DWG/DXF export | Partial | P1 | DXF done (File ▸ Export ▸ DXF, `--export-dxf OUT --view NAME`): any view or sheet as R12 DXF with AIA layers by category, line types, colours, solid fills and text. DWG needs a library (see 4.3) |
 | DWG/DXF import and link (CAD underlays) | Missing | P1 | Very common for site plans and consultant drawings |
 | Images, point clouds (E57, LAS) | Missing | P2 | |
 | gbXML, COBie, BCF (issue exchange) | Missing | P2 | BCF is cheap and useful for coordination |

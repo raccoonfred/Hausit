@@ -1,10 +1,11 @@
 //! Hausit: building information modelling with a Revit-style workflow.
 //!
 //! Usage: `hausit [PROJECT.hausit | FILE.rvt] [--sample | --sample-industrial] [--view "View Name"]
-//! [--export-pdf OUT.pdf] [--export-ifc OUT.ifc]`
+//! [--export-pdf OUT.pdf] [--export-ifc OUT.ifc] [--export-dxf OUT.dxf]`
 //!
 //! `--export-pdf` writes every sheet of the project to a PDF and exits;
-//! `--export-ifc` writes the model as IFC4 and exits.
+//! `--export-ifc` writes the model as IFC4 and exits; `--export-dxf`
+//! writes the view named by `--view` (or the first floor plan) as DXF.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -35,6 +36,8 @@ struct Args {
     export_pdf: Option<std::path::PathBuf>,
     /// Export the model to this IFC file and exit.
     export_ifc: Option<std::path::PathBuf>,
+    /// Export a view to this DXF file and exit.
+    export_dxf: Option<std::path::PathBuf>,
 }
 
 fn parse_args() -> Args {
@@ -47,6 +50,7 @@ fn parse_args() -> Args {
             Some("--view") => args.view = it.next().map(|v| v.to_string_lossy().to_string()),
             Some("--export-pdf") => args.export_pdf = it.next().map(Into::into),
             Some("--export-ifc") => args.export_ifc = it.next().map(Into::into),
+            Some("--export-dxf") => args.export_dxf = it.next().map(Into::into),
             _ => args.path = Some(a.into()),
         }
     }
@@ -96,6 +100,9 @@ fn main() -> eframe::Result {
     if let Some(out) = &args.export_ifc {
         std::process::exit(export_ifc(&args, out));
     }
+    if let Some(out) = &args.export_dxf {
+        std::process::exit(export_dxf(&args, out));
+    }
     // Prefer wgpu (Vulkan/Metal/DX12); fall back to OpenGL on machines
     // without a supported GPU driver.
     match run(args.clone(), eframe::Renderer::Wgpu) {
@@ -128,6 +135,29 @@ fn export_ifc(args: &Args, out: &std::path::Path) -> i32 {
     match hausit_io::export_ifc(&doc, out) {
         Ok(()) => {
             println!("Wrote {}", out.display());
+            0
+        }
+        Err(e) => {
+            eprintln!("{}: {e}", out.display());
+            1
+        }
+    }
+}
+
+/// `--export-dxf`: one view.
+fn export_dxf(args: &Args, out: &std::path::Path) -> i32 {
+    let Some(doc) = load_for_export(args) else { return 1 };
+    let view = match &args.view {
+        Some(name) => doc.views().find(|v| &v.name == name),
+        None => doc.views().find(|v| matches!(v.kind, hausit_model::ViewKind::FloorPlan { .. })),
+    };
+    let Some(view) = view else {
+        eprintln!("No such view.");
+        return 1;
+    };
+    match std::fs::write(out, hausit_views::dxf::write(&doc, &hausit_views::build(&doc, view))) {
+        Ok(()) => {
+            println!("Wrote {} to {}", view.name, out.display());
             0
         }
         Err(e) => {

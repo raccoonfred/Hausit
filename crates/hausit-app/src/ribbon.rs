@@ -173,6 +173,15 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
                 export_ifc(app);
                 ui.close();
             }
+            let view = app.active_view.and_then(|v| app.doc.view(v)).filter(|v| v.kind.is_graphical());
+            if ui
+                .add_enabled(view.is_some(), egui::Button::new("DXF… (current view)"))
+                .on_hover_text("Export the active view as DXF, with layers by category, for AutoCAD and other CAD programs")
+                .clicked()
+            {
+                export_dxf(app);
+                ui.close();
+            }
             ui.add_enabled(false, egui::Button::new("DWG… (planned)"));
             if ui.button("PDF…").clicked() {
                 crate::sheets::start_export(app);
@@ -858,6 +867,24 @@ fn mode_panel(app: &mut HausitApp, ui: &mut Ui) {
 }
 
 /// File ▸ Export ▸ IFC: the whole model as IFC4.
+fn export_dxf(app: &mut HausitApp) {
+    let Some(view) = app.active_view.and_then(|v| app.doc.view(v)).cloned() else {
+        return;
+    };
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("DXF", &["dxf"])
+        .set_file_name(format!("{}.dxf", view.name))
+        .save_file()
+    else {
+        return;
+    };
+    let text = hausit_views::dxf::write(&app.doc, &hausit_views::build(&app.doc, &view));
+    match std::fs::write(&path, text) {
+        Ok(()) => app.status = format!("Exported {} to {}", view.name, path.display()),
+        Err(e) => app.dialogs.error = Some(format!("Could not write the DXF file: {e}")),
+    }
+}
+
 fn export_ifc(app: &mut HausitApp) {
     let name = if app.doc.project_info.name.is_empty() {
         "Project.ifc".to_string()

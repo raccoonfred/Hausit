@@ -8,6 +8,7 @@
 mod annotate;
 mod bsp;
 mod dims;
+pub mod dxf;
 pub mod frame;
 mod hatch;
 pub mod pdf;
