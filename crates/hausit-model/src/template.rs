@@ -630,6 +630,7 @@ pub fn sample_project() -> Document {
         "Furniture Schedule",
         ViewKind::Schedule(crate::ScheduleDef::new(Category::Furniture)),
     );
+    crate::annotation::tag_openings_in_plans(&mut doc);
     doc
 }
 
@@ -973,5 +974,6 @@ pub fn industrial_sample() -> Document {
             ("Bollard", "168mm", 28000.0, -700.0, 0.0),
         ],
     );
+    crate::annotation::tag_openings_in_plans(&mut doc);
     doc
 }

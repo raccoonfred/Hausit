@@ -97,6 +97,10 @@ pub enum Tool {
         walls: Vec<ElementId>,
         detach: bool,
     },
+    /// Text: click where the text goes, then type it.
+    Text,
+    /// Tag by Category: click elements to tag them.
+    Tag,
 }
 
 impl Tool {
@@ -142,6 +146,8 @@ impl Tool {
             Tool::Split => "Modify | Split Element",
             Tool::Attach { detach: false, .. } => "Modify | Walls > Attach Top/Base",
             Tool::Attach { .. } => "Modify | Walls > Detach Top/Base",
+            Tool::Text => "Modify | Place Text",
+            Tool::Tag => "Modify | Tag",
         }
     }
 
@@ -192,6 +198,8 @@ impl Tool {
             Tool::Trim { .. } => "Click the second wall, on the part you want to keep.",
             Tool::Split => "Click a wall where you want to split it.",
             Tool::Attach { .. } => "Pick a roof or floor to attach the selected walls to.",
+            Tool::Text => "Click where the text starts, then type it. Leader on the Options Bar adds an arrow.",
+            Tool::Tag => "Click an element to tag it: doors show their Mark, windows their Type Mark, other elements their type.",
         }
     }
 
@@ -221,6 +229,7 @@ impl Tool {
             Tool::Mirror { draw: false, .. } => matches!(cat, Category::Walls | Category::Grids | Category::RoomSeparation),
             Tool::Trim { .. } | Tool::Split | Tool::WallFoundation => cat == Category::Walls,
             Tool::Attach { .. } => matches!(cat, Category::Roofs | Category::Floors),
+            Tool::Tag => hausit_model::annotation::TAGGABLE.contains(&cat),
             _ => false,
         }
     }
@@ -425,6 +434,11 @@ pub struct ToolOptions {
     pub component_rotation: f64,
     /// Category of the component type used last.
     pub last_component: Option<Category>,
+    /// Tags and text: draw a leader.
+    pub leader: bool,
+    /// Doors and windows: tag them as they are placed (Revit's "Tag on
+    /// Placement").
+    pub tag_on_placement: bool,
 }
 
 impl Default for ToolOptions {
@@ -447,6 +461,8 @@ impl Default for ToolOptions {
             ceiling_height: 2600.0,
             component_rotation: 0.0,
             last_component: None,
+            leader: false,
+            tag_on_placement: true,
         }
     }
 }
@@ -483,6 +499,18 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
         tool,
         Tool::Move { .. } | Tool::Copy { .. } | Tool::Rotate { .. } | Tool::Mirror { .. } | Tool::Attach { .. }
     );
+    if matches!(tool, Tool::Text | Tool::Tag) {
+        let ok = app.active_view.and_then(|v| app.doc.view(v)).is_some_and(|v| {
+            matches!(
+                v.kind,
+                ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. } | ViewKind::Elevation { .. } | ViewKind::Section { .. }
+            )
+        });
+        if !ok {
+            app.status = "Text and tags are placed in a plan, elevation or section.".into();
+            return;
+        }
+    }
     if matches!(tool, Tool::Callout { .. }) {
         let ok = app
             .active_view
@@ -926,7 +954,30 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                     } else {
                         ElementData::Window(o)
                     };
-                    app.transact(&format!("Create {}", cat.singular()), |doc| Ok(doc.add_element(data)));
+                    // Tag on Placement, in the plan it is placed in.
+                    let tag_view = app
+                        .active_view
+                        .filter(|_| app.options.tag_on_placement)
+                        .filter(|v| matches!(app.doc.view(*v).map(|v| &v.kind), Some(ViewKind::FloorPlan { .. })));
+                    let scale = app
+                        .active_view
+                        .and_then(|v| app.doc.view(v))
+                        .map(|v| v.scale as f64)
+                        .unwrap_or(100.0);
+                    app.transact(&format!("Create {}", cat.singular()), |doc| {
+                        let id = doc.add_element(data);
+                        if let Some(view) = tag_view {
+                            if let Some(position) = hausit_model::annotation::default_position(doc, id, scale) {
+                                doc.add_element(ElementData::Tag(Tag {
+                                    view,
+                                    host: id,
+                                    position,
+                                    leader: false,
+                                }));
+                            }
+                        }
+                        Ok(id)
+                    });
                 }
                 None => {
                     app.status = format!(
@@ -1247,6 +1298,57 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 app.tool = tool;
                 return;
             }
+        }
+        Tool::Text => {
+            if let Some(view) = app.active_view {
+                let leader = app.options.leader.then(|| {
+                    let scale = app.doc.view(view).map(|v| v.scale as f64).unwrap_or(100.0);
+                    p + DVec2::new(-8.0, -6.0) * scale
+                });
+                app.dialogs.text_note = Some(crate::dialogs::TextNoteDialog {
+                    id: None,
+                    view,
+                    position: p,
+                    text: String::new(),
+                    size: 2.5,
+                    leader,
+                });
+            }
+        }
+        Tool::Tag => {
+            let host = app.hover.filter(|h| {
+                app.doc
+                    .element(*h)
+                    .is_some_and(|e| hausit_model::annotation::TAGGABLE.contains(&e.category()))
+            });
+            let (Some(host), Some(view)) = (host, app.active_view) else {
+                app.status = "Click a door, window, wall, column, furniture or other model element to tag it.".into();
+                app.tool = tool;
+                return;
+            };
+            let Some(v) = app.doc.view(view) else { return };
+            let scale = v.scale as f64;
+            let in_plan = matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. });
+            let base = if !in_plan {
+                p
+            } else {
+                match app.doc.element(host).map(|e| &e.data) {
+                    // Walls: on the wall where it was clicked.
+                    Some(ElementData::Wall(w)) => closest_on_segment(p, w.start, w.end).0,
+                    _ => hausit_model::annotation::default_position(&app.doc, host, scale).unwrap_or(p),
+                }
+            };
+            let leader = app.options.leader;
+            let h = hausit_model::annotation::TAG_TEXT * scale;
+            let position = if leader { base + DVec2::new(h * 4.0, h * 3.0) } else { base };
+            app.transact("Create Tag", |doc| {
+                Ok(doc.add_element(ElementData::Tag(Tag {
+                    view,
+                    host,
+                    position,
+                    leader,
+                })))
+            });
         }
         Tool::Attach { walls, detach } => {
             let target = app
@@ -1606,6 +1708,8 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
                     pts.push(w.point_at(o.offset));
                 }
             }
+            ElementData::TextNote(t) => pts.push(t.position),
+            ElementData::Tag(t) => pts.push(t.position),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }
@@ -2063,6 +2167,14 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "DI" => {
             start(app, Tool::Dimension { refs: vec![] });
+            true
+        }
+        "TX" => {
+            start(app, Tool::Text);
+            true
+        }
+        "TG" => {
+            start(app, Tool::Tag);
             true
         }
         "CL" => {

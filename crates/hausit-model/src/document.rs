@@ -194,6 +194,9 @@ impl Document {
                     ElementData::Railing(r) => r.level == id || r.host == id,
                     ElementData::Room(r) => r.level == id,
                     ElementData::RoomSeparation(l) => l.level == id,
+                    // Annotation goes with its view; tags with what they tag.
+                    ElementData::TextNote(t) => t.view == id,
+                    ElementData::Tag(t) => t.view == id || t.host == id,
                     // Dimensions go with their view or any element they measure.
                     ElementData::Dimension(d) => {
                         d.view == id
@@ -297,6 +300,13 @@ impl Document {
                     l.start += delta;
                     l.end += delta;
                 }
+                ElementData::TextNote(t) => {
+                    t.position += delta;
+                    if let Some(l) = &mut t.leader {
+                        *l += delta;
+                    }
+                }
+                ElementData::Tag(t) => t.position += delta,
                 ElementData::Dimension(d) => {
                     d.line_point += delta;
                     for r in &mut d.refs {
@@ -364,6 +374,12 @@ impl Document {
                 ElementData::Room(r) => r.number = self.next_room_number(),
                 // Dimensions stay with the elements they measure.
                 ElementData::Dimension(_) => continue,
+                // A tag copied with its element tags the copy.
+                ElementData::Tag(t) => {
+                    if let Some(h) = map.get(&t.host) {
+                        t.host = *h;
+                    }
+                }
                 _ => {}
             }
             let nid = self.add_element(data);
@@ -471,6 +487,11 @@ impl Document {
                     l.start = f(l.start);
                     l.end = f(l.end);
                 }
+                ElementData::TextNote(t) => {
+                    t.position = f(t.position);
+                    t.leader = t.leader.map(f);
+                }
+                ElementData::Tag(t) => t.position = f(t.position),
                 ElementData::Dimension(d) => {
                     d.line_point = f(d.line_point);
                     for r in &mut d.refs {

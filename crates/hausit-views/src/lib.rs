@@ -171,7 +171,11 @@ impl DisplayList {
 /// Builds the graphics of a view. Schedules have none.
 pub fn build(doc: &Document, view: &View) -> DisplayList {
     let mut dl = match &view.kind {
-        ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => plan::floor_plan(doc, view, *level),
+        ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => {
+            let mut dl = plan::floor_plan(doc, view, *level);
+            annotate::notes_and_tags(doc, view, None, &mut dl);
+            dl
+        }
         ViewKind::ThreeD | ViewKind::Elevation { .. } | ViewKind::Section { .. } => {
             let Some(frame) = ViewFrame::for_view(doc, view) else {
                 return DisplayList::default();
@@ -179,6 +183,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
             let mut dl = project::project(doc, view, &frame);
             if !matches!(view.kind, ViewKind::ThreeD) {
                 annotate::levels_and_grids(doc, view, &frame, &mut dl);
+                annotate::notes_and_tags(doc, view, Some(&frame), &mut dl);
             }
             dl
         }

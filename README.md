@@ -34,7 +34,7 @@ and status bar.
 | Area | In this version |
 |------|-----------------|
 | Model | Levels, grids, walls (with automatic corner and T joins, Attach Top/Base to roofs and floors), floors, footprint roofs (flat, hip, gable), doors and windows hosted in walls, structural columns, rooms (bounded automatically by walls, columns and room separation lines, with area, perimeter and volume) |
-| Annotation | Aligned dimensions to wall faces, wall centerlines and grids; room tags with area; door and window tags |
+| Annotation | Aligned dimensions to wall faces, wall centerlines and grids; room tags with area; text notes with leaders (TX); Tag by Category (TG), Tag on Placement and Tag All Not Tagged for doors, windows, walls, structure and components |
 | Families and types | Wall, floor and roof types; door and window families with types. Type Properties dialog with Duplicate, Rename and editable type parameters |
 | Properties | Revit-style instance parameters (Base Constraint, Top Constraint, Unconnected Height, Sill Height, Mark, Comments…) with live Length/Area/Volume |
 | Views | Floor plans (cut plane, poché, door swings, window symbols, grid bubbles), elevations and sections (with level heads and cut elements), orthographic 3D with a Revit ViewCube (faces, edges, corners, compass, Home, roll arrows, drag to orbit). Wireframe, Hidden Line, Shaded and Consistent Colors styles |

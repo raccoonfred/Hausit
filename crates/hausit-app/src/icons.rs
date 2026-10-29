@@ -54,6 +54,8 @@ pub enum Icon {
     Ceiling,
     Component,
     LoadFamily,
+    Text,
+    Tag,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -376,6 +378,36 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 egui::Align2::CENTER_CENTER,
                 "3000",
                 egui::FontId::proportional(7.0 * s),
+                k(INK),
+            );
+        }
+        Icon::Text => {
+            p.text(
+                at(13.0, 15.0),
+                egui::Align2::CENTER_CENTER,
+                "A",
+                egui::FontId::proportional(20.0 * s),
+                k(INK),
+            );
+            seg((22.0, 8.0), (29.0, 8.0), line(1.4, BLUE));
+            seg((22.0, 14.0), (29.0, 14.0), line(1.4, BLUE));
+            seg((22.0, 20.0), (29.0, 20.0), line(1.4, BLUE));
+        }
+        Icon::Tag => {
+            p.rect(rect(3.0, 16.0, 13.0, 26.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            seg((13.0, 21.0), (20.0, 14.0), ink);
+            p.rect(
+                rect(17.0, 5.0, 30.0, 14.0),
+                0.0,
+                k(Color32::WHITE),
+                line(1.4, BLUE),
+                egui::StrokeKind::Middle,
+            );
+            p.text(
+                at(23.5, 9.5),
+                egui::Align2::CENTER_CENTER,
+                "D1",
+                egui::FontId::proportional(6.5 * s),
                 k(INK),
             );
         }

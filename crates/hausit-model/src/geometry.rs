@@ -249,7 +249,9 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         | ElementData::Grid(_)
         | ElementData::Room(_)
         | ElementData::RoomSeparation(_)
-        | ElementData::Dimension(_) => return None,
+        | ElementData::Dimension(_)
+        | ElementData::TextNote(_)
+        | ElementData::Tag(_) => return None,
     };
     if parts.is_empty() {
         return None;

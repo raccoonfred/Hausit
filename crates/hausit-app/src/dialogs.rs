@@ -33,6 +33,33 @@ pub struct NewSchedule {
     pub name: String,
 }
 
+/// The Text tool's editor, for a new note (`id` None) or an existing one.
+pub struct TextNoteDialog {
+    pub id: Option<ElementId>,
+    pub view: ElementId,
+    pub position: hausit_core::DVec2,
+    pub text: String,
+    pub size: f64,
+    pub leader: Option<hausit_core::DVec2>,
+}
+
+impl TextNoteDialog {
+    /// The editor for an existing text note.
+    pub fn edit(doc: &Document, id: ElementId) -> Option<Self> {
+        match &doc.element(id)?.data {
+            hausit_model::ElementData::TextNote(t) => Some(TextNoteDialog {
+                id: Some(id),
+                view: t.view,
+                position: t.position,
+                text: t.text.clone(),
+                size: t.size,
+                leader: t.leader,
+            }),
+            _ => None,
+        }
+    }
+}
+
 pub struct Rename {
     pub target: ElementId,
     pub text: String,
@@ -66,6 +93,9 @@ pub struct Dialogs {
     /// Load from Library: each library family, and whether it is ticked.
     pub library: Option<Vec<bool>>,
     pub family_editor: Option<Box<crate::family_editor::FamilyEditor>>,
+    pub text_note: Option<TextNoteDialog>,
+    /// Tag All Not Tagged: each taggable category and whether it is ticked.
+    pub tag_all: Option<Vec<(Category, bool)>>,
 }
 
 impl Dialogs {
@@ -106,6 +136,8 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     crate::sheets::show(app, ctx);
     crate::families::show(app, ctx);
     crate::family_editor::show(app, ctx);
+    text_note(app, ctx);
+    tag_all(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;
@@ -344,6 +376,107 @@ fn new_schedule(app: &mut HausitApp, ctx: &Context) {
             }
         }
         Some(false) => app.dialogs.new_schedule = None,
+        None => {}
+    }
+}
+
+fn text_note(app: &mut HausitApp, ctx: &Context) {
+    let Some(d) = app.dialogs.text_note.as_mut() else { return };
+    let mut result = None;
+    let title = if d.id.is_some() { "Edit Text" } else { "Text" };
+    window(title).show(ctx, |ui| {
+        let resp = ui.add(
+            egui::TextEdit::multiline(&mut d.text)
+                .desired_rows(4)
+                .desired_width(360.0)
+                .hint_text("Type the text. Enter starts a new line."),
+        );
+        if d.text.is_empty() {
+            resp.request_focus();
+        }
+        ui.horizontal(|ui| {
+            ui.label("Text size:");
+            ui.add(egui::DragValue::new(&mut d.size).range(0.5..=50.0).speed(0.1).suffix(" mm"));
+            ui.label(RichText::new("on paper").color(Color32::DARK_GRAY));
+        });
+        ui.horizontal(|ui| {
+            if ui.button("   OK   ").clicked() {
+                result = Some(true);
+            }
+            if ui.button("Cancel").clicked() {
+                result = Some(false);
+            }
+        });
+    });
+    match result {
+        Some(true) => {
+            let d = app.dialogs.text_note.take().unwrap();
+            if d.text.trim().is_empty() {
+                return;
+            }
+            let note = hausit_model::TextNote {
+                view: d.view,
+                position: d.position,
+                text: d.text.trim_end().to_string(),
+                size: d.size,
+                leader: d.leader,
+            };
+            match d.id {
+                Some(id) => {
+                    app.transact("Edit Text", |doc| {
+                        if let Some(e) = doc.element_mut(id) {
+                            e.data = hausit_model::ElementData::TextNote(note);
+                        }
+                        doc.touch();
+                        Ok(())
+                    });
+                }
+                None => {
+                    app.transact("Create Text", |doc| Ok(doc.add_element(hausit_model::ElementData::TextNote(note))));
+                }
+            }
+        }
+        Some(false) => app.dialogs.text_note = None,
+        None => {}
+    }
+}
+
+fn tag_all(app: &mut HausitApp, ctx: &Context) {
+    let Some(rows) = app.dialogs.tag_all.as_mut() else { return };
+    let mut result = None;
+    window("Tag All Not Tagged").show(ctx, |ui| {
+        ui.label("Tag every element of the ticked categories in the active plan that has no tag yet.");
+        ui.add_space(4.0);
+        egui::Grid::new("tag_all").num_columns(2).show(ui, |ui| {
+            for (i, (cat, on)) in rows.iter_mut().enumerate() {
+                ui.checkbox(on, cat.name());
+                if i % 2 == 1 {
+                    ui.end_row();
+                }
+            }
+        });
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if ui.button("   OK   ").clicked() {
+                result = Some(true);
+            }
+            if ui.button("Cancel").clicked() {
+                result = Some(false);
+            }
+        });
+    });
+    match result {
+        Some(true) => {
+            let rows = app.dialogs.tag_all.take().unwrap();
+            let cats: Vec<Category> = rows.iter().filter(|r| r.1).map(|r| r.0).collect();
+            if let Some(view) = app.active_view {
+                let added = app.transact("Tag All", |doc| Ok(hausit_model::annotation::tag_all(doc, view, &cats)));
+                if let Some(added) = added {
+                    app.status = format!("Added {} tags.", added.len());
+                }
+            }
+        }
+        Some(false) => app.dialogs.tag_all = None,
         None => {}
     }
 }

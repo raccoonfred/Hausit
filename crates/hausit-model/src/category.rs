@@ -24,10 +24,12 @@ pub enum Category {
     Rooms,
     RoomSeparation,
     Dimensions,
+    TextNotes,
+    Tags,
 }
 
 impl Category {
-    pub const ALL: [Category; 21] = [
+    pub const ALL: [Category; 23] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -49,6 +51,8 @@ impl Category {
         Category::Rooms,
         Category::RoomSeparation,
         Category::Dimensions,
+        Category::TextNotes,
+        Category::Tags,
     ];
 
     /// Categories of loadable components, placed with the Component tool.
@@ -124,6 +128,8 @@ impl Category {
             Category::Rooms => "Rooms",
             Category::RoomSeparation => "Room Separation Lines",
             Category::Dimensions => "Dimensions",
+            Category::TextNotes => "Text Notes",
+            Category::Tags => "Tags",
         }
     }
 
@@ -151,7 +157,14 @@ impl Category {
             Category::Rooms => "Room",
             Category::RoomSeparation => "Room Separation Line",
             Category::Dimensions => "Dimension",
+            Category::TextNotes => "Text Note",
+            Category::Tags => "Tag",
         }
+    }
+
+    /// View-specific annotation: drawn only in the view it was placed in.
+    pub fn is_annotation(self) -> bool {
+        matches!(self, Category::Dimensions | Category::TextNotes | Category::Tags)
     }
 
     /// Hosted categories are placed in a wall.
@@ -165,7 +178,13 @@ impl Category {
     pub fn is_model(self) -> bool {
         !matches!(
             self,
-            Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions
+            Category::Levels
+                | Category::Grids
+                | Category::Rooms
+                | Category::RoomSeparation
+                | Category::Dimensions
+                | Category::TextNotes
+                | Category::Tags
         )
     }
 }

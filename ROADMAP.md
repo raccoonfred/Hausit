@@ -125,8 +125,8 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 |---|---|---|---|
 | Aligned dimensions | Have | — | |
 | Linear, angular, radial, diameter, arc length, spot elevation/coordinate/slope | Missing | P0/P1 | Linear and spot elevation P0 |
-| Text, leaders, keynotes, symbols | Missing | P0 | |
-| Tag all, multi-category, material tags | Partial | P1 | |
+| Text, leaders, keynotes, symbols | Partial | P0 | Text notes (Annotate ▸ Text, TX) with size and an arrow leader, in plans, sections and elevations; keynotes and symbols to do |
+| Tag all, multi-category, material tags | Partial | P1 | Tags are view elements: Tag by Category (TG) for doors, windows, walls, structure, furniture and other model elements, with leaders; Tag on Placement for doors and windows; Tag All Not Tagged. Multi-category, material and room tags as elements to do |
 | Detail lines, filled regions, masking regions, detail components, insulation, repeating details | Missing | P0 | |
 | Callouts, drafting views, legends | Partial | P0 | Callouts of plans, sections and elevations (cropped, 1:20, Fine) with a boundary and bubble in the parent view; drafting views and legends still to do |
 | Revision clouds and revision tracking | Missing | P1 | |

@@ -272,3 +272,159 @@ pub fn callout_marks(doc: &Document, view: &View, dl: &mut DisplayList) {
         );
     }
 }
+
+/// Text notes and tags placed in this view. Plans use model x and y;
+/// elevations and sections their own view coordinates, with tags pointing
+/// at their element's projection.
+pub fn notes_and_tags(doc: &Document, view: &View, frame: Option<&ViewFrame>, dl: &mut DisplayList) {
+    let scale = view.scale as f64;
+    for e in doc.elements_of(Category::TextNotes) {
+        let ElementData::TextNote(t) = &e.data else { continue };
+        if t.view == view.id {
+            text_note(dl, t, scale, e.id);
+        }
+    }
+    for e in doc.elements_of(Category::Tags) {
+        let ElementData::Tag(t) = &e.data else { continue };
+        if t.view != view.id {
+            continue;
+        }
+        let Some(host) = doc.element(t.host) else { continue };
+        let anchor = hausit_model::annotation::anchor(doc, t.host).map(|p| match frame {
+            None => p.truncate(),
+            Some(f) => f.to_view(p).0,
+        });
+        let label = hausit_model::annotation::tag_label(doc, t);
+        tag(
+            dl,
+            t.position,
+            &label,
+            host.category(),
+            if t.leader { anchor } else { None },
+            scale,
+            e.id,
+        );
+    }
+}
+
+/// Rough width of text on paper, for boxes and picking.
+fn text_width(text: &str, height: f64) -> f64 {
+    text.chars().count() as f64 * height * 0.6
+}
+
+fn text_note(dl: &mut DisplayList, t: &hausit_model::TextNote, scale: f64, id: ElementId) {
+    let h = t.size * scale;
+    let lines: Vec<&str> = t.text.lines().collect();
+    let lines = if lines.is_empty() { vec![""] } else { lines };
+    let line_h = h * 1.5;
+    let width = lines.iter().map(|l| text_width(l, h)).fold(h, f64::max);
+    // An invisible box so the whole note can be picked.
+    let top = t.position;
+    let bottom = top - DVec2::new(0.0, line_h * lines.len() as f64);
+    dl.push(
+        Prim::Polygon(vec![
+            DVec2::new(top.x, bottom.y),
+            DVec2::new(top.x + width, bottom.y),
+            DVec2::new(top.x + width, top.y),
+            top,
+        ]),
+        None,
+        Some([0, 0, 0, 0]),
+        Some(id),
+    );
+    for (i, line) in lines.iter().enumerate() {
+        dl.push(
+            Prim::Text {
+                pos: top - DVec2::new(0.0, line_h * (i as f64 + 0.5)),
+                text: line.to_string(),
+                height: h,
+                anchor: Anchor::Left,
+                angle: 0.0,
+            },
+            None,
+            None,
+            Some(id),
+        );
+    }
+    if let Some(end) = t.leader {
+        // From the nearer side of the first line to the point, with an
+        // arrowhead.
+        let first = top - DVec2::new(0.0, line_h * 0.5);
+        let start = if end.x < top.x + width / 2.0 {
+            first - DVec2::new(h * 0.3, 0.0)
+        } else {
+            first + DVec2::new(width + h * 0.3, 0.0)
+        };
+        arrow(dl, start, end, scale, id);
+    }
+}
+
+/// A leader line ending in a filled arrowhead.
+fn arrow(dl: &mut DisplayList, from: DVec2, to: DVec2, scale: f64, id: ElementId) {
+    dl.line(from, to, THIN, Some(id));
+    let d = (to - from).normalize_or_zero();
+    if d == DVec2::ZERO {
+        return;
+    }
+    let len = 2.0 * scale;
+    let n = perp(d) * len * 0.3;
+    dl.push(
+        Prim::Polygon(vec![to, to - d * len + n, to - d * len - n]),
+        Some(THIN),
+        Some([0, 0, 0, 255]),
+        Some(id),
+    );
+}
+
+/// A tag: its label in a box shaped by category (a rectangle for doors, a
+/// hexagon for windows, rounded ends for other elements), with an
+/// optional leader to its element.
+fn tag(dl: &mut DisplayList, at: DVec2, label: &str, cat: Category, leader: Option<DVec2>, scale: f64, id: ElementId) {
+    let h = hausit_model::annotation::TAG_TEXT * scale;
+    let (hw, hh) = (h * 0.5 + text_width(label, h) / 2.0, h * 0.75);
+    let corner = |x: f64, y: f64| at + DVec2::new(x, y);
+    let shape = match cat {
+        Category::Doors => vec![corner(-hw, -hh), corner(hw, -hh), corner(hw, hh), corner(-hw, hh)],
+        Category::Windows => vec![
+            corner(-hw - hh * 0.6, 0.0),
+            corner(-hw, -hh),
+            corner(hw, -hh),
+            corner(hw + hh * 0.6, 0.0),
+            corner(hw, hh),
+            corner(-hw, hh),
+        ],
+        _ => {
+            // Rounded ends.
+            let mut pts = Vec::new();
+            for (cx, a0) in [(hw, -90.0_f64), (-hw, 90.0)] {
+                for k in 0..=6 {
+                    let a = (a0 + 30.0 * k as f64).to_radians();
+                    pts.push(corner(cx + hh * a.cos(), hh * a.sin()));
+                }
+            }
+            pts
+        }
+    };
+    if let Some(p) = leader {
+        // From the box edge nearest the element.
+        let start = if (p.x - at.x).abs() * hh > (p.y - at.y).abs() * hw {
+            at + DVec2::new(hw.copysign(p.x - at.x), 0.0)
+        } else {
+            at + DVec2::new(0.0, hh.copysign(p.y - at.y))
+        };
+        dl.line(start, p, THIN, Some(id));
+    }
+    dl.push(Prim::Polygon(shape), Some(THIN), Some([255, 255, 255, 255]), Some(id));
+    dl.push(
+        Prim::Text {
+            pos: at,
+            text: label.to_string(),
+            height: h,
+            anchor: Anchor::Center,
+            angle: 0.0,
+        },
+        None,
+        None,
+        Some(id),
+    );
+}

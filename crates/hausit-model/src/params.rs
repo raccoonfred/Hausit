@@ -3,7 +3,7 @@
 
 use crate::document::{Document, ModelError};
 use crate::element::{ElementData, FramingKind, RoofShape, TopConstraint};
-use hausit_core::ElementId;
+use hausit_core::{DVec2, ElementId};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -303,6 +303,17 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
         ElementData::Dimension(d) => {
             p.push(Parameter::new("Segments", G::Other, V::Integer(d.refs.len().saturating_sub(1) as i64)).ro());
         }
+        ElementData::TextNote(t) => {
+            p.push(Parameter::new("Text", G::Other, V::Text(t.text.clone())));
+            p.push(Parameter::new("Text Size", G::Dimensions, V::Length(t.size)));
+            p.push(Parameter::new("Leader", G::Other, V::Bool(t.leader.is_some())));
+        }
+        ElementData::Tag(t) => {
+            let host = doc.element(t.host).map(|h| h.category().singular()).unwrap_or("Nothing");
+            p.push(Parameter::new("Tagged Element", G::Other, V::Text(host.to_string())).ro());
+            p.push(Parameter::new("Label", G::Other, V::Text(crate::annotation::tag_label(doc, t))).ro());
+            p.push(Parameter::new("Leader", G::Other, V::Bool(t.leader)));
+        }
     }
     if el.category().is_model() {
         p.push(Parameter::new("Comments", G::IdentityData, V::Text(el.comments.clone())));
@@ -445,6 +456,16 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Limit Offset", V::Length(v)) => r.limit_offset = v,
                 ("Number", V::Text(s)) => r.number = s,
                 ("Name", V::Text(s)) => r.name = s,
+                _ => return Err(bad()),
+            },
+            ElementData::TextNote(t) => match (name, value) {
+                ("Text", V::Text(s)) => t.text = s,
+                ("Text Size", V::Length(v)) if v > 0.0 => t.size = v,
+                ("Leader", V::Bool(b)) => t.leader = b.then(|| t.leader.unwrap_or(t.position + DVec2::new(-1000.0, -600.0))),
+                _ => return Err(bad()),
+            },
+            ElementData::Tag(t) => match (name, value) {
+                ("Leader", V::Bool(b)) => t.leader = b,
                 _ => return Err(bad()),
             },
             ElementData::RoomSeparation(_) | ElementData::Dimension(_) => return Err(bad()),

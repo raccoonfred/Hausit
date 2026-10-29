@@ -79,7 +79,12 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         }
                         finish_cancel(app, ui);
                     }
+                    Tool::Text | Tool::Tag => {
+                        ui.checkbox(&mut app.options.leader, "Leader");
+                    }
                     Tool::Door | Tool::Window => {
+                        ui.checkbox(&mut app.options.tag_on_placement, "Tag on Placement");
+                        ui.separator();
                         ui.label(RichText::new("Hover over a wall in plan. The side you click sets the swing side; Space flips the hand.").color(Color32::DARK_GRAY));
                     }
                     Tool::Rotate { .. } | Tool::Mirror { .. } => {
@@ -156,7 +161,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     }
                     Tool::Modify => {
                         if app.selection.is_empty() {
-                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · CL column · BM beam · BR brace · FT wall foundation · MV move · CO copy · RO rotate · MM mirror · BX selection box · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
+                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · TX text · TG tag · CL column · BM beam · BR brace · FT wall foundation · MV move · CO copy · RO rotate · MM mirror · BX selection box · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
                         } else {
                             ui.label(format!("{} selected", app.selection.len()));
                         }

@@ -155,7 +155,13 @@ pub fn default_type_params(category: Category) -> TypeParams {
         }
         // Loadable families bring their own parameters.
         Category::Furniture | Category::Casework | Category::PlumbingFixtures | Category::SpecialtyEquipment | Category::GenericModels => {}
-        Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => {}
+        Category::Levels
+        | Category::Grids
+        | Category::Rooms
+        | Category::RoomSeparation
+        | Category::Dimensions
+        | Category::TextNotes
+        | Category::Tags => {}
     }
     p.insert("Type Mark".into(), ParamValue::Text(String::new()));
     p.insert("Description".into(), ParamValue::Text(String::new()));

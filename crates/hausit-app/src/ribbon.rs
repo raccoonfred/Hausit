@@ -217,7 +217,10 @@ fn panel(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
 
 /// A large ribbon button: icon over label.
 fn big(ui: &mut Ui, icon: Icon, label: &str, tip: &str, active: bool, enabled: bool) -> bool {
-    let size = vec2(54.0, 62.0);
+    // Wide enough for the label.
+    let font = egui::FontId::proportional(11.5);
+    let text_w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font.clone(), Color32::BLACK).size().x);
+    let size = vec2((text_w + 8.0).max(54.0), 62.0);
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
     let p = ui.painter();
     if active {
@@ -244,7 +247,7 @@ fn big(ui: &mut Ui, icon: Icon, label: &str, tip: &str, active: bool, enabled: b
         rect.center_bottom() - vec2(0.0, 12.0),
         egui::Align2::CENTER_CENTER,
         label,
-        egui::FontId::proportional(11.5),
+        font,
         color,
     );
     let resp = if enabled {
@@ -485,10 +488,44 @@ fn annotate(app: &mut HausitApp, ui: &mut Ui) {
         );
         planned(ui, Icon::Dimension, "Linear", "Linear Dimension");
     });
-    panel(ui, "Text", |ui| planned(ui, Icon::Planned, "Text", "Text (TX)"));
+    panel(ui, "Text", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::Text,
+            "Text",
+            "Text (TX): click where the text starts, then type it",
+            Tool::Text,
+        );
+    });
     panel(ui, "Tag", |ui| {
-        planned(ui, Icon::Planned, "Tag by Category", "Tag by Category (TG)");
-        planned(ui, Icon::Planned, "Tag All", "Tag All Not Tagged");
+        tool_button(
+            app,
+            ui,
+            Icon::Tag,
+            "By Category",
+            "Tag by Category (TG): click elements to tag them",
+            Tool::Tag,
+        );
+        let in_plan = app
+            .active_view
+            .and_then(|v| app.doc.view(v))
+            .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }));
+        if big(
+            ui,
+            Icon::Tag,
+            "Tag All",
+            "Tag All Not Tagged: tag every element of chosen categories in this plan",
+            false,
+            in_plan,
+        ) {
+            app.dialogs.tag_all = Some(
+                hausit_model::annotation::TAGGABLE
+                    .iter()
+                    .map(|c| (*c, matches!(c, Category::Doors | Category::Windows)))
+                    .collect(),
+            );
+        }
     });
 }
 
@@ -642,6 +679,16 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         if big(ui, Icon::TypeProps, "Type Props", "Type Properties", false, type_id.is_some()) {
             if let Some(t) = type_id {
                 app.dialogs.open_type_properties(&app.doc, t);
+            }
+        }
+        let note = app
+            .selection
+            .first()
+            .copied()
+            .filter(|id| app.doc.element(*id).is_some_and(|e| e.category() == Category::TextNotes));
+        if let Some(note) = note {
+            if big(ui, Icon::Text, "Edit Text", "Edit the selected text note", false, true) {
+                app.dialogs.text_note = crate::dialogs::TextNoteDialog::edit(&app.doc, note);
             }
         }
         let family = type_id.filter(|t| crate::family_editor::family_of_type(app, *t).is_some());

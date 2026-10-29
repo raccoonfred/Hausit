@@ -10,6 +10,7 @@
 //!   [`params`] so the UI can show a Revit-style Properties palette,
 //! * [`geometry`] turns elements into solids that views project and cut.
 
+pub mod annotation;
 pub mod category;
 pub mod component;
 pub mod dimensions;

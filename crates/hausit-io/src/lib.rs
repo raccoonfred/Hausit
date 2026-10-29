@@ -14,7 +14,9 @@ use std::path::Path;
 use thiserror::Error;
 
 pub const EXTENSION: &str = "hausit";
-pub const FORMAT_VERSION: u32 = 1;
+/// 2: door and window tags became elements (version 1 plans drew them
+/// automatically).
+pub const FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Error)]
 pub enum IoError {
@@ -58,6 +60,9 @@ pub fn from_str(s: &str) -> Result<Document, IoError> {
         return Err(IoError::NewerFormat(env.version));
     }
     let mut doc: Document = serde_json::from_value(env.document)?;
+    if env.version < 2 {
+        hausit_model::annotation::tag_openings_in_plans(&mut doc);
+    }
     doc.touch();
     Ok(doc)
 }
@@ -137,6 +142,17 @@ mod tests {
         let doc = open(&p).unwrap();
         assert_eq!(doc.project_info.name, "Sample House");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn version_1_files_get_their_tags() {
+        let mut doc = sample_project();
+        let tags: Vec<_> = doc.elements_of(hausit_model::Category::Tags).map(|e| e.id).collect();
+        assert!(!tags.is_empty());
+        doc.delete(&tags).unwrap();
+        let text = to_string(&doc).unwrap().replace("\"version\": 2", "\"version\": 1");
+        let back = from_str(&text).unwrap();
+        assert_eq!(back.elements_of(hausit_model::Category::Tags).count(), tags.len());
     }
 
     #[test]

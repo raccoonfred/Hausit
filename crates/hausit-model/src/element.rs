@@ -40,7 +40,9 @@ impl Element {
             | ElementData::Grid(_)
             | ElementData::Room(_)
             | ElementData::RoomSeparation(_)
-            | ElementData::Dimension(_) => None,
+            | ElementData::Dimension(_)
+            | ElementData::TextNote(_)
+            | ElementData::Tag(_) => None,
         }
     }
 
@@ -63,7 +65,9 @@ impl Element {
             | ElementData::Grid(_)
             | ElementData::Room(_)
             | ElementData::RoomSeparation(_)
-            | ElementData::Dimension(_) => {}
+            | ElementData::Dimension(_)
+            | ElementData::TextNote(_)
+            | ElementData::Tag(_) => {}
         }
     }
 
@@ -110,6 +114,8 @@ pub enum ElementData {
     Room(Room),
     RoomSeparation(SketchedLine),
     Dimension(Dimension),
+    TextNote(TextNote),
+    Tag(Tag),
 }
 
 impl ElementData {
@@ -133,6 +139,8 @@ impl ElementData {
             ElementData::Room(_) => Category::Rooms,
             ElementData::RoomSeparation(_) => Category::RoomSeparation,
             ElementData::Dimension(_) => Category::Dimensions,
+            ElementData::TextNote(_) => Category::TextNotes,
+            ElementData::Tag(_) => Category::Tags,
         }
     }
 }
@@ -570,6 +578,39 @@ pub enum DimRef {
         point: DVec2,
         dir: DVec2,
     },
+}
+
+/// Text placed in a view, as Revit's Text tool makes. Its position is
+/// in the view's own coordinates (model x and y in plans).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct TextNote {
+    pub view: ElementId,
+    /// The top left corner of the text.
+    pub position: DVec2,
+    pub text: String,
+    /// Height of the letters on paper, mm.
+    #[serde(default = "default_text_size")]
+    pub size: f64,
+    /// An arrow from the text to this point.
+    #[serde(default)]
+    pub leader: Option<DVec2>,
+}
+
+fn default_text_size() -> f64 {
+    2.5
+}
+
+/// A tag: a label in one view showing a value of the element it tags (a
+/// door's Mark, a window's Type Mark...), as Revit's Tag by Category.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Tag {
+    pub view: ElementId,
+    pub host: ElementId,
+    /// The centre of the tag, in the view's coordinates.
+    pub position: DVec2,
+    /// Draw a line from the tag to the element.
+    #[serde(default)]
+    pub leader: bool,
 }
 
 /// A linear (aligned) dimension string in one view.

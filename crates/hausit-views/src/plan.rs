@@ -14,7 +14,7 @@ use hausit_model::geometry::{
 };
 use hausit_model::rooms::room_info;
 use hausit_model::stairs::{stair_layout, RailingBase, StairPiece};
-use hausit_model::{Category, DetailLevel, Document, ElementData, FramingKind, ParamValue, View};
+use hausit_model::{Category, DetailLevel, Document, ElementData, FramingKind, View};
 
 /// Paper height of tag text, mm.
 const TAG_TEXT: f64 = 2.5;
@@ -529,7 +529,6 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     }
 
     // Doors and windows hosted by walls on this level.
-    let mut tags: Vec<(Vec<DVec2>, String, DVec2, ElementId)> = Vec::new();
     for e in doc.elements().filter(|_| !reflected) {
         let is_door = match e.category() {
             Category::Doors => true,
@@ -630,39 +629,6 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 Some(e.id),
             );
         }
-        // Tags: doors show their Mark, windows their Type Mark.
-        let h = TAG_TEXT * scale;
-        let (label, at) = if is_door {
-            let facing = if o.flip_facing { n } else { -n };
-            (e.mark.clone(), f.center + facing * (half_t + h * 2.2))
-        } else {
-            let tm = doc.type_of(e.id).and_then(|t| match t.params.get("Type Mark") {
-                Some(ParamValue::Text(s)) => Some(s.clone()),
-                _ => None,
-            });
-            (tm.unwrap_or_default(), f.center + n * (half_t + h * 2.2))
-        };
-        if !label.is_empty() {
-            let (hw, hh) = (h * (0.5 + 0.35 * label.chars().count() as f64), h * 0.75);
-            let shape = if is_door {
-                vec![
-                    at + DVec2::new(-hw, -hh),
-                    at + DVec2::new(hw, -hh),
-                    at + DVec2::new(hw, hh),
-                    at + DVec2::new(-hw, hh),
-                ]
-            } else {
-                vec![
-                    at + DVec2::new(-hw - hh * 0.6, 0.0),
-                    at + DVec2::new(-hw, -hh),
-                    at + DVec2::new(hw, -hh),
-                    at + DVec2::new(hw + hh * 0.6, 0.0),
-                    at + DVec2::new(hw, hh),
-                    at + DVec2::new(-hw, hh),
-                ]
-            };
-            tags.push((shape, label, at, e.id));
-        }
         // Cut frame pieces (jambs) drawn as part of the opening.
         if let Some(g) = element_geometry(doc, e.id) {
             for part in &g.parts {
@@ -678,22 +644,6 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 }
             }
         }
-    }
-
-    for (shape, label, at, id) in tags {
-        dl.push(Prim::Polygon(shape), Some(THIN), Some([255, 255, 255, 255]), Some(id));
-        dl.push(
-            Prim::Text {
-                pos: at,
-                text: label,
-                height: TAG_TEXT * scale,
-                anchor: Anchor::Center,
-                angle: 0.0,
-            },
-            None,
-            None,
-            Some(id),
-        );
     }
 
     // Dimensions placed in this view.

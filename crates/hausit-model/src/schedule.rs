@@ -105,7 +105,13 @@ impl ScheduleField {
             | Category::PlumbingFixtures
             | Category::SpecialtyEquipment
             | Category::GenericModels => v.extend([Level]),
-            Category::Levels | Category::Grids | Category::Rooms | Category::RoomSeparation | Category::Dimensions => return vec![],
+            Category::Levels
+            | Category::Grids
+            | Category::Rooms
+            | Category::RoomSeparation
+            | Category::Dimensions
+            | Category::TextNotes
+            | Category::Tags => return vec![],
         }
         v
     }
@@ -129,7 +135,9 @@ impl ScheduleField {
             | Category::SpecialtyEquipment
             | Category::GenericModels => vec![Family, Type, Level, Count],
             Category::Rooms => vec![Number, Name, Level, Area, Perimeter, Volume],
-            Category::Levels | Category::Grids | Category::RoomSeparation | Category::Dimensions => vec![],
+            Category::Levels | Category::Grids | Category::RoomSeparation | Category::Dimensions | Category::TextNotes | Category::Tags => {
+                vec![]
+            }
         }
     }
 }
