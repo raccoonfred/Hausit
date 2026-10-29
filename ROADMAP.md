@@ -480,7 +480,8 @@ Goal: a small architecture practice can switch for new projects.
 9. File format v2 for large models.
 10. Revit-to-Hausit exporter add-in (4.3, step 2).
 11. Scripting API (Python) and add-in loading.
-12. `hausit-rvt`: decompress streams, read schema, read element and parameter
+12. `hausit-rvt`: decompress streams (done), read schema (class names,
+    parents and fields done; field types to do), read element and parameter
     tables for the latest three Revit versions.
 
 **Milestone:** a mid-size project (an apartment building or small office)

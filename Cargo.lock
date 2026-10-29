@@ -1606,6 +1606,7 @@ name = "hausit-rvt"
 version = "0.1.0"
 dependencies = [
  "cfb",
+ "flate2",
  "hausit-model",
  "thiserror 2.0.21",
 ]

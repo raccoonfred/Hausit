@@ -24,6 +24,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "2"
 indexmap = { version = "2", features = ["serde"] }
 cfb = "0.15"
+flate2 = "1"
 eframe = { version = "0.37", features = ["glow"] }
 egui = "0.37"
 egui_extras = { version = "0.37", features = ["image"] }

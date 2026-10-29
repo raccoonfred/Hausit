@@ -20,8 +20,9 @@ pub struct BasicFileInfo {
 impl BasicFileInfo {
     pub fn version_label(&self) -> String {
         match (&self.product, self.version) {
-            (Some(p), _) => p.clone(),
-            (None, Some(v)) => format!("Autodesk Revit {v}"),
+            (Some(p), _) if p.split_whitespace().any(|w| w.parse::<u32>().is_ok()) => p.clone(),
+            (_, Some(v)) => format!("Autodesk Revit {v}"),
+            (Some(p), None) => p.clone(),
             (None, None) => "unknown Revit version".into(),
         }
     }
@@ -52,10 +53,11 @@ fn year_after(text: &str, marker: &str) -> Option<(u32, usize)> {
 pub fn parse(bytes: &[u8]) -> Option<BasicFileInfo> {
     // The binary header length varies by version; try both alignments and
     // keep whichever decodes into recognisable text.
-    let text = [0usize, 1]
-        .iter()
-        .map(|o| decode_utf16(bytes, *o))
-        .max_by_key(|t| ["Format:", "Build:", "Worksharing:"].iter().filter(|m| t.contains(*m)).count())?;
+    let mut texts: Vec<String> = [0usize, 1].iter().map(|o| decode_utf16(bytes, *o)).collect();
+    texts.sort_by_key(|t| std::cmp::Reverse(["Format:", "Build:", "Worksharing:"].iter().filter(|m| t.contains(*m)).count()));
+    // Some files switch alignment part way, so read the better decoding
+    // first and the other after it.
+    let text = texts.join("\n");
     let line_value = |key: &str| -> Option<String> {
         text.lines()
             .find_map(|l| {

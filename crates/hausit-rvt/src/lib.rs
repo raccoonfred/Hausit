@@ -12,8 +12,8 @@
 //! | 1. [`container`] | Open the compound file, list its streams | **done** |
 //! | 2. [`basic_info`] | Read `BasicFileInfo`: Revit version, build, worksharing | **done** |
 //! | 3. [`preview`] | Extract the PNG thumbnail from `RevitPreview4.0` | **done** |
-//! | 4. Partitions | Decompress `Global/*` and `Partitions/*` streams | not started |
-//! | 5. Schema | Decode the per-version class/field schema (`Formats/Latest`) | not started |
+//! | 4. [`partitions`] | Inflate the gzip data in `Formats`, `Global/*` and `Partitions/*` | **done** |
+//! | 5. [`schema`] | Read the class names, parents and field names in `Formats/Latest` | **partly done**: names and hierarchy; field types not decoded |
 //! | 6. Elements | Decode element records into typed data | not started |
 //! | 7. Mapping | Convert decoded elements into a [`hausit_model::Document`] | not started |
 //!
@@ -23,7 +23,9 @@
 
 pub mod basic_info;
 pub mod container;
+pub mod partitions;
 pub mod preview;
+pub mod schema;
 
 use std::io::{Read, Seek};
 use std::path::Path;
@@ -74,6 +76,17 @@ pub struct RevitFileInfo {
     pub basic: Option<BasicFileInfo>,
     pub streams: Vec<StreamInfo>,
     pub preview_png: Option<Vec<u8>>,
+    /// Compressed streams: path, stored size, gzip members, inflated size.
+    pub data_streams: Vec<DataStream>,
+    pub schema: Option<schema::Schema>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DataStream {
+    pub path: String,
+    pub stored: usize,
+    pub members: usize,
+    pub inflated: usize,
 }
 
 impl RevitFileInfo {
@@ -99,6 +112,37 @@ impl RevitFileInfo {
             None => s += "Version: unknown (BasicFileInfo not readable)\n",
         }
         s += &format!("Streams in container: {}\n", self.streams.len());
+        if !self.data_streams.is_empty() {
+            let stored: usize = self.data_streams.iter().map(|d| d.stored).sum();
+            let inflated: usize = self.data_streams.iter().map(|d| d.inflated).sum();
+            s += &format!(
+                "Compressed data: {} streams, {:.1} MB stored, {:.1} MB decompressed\n",
+                self.data_streams.len(),
+                stored as f64 / 1e6,
+                inflated as f64 / 1e6
+            );
+        }
+        if let Some(schema) = &self.schema {
+            let names = schema.class_names();
+            let known: Vec<&str> = [
+                "VWall",
+                "ArcWall",
+                "WallType",
+                "FloorType",
+                "Level",
+                "Grid",
+                "FamilyInstance",
+                "Room",
+            ]
+            .into_iter()
+            .filter(|n| names.contains(n))
+            .collect();
+            s += &format!("Schema: {} classes", names.len());
+            if !known.is_empty() {
+                s += &format!(" (including {})", known.join(", "));
+            }
+            s += "\n";
+        }
         s
     }
 }
@@ -132,11 +176,34 @@ pub fn inspect_reader<R: Read + Seek>(reader: R, kind: Option<RevitFileKind>) ->
     let preview_png = container::read_stream(&mut cf, "RevitPreview4.0")
         .ok()
         .and_then(|b| preview::extract_png(&b));
+    let mut data_streams = Vec::new();
+    let mut schema = None;
+    for st in &streams {
+        let compressed = st.path.starts_with("Global/") || st.path.starts_with("Partitions/") || st.path.starts_with("Formats/");
+        if !compressed {
+            continue;
+        }
+        let Ok(raw) = container::read_stream(&mut cf, &st.path) else {
+            continue;
+        };
+        let inflated = partitions::inflate_stream(&raw);
+        if st.path == "Formats/Latest" && !inflated.data.is_empty() {
+            schema = Some(schema::parse(&inflated.data));
+        }
+        data_streams.push(DataStream {
+            path: st.path.clone(),
+            stored: raw.len(),
+            members: inflated.members.len(),
+            inflated: inflated.data.len(),
+        });
+    }
     Ok(RevitFileInfo {
         kind,
         basic,
         streams,
         preview_png,
+        data_streams,
+        schema,
     })
 }
 
