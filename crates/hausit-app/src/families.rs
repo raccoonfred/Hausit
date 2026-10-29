@@ -53,9 +53,16 @@ fn load(app: &mut HausitApp, defs: Vec<FamilyDef>) {
     if let Some(t) = added.first().and_then(|t| app.doc.family_type(*t)) {
         let category = t.category;
         app.current_type.insert(category, t.id);
-        app.options.last_component = Some(category);
+        if Category::COMPONENTS.contains(&category) {
+            app.options.last_component = Some(category);
+        }
         if app.active_level().is_some() {
-            tools::start(app, Tool::Component { category });
+            let tool = match category {
+                Category::Doors => Tool::Door,
+                Category::Windows => Tool::Window,
+                _ => Tool::Component { category },
+            };
+            tools::start(app, tool);
         }
     }
 }
@@ -72,7 +79,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
             ui.label("Hausit's starter families. Ticked families are loaded into the project with all their types.");
             ui.add_space(4.0);
             egui::ScrollArea::vertical().max_height(380.0).show(ui, |ui| {
-                for cat in Category::COMPONENTS {
+                for cat in [Category::Doors, Category::Windows].into_iter().chain(Category::COMPONENTS) {
                     ui.label(RichText::new(cat.name()).strong());
                     for (i, d) in defs.iter().enumerate().filter(|(_, d)| d.category == cat) {
                         let loaded = app.doc.family_def(d.category, &d.name).is_some();

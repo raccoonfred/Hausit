@@ -72,6 +72,8 @@ The category must be one of the following:
 - `PlumbingFixtures`
 - `SpecialtyEquipment`
 - `GenericModels`
+- `Doors` (wall-hosted, see below)
+- `Windows` (wall-hosted, see below)
 
 ### `parameters`
 
@@ -147,6 +149,43 @@ the following:
 If you leave `plan` out, plans draw the outline of every solid. A
 component drawn entirely above the plan's cut plane, such as a wall
 cabinet, is shown dashed.
+
+## Doors and windows
+
+Door and window families are hosted by a wall. You place them with the
+**Door** (`DR`) and **Window** (`WN`) tools, and they cut an opening the
+size of their `Width` and `Height` parameters. Both parameters are
+required. Windows can also have a `Default Sill Height`.
+
+Their coordinates are set by the opening:
+
+- **x** runs along the wall and is centred on the opening.
+- **y** runs across the wall. Positive y points to the wall's exterior
+  side, and y = 0 is the wall's centreline.
+- **z** runs up from the bottom of the opening.
+
+A hosted family can use the extra variable `Wall Thickness`, which is the
+host wall's width, in its formulas. Frames use it to fit the wall, for
+example `min(Wall Thickness, Frame Depth)`.
+
+The **Flip Hand** and **Flip Facing** settings (Space while placing)
+mirror the family's x and y. Draw a door's plan symbol, its leaf and swing
+arc, opening towards −y (the interior). Flipping then swings it the other
+way.
+
+Doors with an integer `Leaves` parameter are exported to IFC as
+single-swing (1), double (2) or rolling-up (0) doors.
+
+The library has the following door and window families:
+
+- Single Flush, Single Glazed, Double Flush and Sectional Overhead doors
+- Fixed, Casement and Strip windows
+
+New projects load the Single Flush and Double Flush doors and the Fixed
+and Casement windows.
+
+Projects saved before doors and windows became families keep their
+built-in door and window types, which still work.
 
 ## IFC
 

@@ -106,18 +106,18 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
 | System families (walls, floors, roofs) with types | Have | — | |
-| Loadable families with types | Partial | P0 | Components (furniture, casework, plumbing, equipment, generic models) load from `.hfam` files: parametric solids with formulas, repeats, visibility and plan symbols. See docs/families.md. Doors and windows are still built in |
+| Loadable families with types | Partial | P0 | Components and wall-hosted doors and windows load from `.hfam` files: parametric solids with formulas, repeats, visibility and plan symbols. See docs/families.md |
 | Family editor: reference planes, dimensions, labels, parameters, formulas | Missing | P0 | |
 | Extrusion, blend, revolve, sweep, swept blend, voids | Missing | P0 | Needs a solid modeller (see 3.2) |
 | Constraints solver (locks, EQ, alignment) | Missing | P0 | |
 | Family types table, type catalogs | Missing | P1 | |
 | Nested and shared families | Missing | P1 | |
 | Symbolic lines, visibility per view/detail level, masking regions | Missing | P1 | |
-| Family templates (`.rft`), hosted families (wall, face, ceiling, floor) | Missing | P1 | |
+| Family templates (`.rft`), hosted families (wall, face, ceiling, floor) | Partial | P1 | Wall-hosted doors and windows done; face, ceiling and floor hosting to come |
 | Shared parameters, project parameters, global parameters | Missing | P1 | |
 | Detail components, profiles, annotation families (tags, symbols, title blocks) | Missing | P1 | |
 | Adaptive and conceptual mass families | Missing | P3 | |
-| A starter family library (doors, windows, furniture, fixtures, title blocks) | Partial | P0 | 19 families authored for Hausit (Insert ▸ Library); doors, windows and title blocks to come |
+| A starter family library (doors, windows, furniture, fixtures, title blocks) | Partial | P0 | 26 families authored for Hausit (Insert ▸ Library), including 4 doors and 3 windows; title blocks to come |
 
 ### 2.5 Annotation and documentation
 

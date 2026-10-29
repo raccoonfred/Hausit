@@ -1,0 +1,182 @@
+{
+  "name": "Door - Single Flush",
+  "category": "Doors",
+  "description": "Single flush door in a timber frame. Swings to the interior; flip it with Space while placing.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 926
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 2040
+    },
+    {
+      "name": "Leaves",
+      "type": "Integer",
+      "default": 1
+    },
+    {
+      "name": "Frame Width",
+      "type": "Length",
+      "default": 50
+    },
+    {
+      "name": "Frame Depth",
+      "type": "Length",
+      "default": 120
+    },
+    {
+      "name": "Leaf Thickness",
+      "type": "Length",
+      "default": 40
+    },
+    {
+      "name": "Leaf Material",
+      "type": "Material",
+      "default": "Wood - Oak"
+    },
+    {
+      "name": "Frame Material",
+      "type": "Material",
+      "default": "Laminate - White"
+    }
+  ],
+  "types": [
+    {
+      "name": "0826 x 2040mm",
+      "values": {
+        "Width": 826
+      }
+    },
+    {
+      "name": "0926 x 2040mm",
+      "values": {}
+    },
+    {
+      "name": "1026 x 2040mm",
+      "values": {
+        "Width": 1026
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "-Width / 2 + Frame Width",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Frame Width",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        "Height - Frame Width"
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Frame Width",
+        "-Leaf Thickness / 2",
+        0
+      ],
+      "max": [
+        "Width / 2 - Frame Width",
+        "Leaf Thickness / 2",
+        "Height - Frame Width"
+      ],
+      "material": "Leaf Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Frame Width - 120",
+        "-Leaf Thickness / 2 - 60",
+        1000
+      ],
+      "max": [
+        "Width / 2 - Frame Width - 60",
+        "Leaf Thickness / 2 + 60",
+        1020
+      ],
+      "material": "Stainless Steel"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Wall Thickness / 2"
+      ],
+      "max": [
+        "-Width / 2 + Frame Width",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2"
+      ],
+      "max": [
+        "Width / 2",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2 - (Width - 2 * Frame Width)"
+      ],
+      "max": [
+        "-Width / 2 + Frame Width + Leaf Thickness",
+        "-Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Arc",
+      "center": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2"
+      ],
+      "radius": "(Width - 2 * Frame Width)",
+      "start": -90,
+      "end": 0
+    }
+  ]
+}

@@ -181,18 +181,34 @@ impl FamilyDef {
         serde_json::to_string_pretty(self).unwrap_or_default()
     }
 
+    /// Doors and windows: placed in a wall, which they cut.
+    pub fn is_hosted(&self) -> bool {
+        self.category.is_hosted()
+    }
+
     /// Checks the family can be used: it has types, its category takes
-    /// components, and every type's solids evaluate.
+    /// loadable families, hosted families size their opening, and every
+    /// type's solids evaluate.
     pub fn check(&self) -> Result<(), String> {
-        if !Category::COMPONENTS.contains(&self.category) {
-            return Err(format!("{} families cannot be loaded as components", self.category.name()));
+        if !Category::COMPONENTS.contains(&self.category) && !self.is_hosted() {
+            return Err(format!("{} cannot be loaded as a family", self.category.name()));
         }
         if self.types.is_empty() {
             return Err("the family has no types".into());
         }
+        if self.is_hosted() {
+            for need in ["Width", "Height"] {
+                if !self.parameters.iter().any(|p| p.name == need && p.kind == ParamType::Length) {
+                    return Err(format!("door and window families need a \"{need}\" length parameter"));
+                }
+            }
+        }
         for t in &self.types {
             let params = self.type_params(t);
-            let vars = vars_of(&params);
+            let mut vars = vars_of(&params);
+            if self.is_hosted() {
+                vars.insert(WALL_THICKNESS.into(), 200.0);
+            }
             for s in &self.solids {
                 solid_prisms(s, &vars).map_err(|e| format!("type \"{}\": {e}", t.name))?;
             }
@@ -573,12 +589,15 @@ fn plan_lines(p: &PlanSymbol, vars: &Vars) -> Result<Vec<(DVec2, DVec2)>, String
     })
 }
 
-/// Where a component's family coordinates land in the model: the plan
-/// transform and the base height.
+/// Where a family's coordinates land in the model: the plan transform
+/// (with optional mirroring) and the base height.
 pub struct Placement {
     pub origin: DVec2,
     pub dir: DVec2,
     pub z: f64,
+    /// Mirror the family's x (a door's hand) and y (its facing).
+    pub flip_x: bool,
+    pub flip_y: bool,
 }
 
 impl Placement {
@@ -587,31 +606,34 @@ impl Placement {
             origin: c.point,
             dir: DVec2::from_angle(c.rotation.to_radians()),
             z: doc.level_elevation(c.level) + c.offset,
+            flip_x: false,
+            flip_y: false,
         }
     }
 
     pub fn apply(&self, p: DVec2) -> DVec2 {
-        self.origin + self.dir.rotate(p)
+        let q = DVec2::new(if self.flip_x { -p.x } else { p.x }, if self.flip_y { -p.y } else { p.y });
+        self.origin + self.dir.rotate(q)
     }
 }
 
-/// The family and the parameter values behind a component.
-fn family_and_vars<'a>(doc: &'a Document, c: &Component) -> Option<(&'a FamilyDef, Vars)> {
-    let t = doc.family_type(c.type_id)?;
+/// Name of the variable hosted families can use for their wall's
+/// thickness.
+pub const WALL_THICKNESS: &str = "Wall Thickness";
+
+/// The family and the parameter values behind an element's type.
+fn family_and_vars(doc: &Document, type_id: ElementId) -> Option<(&FamilyDef, Vars)> {
+    let t = doc.family_type(type_id)?;
     let def = doc.family_def(t.category, &t.family)?;
     Some((def, vars_of(&t.params)))
 }
 
-/// The solids of a component, in model coordinates.
-pub fn component_parts(doc: &Document, c: &Component) -> Vec<Part> {
-    let Some((def, vars)) = family_and_vars(doc, c) else {
-        return vec![];
-    };
-    let t = doc.family_type(c.type_id);
-    let place = Placement::of(doc, c);
+/// A family type's solids, placed in the model.
+fn family_parts(doc: &Document, type_id: ElementId, def: &FamilyDef, vars: &Vars, place: &Placement) -> Vec<Part> {
+    let t = doc.family_type(type_id);
     let mut parts = Vec::new();
     for s in &def.solids {
-        let Ok((prisms, material)) = solid_prisms(s, &vars) else { continue };
+        let Ok((prisms, material)) = solid_prisms(s, vars) else { continue };
         // A material name, or a Material parameter naming one.
         let material = material.map(|m| match t.and_then(|t| t.params.get(&m)) {
             Some(ParamValue::Text(name)) => name.clone(),
@@ -636,21 +658,65 @@ pub fn component_parts(doc: &Document, c: &Component) -> Vec<Part> {
     parts
 }
 
-/// The plan symbol of a component in model coordinates, or `None` when
-/// its family has none (plans then draw the solids' outlines).
-pub fn component_plan(doc: &Document, c: &Component) -> Option<Vec<(DVec2, DVec2)>> {
-    let (def, vars) = family_and_vars(doc, c)?;
+/// A family's plan symbol, placed in the model; `None` when it has none.
+fn family_plan(def: &FamilyDef, vars: &Vars, place: &Placement) -> Option<Vec<(DVec2, DVec2)>> {
     if def.plan.is_empty() {
         return None;
     }
-    let place = Placement::of(doc, c);
     let mut lines = Vec::new();
     for p in &def.plan {
-        for (a, b) in plan_lines(p, &vars).ok()? {
+        for (a, b) in plan_lines(p, vars).ok()? {
             lines.push((place.apply(a), place.apply(b)));
         }
     }
     Some(lines)
+}
+
+/// The solids of a component, in model coordinates.
+pub fn component_parts(doc: &Document, c: &Component) -> Vec<Part> {
+    let Some((def, vars)) = family_and_vars(doc, c.type_id) else {
+        return vec![];
+    };
+    family_parts(doc, c.type_id, def, &vars, &Placement::of(doc, c))
+}
+
+/// The plan symbol of a component in model coordinates, or `None` when
+/// its family has none (plans then draw the solids' outlines).
+pub fn component_plan(doc: &Document, c: &Component) -> Option<Vec<(DVec2, DVec2)>> {
+    let (def, vars) = family_and_vars(doc, c.type_id)?;
+    family_plan(def, &vars, &Placement::of(doc, c))
+}
+
+/// A door or window's family, its values (with the host wall's
+/// thickness) and its placement: centred on the opening, x along the
+/// wall, y towards the wall's exterior, z from the bottom of the opening.
+fn hosted(doc: &Document, id: ElementId) -> Option<(&FamilyDef, Vars, Placement)> {
+    let o = doc.element(id)?.as_opening()?;
+    let (def, mut vars) = family_and_vars(doc, o.type_id)?;
+    let f = crate::geometry::opening_frame(doc, id)?;
+    vars.insert(WALL_THICKNESS.into(), f.wall_thickness);
+    let place = Placement {
+        origin: f.center,
+        dir: f.dir,
+        z: f.z0,
+        flip_x: o.flip_hand,
+        flip_y: o.flip_facing,
+    };
+    Some((def, vars, place))
+}
+
+/// The solids of a door or window from its family, or `None` for the
+/// built-in types without one.
+pub fn hosted_parts(doc: &Document, id: ElementId) -> Option<Vec<Part>> {
+    let (def, vars, place) = hosted(doc, id)?;
+    let o = doc.element(id)?.as_opening()?;
+    Some(family_parts(doc, o.type_id, def, &vars, &place))
+}
+
+/// The plan symbol of a door or window from its family, if it has one.
+pub fn hosted_plan(doc: &Document, id: ElementId) -> Option<Vec<(DVec2, DVec2)>> {
+    let (def, vars, place) = hosted(doc, id)?;
+    family_plan(def, &vars, &place)
 }
 
 impl Document {
@@ -732,7 +798,8 @@ mod tests {
         for def in crate::library::families() {
             assert!(def.check().is_ok(), "{}: {:?}", def.name, def.check());
             for t in &def.types {
-                let v = vars_of(&def.type_params(t));
+                let mut v = vars_of(&def.type_params(t));
+                v.insert(WALL_THICKNESS.into(), 200.0);
                 let n: usize = def.solids.iter().map(|s| solid_prisms(s, &v).unwrap().0.len()).sum();
                 assert!(n > 0, "{} : {} has no solids", def.name, t.name);
             }

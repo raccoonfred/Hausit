@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub type TypeParams = IndexMap<String, ParamValue>;
 
 /// A family type, e.g. `Basic Wall : Generic - 200mm` or
-/// `M_Single-Flush : 0864 x 2032mm`.
+/// `Door - Single Flush : 0926 x 2040mm`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FamilyType {
     pub id: ElementId,

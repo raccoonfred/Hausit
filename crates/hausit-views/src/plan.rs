@@ -7,7 +7,7 @@ use crate::hatch::{draw_band, layer_bands, structural_material, Band};
 use crate::{pen, Anchor, Dash, DisplayList, Prim, Rgba, Stroke, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, ElementId, LengthUnit};
-use hausit_model::component::component_plan;
+use hausit_model::component::{component_plan, hosted_plan};
 use hausit_model::geometry::{
     column_extent, column_outline, element_geometry, foundation_extent, framing_axis, opening_frame, roof_plan_lines, section_depth,
     section_profile, Material, Shape,
@@ -499,7 +499,14 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         let n = perp(f.dir);
         let hw = f.width / 2.0;
         let half_t = f.wall_thickness / 2.0;
-        if is_door {
+        if let Some(lines) = hosted_plan(doc, e.id) {
+            // The family's own plan symbol.
+            let cat = if is_door { Category::Doors } else { Category::Windows };
+            let stroke = pen(doc, cat, false, view.scale);
+            for (a, b) in lines {
+                dl.line(a, b, stroke, Some(e.id));
+            }
+        } else if is_door {
             let leaves = doc
                 .type_of(e.id)
                 .and_then(|t| match t.params.get("Leaves") {

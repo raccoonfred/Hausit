@@ -727,6 +727,8 @@ impl<'a> Exporter<'a> {
             ElementData::Door(o) => {
                 let operation = match t.and_then(|t| t.params.get("Leaves")) {
                     Some(ParamValue::Integer(2)) => "DOUBLE_DOOR_SINGLE_SWING",
+                    // Doors without swinging leaves, such as sectional overhead doors.
+                    Some(ParamValue::Integer(0)) => "ROLLINGUP",
                     _ if o.flip_hand => "SINGLE_SWING_RIGHT",
                     _ => "SINGLE_SWING_LEFT",
                 };

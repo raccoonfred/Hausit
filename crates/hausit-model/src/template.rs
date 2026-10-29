@@ -165,31 +165,18 @@ pub fn load_default_types(doc: &mut Document) {
         ],
     );
 
-    let door = |w: f64, h: f64, leaves: i64| {
-        with(
-            Doors,
-            &[("Width", len(w)), ("Height", len(h)), ("Leaves", ParamValue::Integer(leaves))],
-        )
-    };
-    doc.add_type(Doors, "M_Single-Flush", "0864 x 2032mm", door(864.0, 2032.0, 1));
-    doc.add_type(Doors, "M_Single-Flush", "0915 x 2134mm", door(915.0, 2134.0, 1));
-    doc.add_type(Doors, "M_Double-Flush", "1730 x 2032mm", door(1730.0, 2032.0, 2));
-
-    let window = |w: f64, h: f64, sill: f64| {
-        with(
-            Windows,
-            &[("Width", len(w)), ("Height", len(h)), ("Default Sill Height", len(sill))],
-        )
-    };
-    doc.add_type(Windows, "M_Fixed", "0915 x 1220mm", window(915.0, 1220.0, 915.0));
-    doc.add_type(Windows, "M_Fixed", "0610 x 1830mm", window(610.0, 1830.0, 610.0));
-    doc.add_type(Windows, "M_Casement", "1200 x 1500mm", window(1200.0, 1500.0, 800.0));
+    // Doors and windows are loadable families from the library.
+    for name in ["Door - Single Flush", "Door - Double Flush", "Window - Fixed", "Window - Casement"] {
+        if let Some(def) = crate::library::family(name) {
+            let _ = doc.load_family(def);
+        }
+    }
 
     let column = |b: f64, h: f64| with(StructuralColumns, &[("b", len(b)), ("h", len(h))]);
     for (b, h) in [(300.0, 300.0), (300.0, 450.0), (450.0, 600.0)] {
         doc.add_type(
             StructuralColumns,
-            "M_Concrete-Rectangular-Column",
+            "Concrete Column - Rectangular",
             &format!("{b:.0} x {h:.0}mm"),
             column(b, h),
         );
@@ -481,8 +468,8 @@ pub fn sample_project() -> Document {
         }));
     }
 
-    let door = t(&doc, Category::Doors, "0915 x 2134mm");
-    let door2 = t(&doc, Category::Doors, "0864 x 2032mm");
+    let door = t(&doc, Category::Doors, "0926 x 2040mm");
+    let door2 = t(&doc, Category::Doors, "0826 x 2040mm");
     let win = t(&doc, Category::Windows, "1200 x 1500mm");
     let opening = |type_id, host, offset, sill| HostedOpening {
         type_id,
@@ -917,15 +904,29 @@ pub fn industrial_sample() -> Document {
         }));
     }
 
-    let door = t(&doc, Category::Doors, "0915 x 2134mm");
-    doc.add_element(ElementData::Door(HostedOpening {
-        type_id: door,
-        host: walls[3],
-        offset: 3000.0,
-        sill_height: 0.0,
+    let door = t(&doc, Category::Doors, "0926 x 2040mm");
+    let opening = |type_id, host, offset, sill_height| HostedOpening {
+        type_id,
+        host,
+        offset,
+        sill_height,
         flip_hand: false,
         flip_facing: false,
-    }));
+    };
+    doc.add_element(ElementData::Door(opening(door, walls[3], 3000.0, 0.0)));
+    // A loading bay door between the columns of the middle bay, and strip
+    // windows high in the north wall.
+    for name in ["Door - Sectional Overhead", "Window - Strip"] {
+        if let Some(def) = crate::library::family(name) {
+            let _ = doc.load_family(def);
+        }
+    }
+    let overhead = t(&doc, Category::Doors, "4000 x 4500mm");
+    doc.add_element(ElementData::Door(opening(overhead, walls[3], 15240.0, 0.0)));
+    let strip = t(&doc, Category::Windows, "3000 x 900mm");
+    for x in [3000.0, 9000.0, 15000.0] {
+        doc.add_element(ElementData::Window(opening(strip, walls[1], x - lo, 2400.0)));
+    }
 
     doc.add_view(
         &doc.unique_view_name("Section"),

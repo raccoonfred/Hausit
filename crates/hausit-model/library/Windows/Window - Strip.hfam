@@ -1,0 +1,223 @@
+{
+  "name": "Window - Strip",
+  "category": "Windows",
+  "description": "Long strip window for industrial walls, in aluminium.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 6000
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 900
+    },
+    {
+      "name": "Default Sill Height",
+      "type": "Length",
+      "default": 2400
+    },
+    {
+      "name": "Panes",
+      "type": "Integer",
+      "default": 6
+    },
+    {
+      "name": "Frame Width",
+      "type": "Length",
+      "default": 60
+    },
+    {
+      "name": "Frame Depth",
+      "type": "Length",
+      "default": 90
+    },
+    {
+      "name": "Frame Material",
+      "type": "Material",
+      "default": "Stainless Steel"
+    }
+  ],
+  "types": [
+    {
+      "name": "3000 x 900mm",
+      "values": {
+        "Width": 3000,
+        "Panes": 3
+      }
+    },
+    {
+      "name": "6000 x 900mm",
+      "values": {}
+    },
+    {
+      "name": "6000 x 1500mm",
+      "values": {
+        "Height": 1500
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "-Width / 2 + Frame Width",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Frame Width",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        "Height - Frame Width"
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Frame Width"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Frame Width",
+        -6,
+        "Frame Width"
+      ],
+      "max": [
+        "Width / 2 - Frame Width",
+        6,
+        "Height - Frame Width"
+      ],
+      "material": "Glass"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + (Width / Panes) - Frame Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        "Frame Width"
+      ],
+      "max": [
+        "-Width / 2 + (Width / Panes) + Frame Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height - Frame Width"
+      ],
+      "material": "Frame Material",
+      "repeat": {
+        "count": "Panes - 1",
+        "step": [
+          "Width / Panes",
+          0,
+          0
+        ]
+      }
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "Wall Thickness / 2"
+      ],
+      "to": [
+        "Width / 2",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Wall Thickness / 2"
+      ],
+      "to": [
+        "Width / 2",
+        "-Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        "-Wall Thickness / 2"
+      ],
+      "to": [
+        "-Width / 2",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "Width / 2",
+        "-Wall Thickness / 2"
+      ],
+      "to": [
+        "Width / 2",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        15
+      ],
+      "to": [
+        "Width / 2",
+        15
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2",
+        -15
+      ],
+      "to": [
+        "Width / 2",
+        -15
+      ]
+    }
+  ]
+}

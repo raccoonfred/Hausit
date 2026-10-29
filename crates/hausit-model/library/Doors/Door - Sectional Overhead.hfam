@@ -1,0 +1,218 @@
+{
+  "name": "Door - Sectional Overhead",
+  "category": "Doors",
+  "description": "Insulated sectional overhead door for loading bays, with its guide tracks inside.",
+  "parameters": [
+    {
+      "name": "Width",
+      "type": "Length",
+      "default": 4000
+    },
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 4500
+    },
+    {
+      "name": "Leaves",
+      "type": "Integer",
+      "default": 0
+    },
+    {
+      "name": "Frame Width",
+      "type": "Length",
+      "default": 100
+    },
+    {
+      "name": "Frame Depth",
+      "type": "Length",
+      "default": 150
+    },
+    {
+      "name": "Panel Height",
+      "type": "Length",
+      "default": 500
+    },
+    {
+      "name": "Panel Material",
+      "type": "Material",
+      "default": "Metal Panel - Steel"
+    },
+    {
+      "name": "Frame Material",
+      "type": "Material",
+      "default": "Steel - Painted Blue"
+    }
+  ],
+  "types": [
+    {
+      "name": "3000 x 3000mm",
+      "values": {
+        "Width": 3000,
+        "Height": 3000
+      }
+    },
+    {
+      "name": "4000 x 4500mm",
+      "values": {}
+    },
+    {
+      "name": "5000 x 5000mm",
+      "values": {
+        "Width": 5000,
+        "Height": 5000
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "-Width / 2 + Frame Width",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Frame Width",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        0
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2",
+        "-min(Wall Thickness, Frame Depth) / 2",
+        "Height - Frame Width"
+      ],
+      "max": [
+        "Width / 2",
+        "min(Wall Thickness, Frame Depth) / 2",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2 - 60",
+        0
+      ],
+      "max": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2 - 20",
+        "Panel Height - 10"
+      ],
+      "material": "Panel Material",
+      "repeat": {
+        "count": "floor((Height - Frame Width) / Panel Height)",
+        "step": [
+          0,
+          0,
+          "Panel Height"
+        ]
+      }
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "-Width / 2 + Frame Width - 80",
+        "-Wall Thickness / 2 - 100",
+        0
+      ],
+      "max": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2 - 20",
+        "Height"
+      ],
+      "material": "Frame Material"
+    },
+    {
+      "shape": "Box",
+      "min": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2 - 100",
+        0
+      ],
+      "max": [
+        "Width / 2 - Frame Width + 80",
+        "-Wall Thickness / 2 - 20",
+        "Height"
+      ],
+      "material": "Frame Material"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2",
+        "-Wall Thickness / 2"
+      ],
+      "max": [
+        "-Width / 2 + Frame Width",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2"
+      ],
+      "max": [
+        "Width / 2",
+        "Wall Thickness / 2"
+      ]
+    },
+    {
+      "shape": "Rectangle",
+      "min": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2 - 60"
+      ],
+      "max": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2 - 20"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2 - 100"
+      ],
+      "to": [
+        "-Width / 2 + Frame Width",
+        "-Wall Thickness / 2 - 600"
+      ]
+    },
+    {
+      "shape": "Line",
+      "from": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2 - 100"
+      ],
+      "to": [
+        "Width / 2 - Frame Width",
+        "-Wall Thickness / 2 - 600"
+      ]
+    }
+  ]
+}

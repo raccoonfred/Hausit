@@ -1000,6 +1000,11 @@ fn rect(center: DVec2, dir: DVec2, along: (f64, f64), across: (f64, f64)) -> Vec
 }
 
 fn opening_parts(doc: &Document, id: ElementId, _o: &HostedOpening, door: bool) -> Vec<Part> {
+    // Doors and windows from a loaded family; the built-in shapes below
+    // are for types without one.
+    if let Some(parts) = crate::component::hosted_parts(doc, id) {
+        return parts;
+    }
     let Some(f) = opening_frame(doc, id) else { return vec![] };
     let (hw, ht) = (f.width * 0.5, f.thickness * 0.5);
     let frame_w = 50.0;
@@ -1186,7 +1191,7 @@ mod tests {
             .map(|p| if let Shape::Prism(p) = &p.shape { p.volume() } else { 0.0 })
             .sum();
         let gross = w.length() * 350.0 * 4425.0; // a square mitre keeps centreline length × thickness
-        let holes = 915.0 * 2134.0 * 350.0 + 1200.0 * 1500.0 * 350.0;
+        let holes = 926.0 * 2040.0 * 350.0 + 1200.0 * 1500.0 * 350.0;
         assert!((vol - (gross - holes)).abs() < 1.0, "vol {vol} expected {}", gross - holes);
     }
 
