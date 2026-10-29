@@ -1,7 +1,7 @@
 # Hausit families (`.hfam`)
 
-Furniture, casework, plumbing fixtures, equipment and other components
-are **loadable families**. Each family is a small JSON file with the
+Doors, windows, furniture, casework, plumbing fixtures, equipment and
+other components are **loadable families**. Each family is a small JSON file with the
 `.hfam` extension. It describes:
 
 - the family's parameters,
@@ -23,6 +23,44 @@ The starter library lives in
 [`crates/hausit-model/library/`](../crates/hausit-model/library). It was
 written for Hausit and is a good place to start when you write your own
 families.
+
+## The Family Editor
+
+You can create and change families in the **Family Editor** instead of
+writing the JSON by hand. There are three ways to open it:
+
+- **File ▸ New Family** starts a family of a category. Doors and windows
+  start from a simple frame with a leaf or glass, and other categories
+  start from a box with Width, Depth and Height.
+- **File ▸ Open Family** opens a `.hfam` file. Opening a `.hfam` file
+  through **File ▸ Open** also works.
+- **Edit Family** on the Modify tab opens the family of the selected
+  door, window or component.
+
+The window has three parts:
+
+- **Family Types**, on the left, works like Revit's Family Types dialog.
+  You pick the type to show, and you can add, rename and delete types.
+  The parameter table shows each parameter's value for that type. You can
+  add parameters, change their type, rename them and delete them. When you
+  rename a parameter, every formula that uses it is updated.
+- **Solids and plan symbols**, in the middle, lists the family's geometry.
+  Use the toolbar to add a Box, Extrusion or Cylinder, or a plan symbol
+  (Line, Rectangle, Circle, Arc or Polyline). For the selected item you
+  can edit every dimension as a number or a formula, along with its
+  material (a fixed material, or a Material parameter), a visibility
+  condition and repeats. A formula that does not work turns red, and
+  hovering over it shows the error. Hovering over a formula that works
+  shows its value.
+- **The preview**, on the right, shows the current type in plan, front,
+  right or 3D. Drag in the 3D preview to orbit around the family. Green
+  dashed lines are the reference planes through the origin. Doors and
+  windows also show their host wall and opening.
+
+**Load into Project** loads the family into the open project. Types that
+are already in the project take the family's values, and every placed
+door, window or component updates. You can undo this. **Save** and
+**Save As** write the `.hfam` file.
 
 ## Coordinates
 

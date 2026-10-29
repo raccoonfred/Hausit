@@ -13,6 +13,7 @@ mod browser;
 mod canvas;
 mod dialogs;
 mod families;
+mod family_editor;
 mod icons;
 mod options_bar;
 mod properties;

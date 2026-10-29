@@ -65,6 +65,7 @@ pub struct Dialogs {
     pub export_pdf: Option<crate::sheets::ExportPdf>,
     /// Load from Library: each library family, and whether it is ticked.
     pub library: Option<Vec<bool>>,
+    pub family_editor: Option<Box<crate::family_editor::FamilyEditor>>,
 }
 
 impl Dialogs {
@@ -104,6 +105,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     materials(app, ctx);
     crate::sheets::show(app, ctx);
     crate::families::show(app, ctx);
+    crate::family_editor::show(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;

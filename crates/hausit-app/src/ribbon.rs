@@ -139,6 +139,18 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
     if ui.button("Open…                     Ctrl+O").clicked() {
         app.open_dialog();
     }
+    ui.menu_button("New Family", |ui| {
+        for c in [Category::Doors, Category::Windows].into_iter().chain(Category::COMPONENTS) {
+            if ui.button(c.name()).clicked() {
+                crate::family_editor::new_family(app, c);
+                ui.close();
+            }
+        }
+    });
+    if ui.button("Open Family…").clicked() {
+        crate::family_editor::open_family_dialog(app);
+    }
+    ui.separator();
     if ui.button("Open Sample House").clicked() {
         app.set_document(crate::sheets::sample_house(), None);
     }
@@ -630,6 +642,19 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         if big(ui, Icon::TypeProps, "Type Props", "Type Properties", false, type_id.is_some()) {
             if let Some(t) = type_id {
                 app.dialogs.open_type_properties(&app.doc, t);
+            }
+        }
+        let family = type_id.filter(|t| crate::family_editor::family_of_type(app, *t).is_some());
+        if big(
+            ui,
+            Icon::LoadFamily,
+            "Edit Family",
+            "Edit Family: open this element's family in the Family Editor",
+            false,
+            family.is_some(),
+        ) {
+            if let Some(t) = family {
+                crate::family_editor::edit_family(app, t);
             }
         }
     });

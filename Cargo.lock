@@ -1565,6 +1565,7 @@ dependencies = [
  "hausit-views",
  "image",
  "rfd",
+ "serde_json",
 ]
 
 [[package]]

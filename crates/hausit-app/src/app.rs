@@ -170,6 +170,13 @@ impl HausitApp {
     }
 
     pub fn open_path(&mut self, path: &Path) {
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case(hausit_model::component::EXTENSION))
+        {
+            crate::family_editor::open_family(self, path);
+            return;
+        }
         let is_ifc = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
         if is_ifc {
             match hausit_io::import_ifc(path) {
@@ -234,11 +241,13 @@ impl HausitApp {
     }
 
     pub fn open_dialog(&mut self) {
-        let exts = hausit_io::openable_extensions();
+        let mut exts = hausit_io::openable_extensions();
+        exts.push(hausit_model::component::EXTENSION);
         let picked = rfd::FileDialog::new()
             .add_filter("All supported files", &exts)
             .add_filter("Hausit project", &[hausit_io::EXTENSION])
             .add_filter("IFC", &["ifc"])
+            .add_filter("Hausit family", &[hausit_model::component::EXTENSION])
             .add_filter("Autodesk Revit files", &hausit_rvt::EXTENSIONS)
             .pick_file();
         if let Some(p) = picked {

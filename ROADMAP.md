@@ -107,7 +107,7 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 |---|---|---|---|
 | System families (walls, floors, roofs) with types | Have | — | |
 | Loadable families with types | Partial | P0 | Components and wall-hosted doors and windows load from `.hfam` files: parametric solids with formulas, repeats, visibility and plan symbols. See docs/families.md |
-| Family editor: reference planes, dimensions, labels, parameters, formulas | Missing | P0 | |
+| Family editor: reference planes, dimensions, labels, parameters, formulas | Partial | P0 | Family Editor window (File ▸ New Family, File ▸ Open Family, Modify ▸ Edit Family): Family Types with add, rename and delete for types and parameters (renaming updates every formula), solids and plan symbols with formula dimensions, material, visibility and repeat, live plan, front, right and 3D preview, Load into Project (updates placed instances) and Save as .hfam. Still to do: drawing sketches and dimensions on reference planes with a constraint solver |
 | Extrusion, blend, revolve, sweep, swept blend, voids | Missing | P0 | Needs a solid modeller (see 3.2) |
 | Constraints solver (locks, EQ, alignment) | Missing | P0 | |
 | Family types table, type catalogs | Missing | P1 | |
