@@ -393,7 +393,79 @@ pub fn new_project() -> Document {
     ] {
         doc.add_view(d.label(), ViewKind::Elevation { direction: d });
     }
+    add_default_view_templates(&mut doc);
     doc
+}
+
+/// Revit-style starting view templates: an architectural plan, a
+/// structural plan without furniture, fixtures and rooms, and a shaded 3D
+/// presentation view.
+pub fn add_default_view_templates(doc: &mut Document) {
+    use crate::view::{CategoryGraphics, Graphics, ViewTemplate};
+    let id = |doc: &mut Document, t: ViewTemplate| {
+        doc.insert_view_template(t);
+    };
+    let hidden = CategoryGraphics {
+        visible: false,
+        ..Default::default()
+    };
+    let structural: Graphics = [
+        Category::Furniture,
+        Category::Casework,
+        Category::PlumbingFixtures,
+        Category::SpecialtyEquipment,
+        Category::GenericModels,
+        Category::Rooms,
+        Category::RoomSeparation,
+        Category::Ceilings,
+    ]
+    .into_iter()
+    .map(|c| (c, hidden))
+    .chain([(
+        Category::Doors,
+        CategoryGraphics {
+            halftone: true,
+            ..Default::default()
+        },
+    )])
+    .collect();
+    let base = ViewTemplate {
+        id: ElementId::INVALID,
+        name: String::new(),
+        scale: Some(100),
+        detail_level: Some(crate::DetailLevel::Medium),
+        visual_style: Some(crate::VisualStyle::HiddenLine),
+        cut_height: Some(1200.0),
+        graphics: Some(Graphics::new()),
+    };
+    id(
+        doc,
+        ViewTemplate {
+            name: "Architectural Plan".into(),
+            ..base.clone()
+        },
+    );
+    id(
+        doc,
+        ViewTemplate {
+            name: "Structural Plan".into(),
+            detail_level: Some(crate::DetailLevel::Coarse),
+            graphics: Some(structural),
+            ..base.clone()
+        },
+    );
+    id(
+        doc,
+        ViewTemplate {
+            name: "3D Presentation".into(),
+            scale: None,
+            detail_level: Some(crate::DetailLevel::Fine),
+            visual_style: Some(crate::VisualStyle::Shaded),
+            cut_height: None,
+            graphics: None,
+            ..base
+        },
+    );
 }
 
 /// A small house, used as the "Sample project" and in tests.

@@ -96,6 +96,8 @@ pub struct Dialogs {
     pub text_note: Option<TextNoteDialog>,
     /// Tag All Not Tagged: each taggable category and whether it is ticked.
     pub tag_all: Option<Vec<(Category, bool)>>,
+    pub vg: Option<crate::view_graphics::VgDialog>,
+    pub templates: Option<crate::view_graphics::TemplatesDialog>,
 }
 
 impl Dialogs {
@@ -138,6 +140,8 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     crate::family_editor::show(app, ctx);
     text_note(app, ctx);
     tag_all(app, ctx);
+    crate::view_graphics::show_templates(app, ctx);
+    crate::view_graphics::show_vg(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;

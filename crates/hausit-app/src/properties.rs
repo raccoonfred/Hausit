@@ -407,6 +407,30 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
         .default_open(true)
         .show(ui, |ui| {
             egui::Grid::new("view_identity").num_columns(2).show(ui, |ui| {
+                if v.kind.is_graphical() && !is_sheet {
+                    ui.label("View Template");
+                    let name = |id: Option<ElementId>| {
+                        id.and_then(|t| app.doc.view_template(t))
+                            .map(|t| t.name.clone())
+                            .unwrap_or_else(|| "<None>".into())
+                    };
+                    egui::ComboBox::from_id_salt("vp_template")
+                        .selected_text(name(v.template))
+                        .width(140.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut v.template, None, "<None>");
+                            for t in &app.doc.view_templates {
+                                ui.selectable_value(&mut v.template, Some(t.id), t.name.clone());
+                            }
+                        });
+                    ui.end_row();
+                    ui.label("Visibility/Graphics");
+                    if ui.button("Edit…").clicked() {
+                        app.active_view = Some(view_id);
+                        crate::view_graphics::open_for_active_view(app);
+                    }
+                    ui.end_row();
+                }
                 ui.label("View Name");
                 let key = egui::Id::unique(("view_name", view_id));
                 let mut t = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| v.name.clone());

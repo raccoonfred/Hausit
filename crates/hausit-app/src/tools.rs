@@ -2169,6 +2169,10 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
             start(app, Tool::Dimension { refs: vec![] });
             true
         }
+        "VV" | "VG" => {
+            crate::view_graphics::open_for_active_view(app);
+            true
+        }
         "TX" => {
             start(app, Tool::Text);
             true

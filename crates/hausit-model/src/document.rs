@@ -47,6 +47,8 @@ pub struct Document {
     /// Loadable families in the project.
     #[serde(default)]
     pub families: Vec<crate::component::FamilyDef>,
+    #[serde(default)]
+    pub view_templates: Vec<crate::view::ViewTemplate>,
     elements: IndexMap<ElementId, Element>,
     types: IndexMap<ElementId, FamilyType>,
     views: IndexMap<ElementId, View>,
@@ -78,6 +80,7 @@ impl Document {
             line_weights: Default::default(),
             materials: crate::materials::default_materials(),
             families: Vec::new(),
+            view_templates: Vec::new(),
             elements: IndexMap::new(),
             types: IndexMap::new(),
             views: IndexMap::new(),
@@ -732,6 +735,60 @@ impl Document {
         self.views.insert(id, View::new(id, name, kind));
         self.touch();
         id
+    }
+
+    // ----- view templates --------------------------------------------------
+
+    pub fn view_template(&self, id: ElementId) -> Option<&crate::view::ViewTemplate> {
+        self.view_templates.iter().find(|t| t.id == id)
+    }
+
+    pub fn view_template_mut(&mut self, id: ElementId) -> Option<&mut crate::view::ViewTemplate> {
+        self.touch();
+        self.view_templates.iter_mut().find(|t| t.id == id)
+    }
+
+    /// Create Template from Current View.
+    pub fn add_view_template(&mut self, name: &str, from: ElementId) -> Option<ElementId> {
+        let view = self.view(from)?.clone();
+        let id = self.alloc_id();
+        self.view_templates.push(crate::view::ViewTemplate::from_view(id, name, &view));
+        self.touch();
+        Some(id)
+    }
+
+    /// Adds a template, giving it a new id.
+    pub fn insert_view_template(&mut self, mut t: crate::view::ViewTemplate) -> ElementId {
+        t.id = self.alloc_id();
+        let id = t.id;
+        self.view_templates.push(t);
+        self.touch();
+        id
+    }
+
+    /// Deletes a template; its views keep their current settings.
+    pub fn delete_view_template(&mut self, id: ElementId) {
+        let effective: Vec<View> = self
+            .views
+            .values()
+            .filter(|v| v.template == Some(id))
+            .map(|v| self.effective_view(v))
+            .collect();
+        for mut v in effective {
+            v.template = None;
+            self.views.insert(v.id, v);
+        }
+        self.view_templates.retain(|t| t.id != id);
+        self.touch();
+    }
+
+    /// The view with its template's settings in place: what it shows.
+    pub fn effective_view(&self, view: &View) -> View {
+        let mut v = view.clone();
+        if let Some(t) = view.template.and_then(|t| self.view_template(t)) {
+            t.apply_to(&mut v);
+        }
+        v
     }
 
     pub fn delete_view(&mut self, id: ElementId) {

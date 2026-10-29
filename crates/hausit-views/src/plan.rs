@@ -40,7 +40,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             }
             dl.push(
                 Prim::Polygon(c.boundary.clone()),
-                Some(pen(doc, Category::Ceilings, false, view.scale)),
+                Some(pen(doc, Category::Ceilings, false, view)),
                 Some([255, 255, 255, 0]),
                 Some(e.id),
             );
@@ -63,7 +63,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                     pts: f.boundary.clone(),
                     closed: true,
                 },
-                Some(pen(doc, Category::Floors, false, view.scale)),
+                Some(pen(doc, Category::Floors, false, view)),
                 None,
                 Some(e.id),
             );
@@ -80,12 +80,12 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                     pts: r.footprint.clone(),
                     closed: true,
                 },
-                Some(pen(doc, Category::Roofs, false, view.scale)),
+                Some(pen(doc, Category::Roofs, false, view)),
                 None,
                 Some(e.id),
             );
             for (a, b) in roof_plan_lines(r) {
-                dl.line(a, b, pen(doc, Category::Roofs, false, view.scale), Some(e.id));
+                dl.line(a, b, pen(doc, Category::Roofs, false, view), Some(e.id));
             }
         }
     }
@@ -127,7 +127,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements_of(Category::RoomSeparation) {
         let ElementData::RoomSeparation(l) = &e.data else { continue };
         if l.level == level {
-            dl.line(l.start, l.end, pen(doc, Category::RoomSeparation, false, view.scale), Some(e.id));
+            dl.line(l.start, l.end, pen(doc, Category::RoomSeparation, false, view), Some(e.id));
         }
     }
 
@@ -141,7 +141,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         if base != level && !(z0 < cut_z && z1 > elev) {
             continue;
         }
-        let mut stroke = pen(doc, Category::StructuralFoundations, false, view.scale);
+        let mut stroke = pen(doc, Category::StructuralFoundations, false, view);
         if z1 <= elev + 1.0 {
             stroke.dash = Dash::Dashed;
         }
@@ -200,7 +200,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                         pts: footprint.clone(),
                         closed: true,
                     },
-                    Some(pen(doc, Category::Walls, false, view.scale)),
+                    Some(pen(doc, Category::Walls, false, view)),
                     None,
                     Some(e.id),
                 );
@@ -225,7 +225,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     let shared = |a: DVec2, b: DVec2| edge_count.get(&key(a, b)).copied().unwrap_or(0) > 1;
     for (a, b, id) in &cut_edges {
         if !shared(*a, *b) {
-            dl.line(*a, *b, pen(doc, Category::Walls, true, view.scale), Some(*id));
+            dl.line(*a, *b, pen(doc, Category::Walls, true, view), Some(*id));
         }
     }
 
@@ -236,7 +236,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         let (z0, z1) = column_extent(doc, c);
         let Some(outline) = column_outline(doc, e.id) else { continue };
         if z0 <= cut_z && cut_z < z1 {
-            let edge = pen(doc, Category::StructuralColumns, true, view.scale);
+            let edge = pen(doc, Category::StructuralColumns, true, view);
             match structural_material(doc, e.id).filter(|_| view.detail_level != DetailLevel::Coarse) {
                 Some(material) => {
                     let band = Band {
@@ -263,7 +263,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                     pts: outline,
                     closed: true,
                 },
-                Some(pen(doc, Category::StructuralColumns, false, view.scale)),
+                Some(pen(doc, Category::StructuralColumns, false, view)),
                 None,
                 Some(e.id),
             );
@@ -280,7 +280,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 continue;
             }
             let Some(g) = element_geometry(doc, e.id) else { continue };
-            let mut stroke = pen(doc, *cat, false, view.scale);
+            let mut stroke = pen(doc, *cat, false, view);
             let above = g.parts.iter().filter_map(|p| p.vertical_extent()).all(|(_, z0, _)| z0 > cut_z);
             if above {
                 stroke.dash = Dash::Dashed;
@@ -314,8 +314,8 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements().filter(|_| !reflected) {
         let ElementData::DirectShape(d) = &e.data else { continue };
         let Some(g) = element_geometry(doc, e.id) else { continue };
-        let cut_pen = pen(doc, d.category, true, view.scale);
-        let proj_pen = pen(doc, d.category, false, view.scale);
+        let cut_pen = pen(doc, d.category, true, view);
+        let proj_pen = pen(doc, d.category, false, view);
         let on_level = d.level == level;
         for part in &g.parts {
             match &part.shape {
@@ -370,7 +370,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         if !(f.level == level || (z0 < cut_z && z1 > elev)) {
             continue;
         }
-        let stroke = pen(doc, Category::StructuralFraming, false, view.scale);
+        let stroke = pen(doc, Category::StructuralFraming, false, view);
         let (p, q) = (DVec2::new(a.x, a.y), DVec2::new(b.x, b.y));
         let dir = (q - p).normalize_or_zero();
         if view.detail_level == DetailLevel::Coarse || dir == DVec2::ZERO {
@@ -414,7 +414,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         if !lower && !upper {
             continue;
         }
-        let stroke = pen(doc, Category::Stairs, false, view.scale);
+        let stroke = pen(doc, Category::Stairs, false, view);
         let shown = |z: f64| if lower { z <= base_cut } else { z > base_cut };
         let mut break_at: Option<&StairPiece> = None;
         for (i, piece) in l.pieces.iter().enumerate() {
@@ -444,7 +444,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             dl.line(
                 a - along * 150.0,
                 b + along * 350.0,
-                pen(doc, Category::Stairs, true, view.scale),
+                pen(doc, Category::Stairs, true, view),
                 Some(e.id),
             );
         }
@@ -498,7 +498,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements_of(Category::Railings).filter(|_| !reflected) {
         let ElementData::Railing(r) = &e.data else { continue };
         let base = RailingBase::of(doc, r);
-        let stroke = pen(doc, Category::Railings, false, view.scale);
+        let stroke = pen(doc, Category::Railings, false, view);
         let host = doc.element(r.host).and_then(|h| match &h.data {
             ElementData::Stair(s) => Some(s),
             _ => None,
@@ -552,7 +552,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         if let Some(lines) = hosted_plan(doc, e.id) {
             // The family's own plan symbol.
             let cat = if is_door { Category::Doors } else { Category::Windows };
-            let stroke = pen(doc, cat, false, view.scale);
+            let stroke = pen(doc, cat, false, view);
             for (a, b) in lines {
                 dl.line(a, b, stroke, Some(e.id));
             }
@@ -574,7 +574,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                 let side = to_closed * t;
                 dl.push(
                     Prim::Polygon(vec![hinge, open_end, open_end + side, hinge + side]),
-                    Some(pen(doc, Category::Doors, true, view.scale)),
+                    Some(pen(doc, Category::Doors, true, view)),
                     Some([255, 255, 255, 255]),
                     Some(e.id),
                 );
@@ -594,7 +594,7 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                         start: a0,
                         end: a0 + sweep,
                     },
-                    Some(pen(doc, Category::Doors, false, view.scale)),
+                    Some(pen(doc, Category::Doors, false, view)),
                     None,
                     Some(e.id),
                 );
@@ -611,23 +611,13 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             let a = f.center - f.dir * hw;
             let b = f.center + f.dir * hw;
             for off in [half_t, -half_t] {
-                dl.line(a + n * off, b + n * off, pen(doc, Category::Windows, false, view.scale), Some(e.id));
+                dl.line(a + n * off, b + n * off, pen(doc, Category::Windows, false, view), Some(e.id));
             }
             for off in [25.0, -25.0] {
                 dl.line(a + n * off, b + n * off, Stroke::new(1.0, GLASS), Some(e.id));
             }
-            dl.line(
-                a + n * half_t,
-                a - n * half_t,
-                pen(doc, Category::Windows, true, view.scale),
-                Some(e.id),
-            );
-            dl.line(
-                b + n * half_t,
-                b - n * half_t,
-                pen(doc, Category::Windows, true, view.scale),
-                Some(e.id),
-            );
+            dl.line(a + n * half_t, a - n * half_t, pen(doc, Category::Windows, true, view), Some(e.id));
+            dl.line(b + n * half_t, b - n * half_t, pen(doc, Category::Windows, true, view), Some(e.id));
         }
         // Cut frame pieces (jambs) drawn as part of the opening.
         if let Some(g) = element_geometry(doc, e.id) {

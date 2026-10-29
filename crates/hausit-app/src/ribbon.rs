@@ -532,24 +532,29 @@ fn annotate(app: &mut HausitApp, ui: &mut Ui) {
 fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
     select_panel(app, ui);
     panel(ui, "Graphics", |ui| {
-        let style_enabled = app
+        let graphical = app
             .active_view
             .and_then(|v| app.doc.view(v))
-            .map(|v| v.kind.is_graphical())
-            .unwrap_or(false);
+            .is_some_and(|v| v.kind.is_graphical() && !matches!(v.kind, ViewKind::Sheet(_)));
         if big(
             ui,
             Icon::TypeProps,
-            "Visibility",
-            "Visual style of the active view: cycles Wireframe, Hidden Line, Shaded, Consistent Colors",
+            "Visibility/Graphics",
+            "Visibility/Graphics (VV): show, hide and override categories in the active view",
             false,
-            style_enabled,
+            graphical,
         ) {
-            if let Some(v) = app.active_view.and_then(|v| app.doc.view_mut(v)) {
-                let all = hausit_model::VisualStyle::ALL;
-                let i = all.iter().position(|s| *s == v.visual_style).unwrap_or(0);
-                v.visual_style = all[(i + 1) % all.len()];
-            }
+            crate::view_graphics::open_for_active_view(app);
+        }
+        if big(
+            ui,
+            Icon::TypeProps,
+            "View Templates",
+            "View Templates: create templates from views, edit them, and apply them",
+            false,
+            true,
+        ) {
+            crate::view_graphics::open_templates(app);
         }
     });
     panel(ui, "Create", |ui| {

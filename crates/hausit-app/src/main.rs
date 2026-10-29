@@ -22,6 +22,7 @@ mod schedule_view;
 mod sheets;
 mod theme;
 mod tools;
+mod view_graphics;
 mod viewcube;
 
 #[derive(Clone, Default)]

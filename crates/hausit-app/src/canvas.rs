@@ -1374,31 +1374,45 @@ fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: Eleme
                         );
                         return;
                     }
-                    egui::ComboBox::from_id_salt("scale")
-                        .selected_text(format!("1 : {}", v.scale))
-                        .width(70.0)
-                        .show_ui(ui, |ui| {
-                            for s in [1, 5, 10, 20, 25, 50, 100, 200, 500, 1000] {
-                                ui.selectable_value(&mut v.scale, s, format!("1 : {s}"));
-                            }
-                        });
-                    egui::ComboBox::from_id_salt("detail")
-                        .selected_text(v.detail_level.label())
-                        .width(70.0)
-                        .show_ui(ui, |ui| {
-                            for d in DetailLevel::ALL {
-                                ui.selectable_value(&mut v.detail_level, d, d.label());
-                            }
-                        });
-                    if v.kind.plan_level().is_none() {
-                        egui::ComboBox::from_id_salt("style")
-                            .selected_text(v.visual_style.label())
-                            .width(110.0)
+                    // Settings a view template controls show its values,
+                    // greyed out.
+                    let tpl = view.template.and_then(|t| app.doc.view_template(t)).cloned();
+                    let eff = app.doc.effective_view(&view);
+                    let free = |f: fn(&hausit_model::ViewTemplate) -> bool| tpl.as_ref().is_none_or(|t| !f(t));
+                    ui.add_enabled_ui(free(|t| t.scale.is_some()), |ui| {
+                        egui::ComboBox::from_id_salt("scale")
+                            .selected_text(format!("1 : {}", eff.scale))
+                            .width(70.0)
                             .show_ui(ui, |ui| {
-                                for s in VisualStyle::ALL {
-                                    ui.selectable_value(&mut v.visual_style, s, s.label());
+                                for s in [1, 5, 10, 20, 25, 50, 100, 200, 500, 1000] {
+                                    ui.selectable_value(&mut v.scale, s, format!("1 : {s}"));
                                 }
                             });
+                    });
+                    ui.add_enabled_ui(free(|t| t.detail_level.is_some()), |ui| {
+                        egui::ComboBox::from_id_salt("detail")
+                            .selected_text(eff.detail_level.label())
+                            .width(70.0)
+                            .show_ui(ui, |ui| {
+                                for d in DetailLevel::ALL {
+                                    ui.selectable_value(&mut v.detail_level, d, d.label());
+                                }
+                            });
+                    });
+                    if v.kind.plan_level().is_none() {
+                        ui.add_enabled_ui(free(|t| t.visual_style.is_some()), |ui| {
+                            egui::ComboBox::from_id_salt("style")
+                                .selected_text(eff.visual_style.label())
+                                .width(110.0)
+                                .show_ui(ui, |ui| {
+                                    for s in VisualStyle::ALL {
+                                        ui.selectable_value(&mut v.visual_style, s, s.label());
+                                    }
+                                });
+                        });
+                    }
+                    if let Some(t) = &tpl {
+                        ui.label(egui::RichText::new(format!("Template: {}", t.name)).color(Color32::GRAY).size(11.0));
                     }
                     if ui.button("⛶ Zoom to Fit").on_hover_text("Zoom To Fit (ZF)").clicked() {
                         if let Some(c) = app.cameras.get_mut(&view_id) {

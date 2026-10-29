@@ -1,10 +1,12 @@
 //! View definitions. Views are elements of the document, as in Revit; the
 //! graphics they show are produced by the `hausit-views` crate.
 
+use crate::category::Category;
 use crate::schedule::ScheduleDef;
 use crate::sheet::SheetDef;
 use hausit_core::{DVec2, DVec3, ElementId};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CardinalDirection {
@@ -220,6 +222,114 @@ pub struct View {
     /// For a callout: the view it was drawn in, which shows its boundary.
     #[serde(default)]
     pub callout_of: Option<ElementId>,
+    /// Visibility/Graphics overrides by category; categories not listed
+    /// show as their Object Styles say.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub graphics: Graphics,
+    /// The view template that controls this view's settings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<ElementId>,
+}
+
+/// Visibility/Graphics overrides of a view, by category.
+pub type Graphics = BTreeMap<Category, CategoryGraphics>;
+
+/// How a view shows one category (Revit's Visibility/Graphics dialog):
+/// whether it is visible, halftone, and its line colour and weight in
+/// projection and cut, overriding Object Styles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CategoryGraphics {
+    #[serde(default = "yes")]
+    pub visible: bool,
+    #[serde(default)]
+    pub halftone: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_color: Option<[u8; 3]>,
+    /// Line weight number, 1 to 16.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_weight: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut_color: Option<[u8; 3]>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut_weight: Option<u8>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Default for CategoryGraphics {
+    fn default() -> Self {
+        CategoryGraphics {
+            visible: true,
+            halftone: false,
+            projection_color: None,
+            projection_weight: None,
+            cut_color: None,
+            cut_weight: None,
+        }
+    }
+}
+
+impl CategoryGraphics {
+    pub fn is_default(&self) -> bool {
+        *self == CategoryGraphics::default()
+    }
+}
+
+/// A view template: settings applied to the views that use it. Each
+/// setting is `None` when the template does not include it, and the view
+/// then keeps its own, as Revit's "Include" checkboxes do.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ViewTemplate {
+    pub id: ElementId,
+    pub name: String,
+    #[serde(default)]
+    pub scale: Option<u32>,
+    #[serde(default)]
+    pub detail_level: Option<DetailLevel>,
+    #[serde(default)]
+    pub visual_style: Option<VisualStyle>,
+    /// Plans only: View Range cut plane.
+    #[serde(default)]
+    pub cut_height: Option<f64>,
+    #[serde(default)]
+    pub graphics: Option<Graphics>,
+}
+
+impl ViewTemplate {
+    /// A template with every setting taken from `view`.
+    pub fn from_view(id: ElementId, name: &str, view: &View) -> ViewTemplate {
+        let plan = view.kind.plan_level().is_some();
+        ViewTemplate {
+            id,
+            name: name.to_string(),
+            scale: Some(view.scale),
+            detail_level: Some(view.detail_level),
+            visual_style: Some(view.visual_style),
+            cut_height: plan.then_some(view.cut_height),
+            graphics: Some(view.graphics.clone()),
+        }
+    }
+
+    /// Writes the included settings into a view.
+    pub fn apply_to(&self, view: &mut View) {
+        if let Some(s) = self.scale {
+            view.scale = s;
+        }
+        if let Some(d) = self.detail_level {
+            view.detail_level = d;
+        }
+        if let Some(v) = self.visual_style {
+            view.visual_style = v;
+        }
+        if let (Some(c), Some(_)) = (self.cut_height, view.kind.plan_level()) {
+            view.cut_height = c;
+        }
+        if let Some(g) = &self.graphics {
+            view.graphics = g.clone();
+        }
+    }
 }
 
 impl View {
@@ -248,6 +358,13 @@ impl View {
             section_box: None,
             crop: None,
             callout_of: None,
+            graphics: Graphics::new(),
+            template: None,
         }
+    }
+
+    /// How the view shows a category.
+    pub fn category_graphics(&self, cat: Category) -> CategoryGraphics {
+        self.graphics.get(&cat).copied().unwrap_or_default()
     }
 }

@@ -131,7 +131,7 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Callouts, drafting views, legends | Partial | P0 | Callouts of plans, sections and elevations (cropped, 1:20, Fine) with a boundary and bubble in the parent view; drafting views and legends still to do |
 | Revision clouds and revision tracking | Missing | P1 | |
 | Object styles, line styles, line weights by scale, line patterns, fill patterns | Missing | P0 | Drawing quality depends on this |
-| View templates, visibility/graphics overrides, filters | Missing | P0 | |
+| View templates, visibility/graphics overrides, filters | Partial | P0 | Visibility/Graphics (VV) per view: hide categories, halftone, projection and cut colour and line weight. View templates with Include per setting (scale, detail level, visual style, cut plane, V/G), assigned in view properties or applied once; Architectural Plan, Structural Plan and 3D Presentation to start. Filters to do |
 | View range, underlay, crop regions, scope boxes, detail levels | Partial | P0 | |
 | Materials with graphics, appearance, cut/surface patterns | Partial | P0 | Material Browser with colour, cut patterns (incl. batt and rigid insulation) and surface patterns (brick, block, tiles, cladding ribs) shown in 3D and elevations; appearance/textures still to do |
 | Schedules (quantities, material takeoff, sheet list, view list, note blocks, key schedules, calculated values, conditional formatting) | Partial | P1 | |

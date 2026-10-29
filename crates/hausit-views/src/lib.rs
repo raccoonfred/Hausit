@@ -61,13 +61,50 @@ impl Stroke {
 /// Screen pixels per paper millimetre for line weights.
 pub const PX_PER_MM: f64 = 5.2;
 
-/// The stroke a category draws with in a view at 1:`scale`, from the
-/// document's object styles and line weights.
-pub fn pen(doc: &Document, cat: hausit_model::Category, cut: bool, scale: u32) -> Stroke {
+/// The stroke a category draws with in a view: its object style's line
+/// weight at the view's scale and colour, with the view's
+/// Visibility/Graphics overrides.
+pub fn pen(doc: &Document, cat: hausit_model::Category, cut: bool, view: &View) -> Stroke {
     let style = doc.object_styles.get(cat);
-    let mm = doc.line_weights.width(if cut { style.cut } else { style.projection }, scale);
-    let [r, g, b] = style.color;
+    let vg = view.category_graphics(cat);
+    let (weight, color) = if cut {
+        (vg.cut_weight.unwrap_or(style.cut), vg.cut_color.unwrap_or(style.color))
+    } else {
+        (
+            vg.projection_weight.unwrap_or(style.projection),
+            vg.projection_color.unwrap_or(style.color),
+        )
+    };
+    let mm = doc.line_weights.width(weight, view.scale);
+    let [r, g, b] = color;
     Stroke::new((mm * PX_PER_MM).max(1.0) as f32, [r, g, b, 255])
+}
+
+/// Halftone: half way to white, as Revit draws it.
+pub fn halftone(c: Rgba) -> Rgba {
+    let h = |v: u8| ((v as u16 + 255) / 2) as u8;
+    [h(c[0]), h(c[1]), h(c[2]), c[3]]
+}
+
+/// Applies a view's Visibility/Graphics: drops hidden categories and
+/// draws halftone ones lighter.
+fn apply_graphics(doc: &Document, view: &View, dl: &mut DisplayList) {
+    if view.graphics.is_empty() {
+        return;
+    }
+    let cat_of = |id: Option<ElementId>| id.and_then(|id| doc.element(id)).map(|e| e.category());
+    dl.items
+        .retain(|it| cat_of(it.element).is_none_or(|c| view.category_graphics(c).visible));
+    for it in &mut dl.items {
+        if cat_of(it.element).is_some_and(|c| view.category_graphics(c).halftone) {
+            if let Some(s) = &mut it.stroke {
+                s.color = halftone(s.color);
+            }
+            if let Some(f) = &mut it.fill {
+                *f = halftone(*f);
+            }
+        }
+    }
 }
 
 pub const THIN: Stroke = Stroke::new(1.0, BLACK);
@@ -170,6 +207,9 @@ impl DisplayList {
 
 /// Builds the graphics of a view. Schedules have none.
 pub fn build(doc: &Document, view: &View) -> DisplayList {
+    // The view as its template sets it.
+    let effective = doc.effective_view(view);
+    let view = &effective;
     let mut dl = match &view.kind {
         ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => {
             let mut dl = plan::floor_plan(doc, view, *level);
@@ -191,6 +231,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
         ViewKind::Sheet(def) => return sheet::build(doc, view, def),
     };
     annotate::callout_marks(doc, view, &mut dl);
+    apply_graphics(doc, view, &mut dl);
     if let Some((lo, hi)) = view.crop {
         dl = crop(dl, lo, hi);
     }
@@ -262,6 +303,47 @@ pub fn crop(dl: DisplayList, lo: DVec2, hi: DVec2) -> DisplayList {
 mod tests {
     use super::*;
     use hausit_model::template::sample_project;
+
+    #[test]
+    fn view_templates_and_visibility() {
+        let mut doc = sample_project();
+        let plan = doc
+            .views()
+            .find(|v| matches!(v.kind, ViewKind::FloorPlan { .. }))
+            .map(|v| v.id)
+            .unwrap();
+        let shows = |doc: &Document, cat: hausit_model::Category| {
+            build(doc, doc.view(plan).unwrap())
+                .items
+                .iter()
+                .any(|it| it.element.and_then(|e| doc.element(e)).is_some_and(|e| e.category() == cat))
+        };
+        assert!(shows(&doc, hausit_model::Category::Furniture));
+        // The Structural Plan template hides furniture.
+        let t = doc.view_templates.iter().find(|t| t.name == "Structural Plan").unwrap().id;
+        doc.view_mut(plan).unwrap().template = Some(t);
+        assert!(!shows(&doc, hausit_model::Category::Furniture));
+        assert!(shows(&doc, hausit_model::Category::Walls));
+        assert_eq!(
+            doc.effective_view(doc.view(plan).unwrap()).detail_level,
+            hausit_model::DetailLevel::Coarse
+        );
+        // Deleting the template leaves the view as it looked.
+        doc.delete_view_template(t);
+        assert!(doc.view(plan).unwrap().template.is_none());
+        assert!(!shows(&doc, hausit_model::Category::Furniture));
+        // A colour override reaches the pen.
+        let v = doc.view_mut(plan).unwrap();
+        v.graphics.insert(
+            hausit_model::Category::Walls,
+            hausit_model::CategoryGraphics {
+                cut_color: Some([200, 0, 0]),
+                ..Default::default()
+            },
+        );
+        let v = doc.view(plan).unwrap().clone();
+        assert_eq!(pen(&doc, hausit_model::Category::Walls, true, &v).color, [200, 0, 0, 255]);
+    }
 
     #[test]
     fn every_view_builds() {

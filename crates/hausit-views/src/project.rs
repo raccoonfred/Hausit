@@ -562,7 +562,7 @@ fn section_caps(
                         };
                         let rect = vec![DVec2::new(a, p.z0), DVec2::new(b, p.z0), DVec2::new(b, p.z1), DVec2::new(a, p.z1)];
                         let rect = clip_polygon_2d(&rect, DVec2::X, u1);
-                        let edge = crate::pen(doc, g.category, true, view.scale);
+                        let edge = crate::pen(doc, g.category, true, view);
                         let (mut bands, lines) = if part.material == Material::Glass {
                             (vec![], vec![])
                         } else {
@@ -605,7 +605,7 @@ fn section_caps(
                         }
                     }
                     // Every closed cut is filled; layered types get their layers.
-                    let edge = crate::pen(doc, g.category, true, view.scale);
+                    let edge = crate::pen(doc, g.category, true, view);
                     let loops = chain_loops(segs.clone());
                     if loops.is_empty() {
                         for (a, b) in segs {

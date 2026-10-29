@@ -40,6 +40,6 @@ pub use history::History;
 pub use params::{ParamGroup, ParamKind, ParamValue, Parameter};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use sheet::{SheetDef, SheetSize, Viewport};
-pub use view::{CardinalDirection, DetailLevel, SectionBox, View, ViewKind, VisualStyle};
+pub use view::{CardinalDirection, CategoryGraphics, DetailLevel, Graphics, SectionBox, View, ViewKind, ViewTemplate, VisualStyle};
 
 pub use hausit_core::{DVec2, DVec3, ElementId};
