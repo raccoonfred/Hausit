@@ -515,6 +515,7 @@ pub fn sample_project() -> Document {
             structural: false,
             room_bounding: true,
             attached_top: vec![],
+            disallow_join: [false; 2],
         })));
     }
     let partition = doc.add_element(ElementData::Wall(Wall {
@@ -527,6 +528,7 @@ pub fn sample_project() -> Document {
         structural: false,
         room_bounding: true,
         attached_top: vec![],
+        disallow_join: [false; 2],
     }));
 
     for (name, x) in [("Living", 3000.0), ("Bedroom", 9000.0)] {
@@ -593,6 +595,7 @@ pub fn sample_project() -> Document {
         slope: 30.0,
         shape: RoofShape::Hip,
         defines_slope: vec![],
+        slope_arrow: None,
     }));
     // Exterior walls are attached to the roof, as Revit offers when the
     // roof is created.
@@ -861,6 +864,7 @@ pub fn industrial_sample() -> Document {
             structural: false,
             room_bounding: true,
             attached_top: vec![],
+            disallow_join: [false; 2],
         })));
     }
     let slab = t(&doc, Category::Floors, "Concrete Slab - Industrial 250mm");
@@ -893,6 +897,7 @@ pub fn industrial_sample() -> Document {
         slope: 6.0,
         shape: RoofShape::Gable,
         defines_slope: vec![],
+        slope_arrow: None,
     }));
     for w in &walls {
         if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {

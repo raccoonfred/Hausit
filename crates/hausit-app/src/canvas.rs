@@ -7,7 +7,7 @@ use crate::tools::{self, DrawShape, SnapKind, Tool};
 use egui::{pos2, vec2, Color32, FontId, Pos2, Rect, Sense, Shape, Stroke, Ui};
 use hausit_core::geom::{distance_to_segment, perp, point_in_polygon, triangulate};
 use hausit_core::{DVec2, ElementId};
-use hausit_model::{Category, DetailLevel, ViewKind, VisualStyle};
+use hausit_model::{Category, DetailLevel, ElementData, ViewKind, VisualStyle};
 use hausit_views::{Anchor, Dash, DisplayList, Item, Prim};
 
 /// Screen ⇄ view-coordinate transform for one frame.
@@ -181,7 +181,8 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         }
     }
 
-    if response.clicked_by(egui::PointerButton::Primary) {
+    let flipped = is_plan && flip_controls(app, &response, &painter, &xf, pointer);
+    if response.clicked_by(egui::PointerButton::Primary) && !flipped {
         if let Some(p) = snapped {
             if app.tool == Tool::Modify {
                 select_click(app, app.hover, ctrl, shift);
@@ -236,6 +237,11 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
 
     if is_plan {
         paint_sketch(app, &painter, &xf);
+    }
+    if response.secondary_clicked() {
+        if let Some(p) = raw {
+            ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("context_menu_at"), p));
+        }
     }
     context_menu(app, &response);
     if is_3d {
@@ -784,6 +790,89 @@ enum DirectDrag {
     WallEnd { wall: ElementId, end: bool },
 }
 
+/// A flip control: what clicking it flips.
+#[derive(Clone, Copy, PartialEq)]
+enum Flip {
+    Wall,
+    Hand,
+    Facing,
+}
+
+/// The flip controls of the selected element in plan: the double arrow
+/// on a wall's exterior side, and a door or window's hand and facing
+/// arrows. Returns true when this click hit one.
+fn flip_controls(app: &mut HausitApp, response: &egui::Response, painter: &egui::Painter, xf: &Xform, pointer: Option<Pos2>) -> bool {
+    if app.tool != Tool::Modify || app.selection.len() != 1 {
+        return false;
+    }
+    let id = app.selection[0];
+    let mut controls: Vec<(Flip, Pos2, egui::Vec2)> = Vec::new();
+    let screen_dir = |d: DVec2| {
+        let v = xf.to_screen(d) - xf.to_screen(DVec2::ZERO);
+        v.normalized()
+    };
+    match app.doc.element(id).map(|e| &e.data) {
+        Some(ElementData::Wall(w)) => {
+            let t = app.doc.type_of(id).map(|t| t.thickness()).unwrap_or(200.0) / 2.0;
+            let n = perp(w.direction());
+            let mid = (w.start + w.end) * 0.5;
+            let c = xf.to_screen(mid + n * t) + screen_dir(n) * 16.0;
+            controls.push((Flip::Wall, c, screen_dir(n)));
+        }
+        Some(ElementData::Door(o) | ElementData::Window(o)) => {
+            let Some(w) = app.doc.element(o.host).and_then(|e| e.as_wall()) else {
+                return false;
+            };
+            let t = app.doc.type_of(o.host).map(|t| t.thickness()).unwrap_or(200.0) / 2.0;
+            let width = app.doc.type_of(id).map(|t| t.width()).unwrap_or(900.0);
+            let (d, n) = (w.direction(), perp(w.direction()));
+            let c = w.point_at(o.offset);
+            let side = if o.flip_facing { n } else { -n };
+            controls.push((Flip::Facing, xf.to_screen(c + side * t) + screen_dir(side) * 16.0, screen_dir(n)));
+            let hinge = if o.flip_hand { d } else { -d };
+            controls.push((
+                Flip::Hand,
+                xf.to_screen(c + hinge * width / 2.0 + side * t) + screen_dir(side) * 16.0,
+                screen_dir(d),
+            ));
+        }
+        _ => return false,
+    }
+    let blue = Color32::from_rgb(40, 110, 230);
+    for (_, c, u) in &controls {
+        double_arrow(painter, *c, *u, blue);
+    }
+    if !response.clicked_by(egui::PointerButton::Primary) {
+        return false;
+    }
+    let Some(sp) = pointer else { return false };
+    let Some((flip, ..)) = controls.iter().find(|(_, c, _)| c.distance(sp) < 10.0).copied() else {
+        return false;
+    };
+    match flip {
+        Flip::Wall => app.transact("Flip Wall", |doc| doc.flip_wall(id)),
+        Flip::Hand => app.transact("Flip Hand", |doc| doc.flip_opening(id, true)),
+        Flip::Facing => app.transact("Flip Facing", |doc| doc.flip_opening(id, false)),
+    };
+    true
+}
+
+/// A small double-headed arrow along `u`, centred at `c`.
+fn double_arrow(painter: &egui::Painter, c: Pos2, u: egui::Vec2, color: Color32) {
+    let v = egui::vec2(-u.y, u.x);
+    let (a, b) = (c - u * 8.0, c + u * 8.0);
+    painter.circle_filled(c, 10.0, Color32::from_white_alpha(200));
+    painter.line_segment([a, b], Stroke::new(1.5, color));
+    for (tip, dir) in [(a, -u), (b, u)] {
+        let base = tip - dir * 4.5;
+        painter.add(Shape::convex_polygon(
+            vec![tip, base + v * 3.5, base - v * 3.5],
+            color,
+            Stroke::NONE,
+        ));
+    }
+}
+
 /// Revit-style direct editing in plan: selected walls show blue end
 /// grips that drag their ends; dragging a selected (or hovered) element
 /// moves it, with snapping.
@@ -975,6 +1064,25 @@ fn paint_sketch(app: &HausitApp, painter: &egui::Painter, xf: &Xform) {
             painter.add(Shape::closed_line(tri, Stroke::new(1.2, SKETCH)));
         }
     }
+    if let Some((t, h)) = sk.arrow {
+        slope_arrow(painter, xf.to_screen(t), xf.to_screen(h), SKETCH);
+    }
+}
+
+/// A slope arrow: a line from tail to head with a filled arrowhead.
+fn slope_arrow(painter: &egui::Painter, tail: Pos2, head: Pos2, color: Color32) {
+    painter.line_segment([tail, head], Stroke::new(1.5, color));
+    if tail.distance(head) < 1.0 {
+        return;
+    }
+    let d = (head - tail).normalized();
+    let n = vec2(-d.y, d.x);
+    let base = head - d * 12.0;
+    painter.add(Shape::convex_polygon(
+        vec![head, base + n * 5.0, base - n * 5.0],
+        color,
+        Stroke::NONE,
+    ));
 }
 
 fn label_at(painter: &egui::Painter, p: Pos2, text: &str) {
@@ -1272,6 +1380,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                     painter.add(Shape::closed_line(sp, Stroke::new(1.5, SKETCH)));
                 }
                 (DrawShape::Line, Some(a)) => seg(a, p),
+                (DrawShape::SlopeArrow, Some(a)) => slope_arrow(painter, xf.to_screen(a), xf.to_screen(p), PREVIEW),
                 _ => {}
             }
         }
@@ -1382,6 +1491,21 @@ fn context_menu(app: &mut HausitApp, response: &egui::Response) {
                 crate::hide_isolate::copy_to_clipboard(app);
                 ui.close();
             }
+            if let Some((wall, end, allowed)) = wall_end_under_menu(app, ui) {
+                let label = if allowed { "Disallow Join" } else { "Allow Join" };
+                if ui.button(label).clicked() {
+                    app.transact(label, |doc| doc.set_join_allowed(wall, end, !allowed));
+                    ui.close();
+                }
+            }
+            if app.selection.len() == 1
+                && app.doc.element(app.selection[0]).and_then(|e| e.as_wall()).is_some()
+                && ui.button("Flip (Space)").clicked()
+            {
+                let id = app.selection[0];
+                app.transact("Flip Wall", |doc| doc.flip_wall(id));
+                ui.close();
+            }
             let pinned = app.selection.iter().any(|s| app.doc.element(*s).is_some_and(|e| e.pinned));
             if ui.button(if pinned { "Unpin (UP)" } else { "Pin (PN)" }).clicked() {
                 crate::hide_isolate::pin(app, !pinned);
@@ -1400,6 +1524,20 @@ fn context_menu(app: &mut HausitApp, response: &egui::Response) {
             ui.close();
         }
     });
+}
+
+/// The selected wall end the context menu was opened on (within 600 mm
+/// of the right-click), with whether it may join: Revit offers Allow or
+/// Disallow Join on a wall end's control.
+fn wall_end_under_menu(app: &HausitApp, ui: &Ui) -> Option<(ElementId, usize, bool)> {
+    let at = ui.ctx().data(|d| d.get_temp::<DVec2>(egui::Id::unique("context_menu_at")))?;
+    app.selection
+        .iter()
+        .filter_map(|s| app.doc.element(*s).and_then(|e| e.as_wall()).map(|w| (*s, w)))
+        .flat_map(|(s, w)| [(s, 0usize, w.start, w), (s, 1usize, w.end, w)])
+        .filter(|(_, _, p, _)| p.distance(at) < 600.0)
+        .min_by(|a, b| a.2.distance(at).total_cmp(&b.2.distance(at)))
+        .map(|(s, end, _, w)| (s, end, !w.disallow_join[end]))
 }
 
 /// Simplified ViewCube: preset orientations for the 3D view.

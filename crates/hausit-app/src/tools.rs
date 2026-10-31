@@ -374,6 +374,8 @@ pub enum DrawShape {
     Line,
     Rectangle,
     PickWalls,
+    /// Roof sketches: a slope arrow from tail to head.
+    SlopeArrow,
 }
 
 /// One boundary line of a floor or roof sketch.
@@ -397,6 +399,8 @@ pub struct Sketch {
     pub start: Option<DVec2>,
     /// Where the current chain began, to stop chaining when it closes.
     pub chain_from: Option<DVec2>,
+    /// Roofs: the slope arrow, tail then head.
+    pub arrow: Option<(DVec2, DVec2)>,
 }
 
 impl Sketch {
@@ -951,6 +955,7 @@ fn build_wall(app: &mut HausitApp, a: DVec2, b: DVec2, structural: bool) -> Opti
         structural,
         room_bounding: true,
         attached_top: vec![],
+        disallow_join: [false; 2],
     })
 }
 
@@ -1078,6 +1083,14 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                         app.tool = tool;
                         return;
                     }
+                },
+                DrawShape::SlopeArrow => match sketch.start.take() {
+                    None => sketch.start = Some(p),
+                    Some(a) if a.distance(p) > 10.0 => {
+                        sketch.arrow = Some((a, p));
+                        app.status = "Slope arrow placed: the roof rises from its tail to its head at the roof slope.".into();
+                    }
+                    Some(a) => sketch.start = Some(a),
                 },
                 DrawShape::Rectangle => match sketch.start.take() {
                     None => sketch.start = Some(p),
@@ -2105,6 +2118,7 @@ pub fn finish_sketch(app: &mut HausitApp) {
                     RoofShape::Flat
                 },
                 defines_slope: corners.iter().map(|c| c.1.slope).collect(),
+                slope_arrow: sketch.arrow.map(|(tail, head)| hausit_model::SlopeArrow { tail, head }),
             };
             let roof_z = app.doc.level_elevation(roof_level);
             let footprint = r.footprint.clone();
@@ -2232,6 +2246,19 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
     {
         // Spacebar flips the wall's exterior side or the door's hand.
         app.options.flip = !app.options.flip;
+    }
+    if space && app.tool == Tool::Modify && app.selection.len() == 1 {
+        // Space flips a selected wall, door or window, as its flip control does.
+        let id = app.selection[0];
+        match app.doc.element(id).map(|e| e.category()) {
+            Some(Category::Walls) => {
+                app.transact("Flip Wall", |doc| doc.flip_wall(id));
+            }
+            Some(Category::Doors | Category::Windows) => {
+                app.transact("Flip Facing", |doc| doc.flip_opening(id, false));
+            }
+            _ => {}
+        }
     }
     if space && matches!(app.tool, Tool::Component { .. }) {
         app.options.component_rotation = (app.options.component_rotation + 90.0) % 360.0;

@@ -917,6 +917,10 @@ fn wall_panel(app: &mut HausitApp, ui: &mut Ui) {
 /// entered.
 fn draw_panel(app: &mut HausitApp, ui: &mut Ui) {
     let sketch = app.tool.is_sketch();
+    let roof = matches!(app.tool, Tool::Roof { .. });
+    if sketch && !roof && app.options.sketch_mode == DrawShape::SlopeArrow {
+        app.options.sketch_mode = DrawShape::Line;
+    }
     if !sketch && !matches!(app.tool, Tool::Wall { .. }) {
         return;
     }
@@ -938,6 +942,9 @@ fn draw_panel(app: &mut HausitApp, ui: &mut Ui) {
             }
             item(ui, DrawShape::Line, "╱ Line");
             item(ui, DrawShape::Rectangle, "▭ Rectangle");
+            if roof {
+                item(ui, DrawShape::SlopeArrow, "↗ Slope Arrow");
+            }
         });
     });
 }

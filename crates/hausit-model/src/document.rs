@@ -481,6 +481,7 @@ impl Document {
                         reversed.push((*id, w.length()));
                         w.start = b;
                         w.end = a;
+                        w.disallow_join.swap(0, 1);
                     } else {
                         w.start = a;
                         w.end = b;
@@ -491,7 +492,13 @@ impl Document {
                     g.end = f(g.end);
                 }
                 ElementData::Floor(fl) => fl.boundary.iter_mut().for_each(|p| *p = f(*p)),
-                ElementData::Roof(r) => r.footprint.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Roof(r) => {
+                    r.footprint.iter_mut().for_each(|p| *p = f(*p));
+                    if let Some(a) = &mut r.slope_arrow {
+                        a.tail = f(a.tail);
+                        a.head = f(a.head);
+                    }
+                }
                 ElementData::Column(c) => {
                     c.point = f(c.point);
                     c.rotation = if mirror { 2.0 * angle - c.rotation } else { c.rotation + angle };
@@ -525,6 +532,9 @@ impl Document {
                 }
                 ElementData::Tag(t) => t.position = f(t.position),
                 ElementData::Dimension(d) => {
+                    if let Some(m) = d.measure {
+                        d.measure = Some((f(d.line_point + m) - f(d.line_point)).normalize_or_zero());
+                    }
                     d.line_point = f(d.line_point);
                     for r in &mut d.refs {
                         match r {

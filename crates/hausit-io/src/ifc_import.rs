@@ -1809,6 +1809,7 @@ impl<'a> Importer<'a> {
             structural: false,
             room_bounding: true,
             attached_top: vec![],
+            disallow_join: [false; 2],
         };
         let w = self.doc.add_element(ElementData::Wall(wall));
         let sloped = self.body(e).iter().any(|p| match &p.solid {

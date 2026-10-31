@@ -213,6 +213,54 @@ impl Document {
         out
     }
 
+    /// Flip a wall's orientation (its flip control or Space): the
+    /// exterior side swaps about the location line. Hosted doors and
+    /// windows keep their place and orientation.
+    pub fn flip_wall(&mut self, id: ElementId) -> Result<(), ModelError> {
+        self.check_unpinned(&[id])?;
+        let Some(ElementData::Wall(w)) = self.element_mut(id).map(|e| &mut e.data) else {
+            return Err(ModelError::Rejected("Only walls can be flipped this way.".into()));
+        };
+        std::mem::swap(&mut w.start, &mut w.end);
+        w.disallow_join.swap(0, 1);
+        let len = w.length();
+        let hosted: Vec<ElementId> = self.openings_in(id).map(|(e, _)| e.id).collect();
+        for h in hosted {
+            if let Some(ElementData::Door(o) | ElementData::Window(o)) = self.element_mut(h).map(|e| &mut e.data) {
+                o.offset = len - o.offset;
+                o.flip_hand = !o.flip_hand;
+                o.flip_facing = !o.flip_facing;
+            }
+        }
+        self.touch();
+        Ok(())
+    }
+
+    /// The flip controls of a door or window: swap the hand (hinge side)
+    /// or the facing (swing side).
+    pub fn flip_opening(&mut self, id: ElementId, hand: bool) -> Result<(), ModelError> {
+        let Some(ElementData::Door(o) | ElementData::Window(o)) = self.element_mut(id).map(|e| &mut e.data) else {
+            return Err(ModelError::Rejected("Only doors and windows have flip controls.".into()));
+        };
+        if hand {
+            o.flip_hand = !o.flip_hand;
+        } else {
+            o.flip_facing = !o.flip_facing;
+        }
+        self.touch();
+        Ok(())
+    }
+
+    /// Allow Join / Disallow Join at a wall end (0 start, 1 end).
+    pub fn set_join_allowed(&mut self, id: ElementId, end: usize, allowed: bool) -> Result<(), ModelError> {
+        let Some(ElementData::Wall(w)) = self.element_mut(id).map(|e| &mut e.data) else {
+            return Err(ModelError::Rejected("Only walls have joins.".into()));
+        };
+        w.disallow_join[end.min(1)] = !allowed;
+        self.touch();
+        Ok(())
+    }
+
     /// The level elements are drawn on, for Paste Aligned: the base level
     /// most of them share.
     pub fn common_level(&self, ids: &[ElementId]) -> Option<ElementId> {
@@ -269,5 +317,37 @@ mod tests {
             assert_eq!(w.base_level, l2);
             assert!(matches!(w.top, TopConstraint::Unconnected { .. }), "no level above Level 2");
         }
+    }
+
+    #[test]
+    fn flip_and_disallow_join() {
+        use crate::geometry::wall_outline;
+        let mut doc = sample_project();
+        let walls: Vec<ElementId> = doc.elements_of(Category::Walls).map(|e| e.id).collect();
+        // The south wall hosts a door: flipping keeps the door in place.
+        let south = walls[3];
+        let door = doc.openings_in(south).map(|(e, _)| e.id).next().unwrap();
+        let before = crate::geometry::element_geometry(&doc, door).unwrap();
+        let outline = wall_outline(&doc, south).unwrap();
+        doc.flip_wall(south).unwrap();
+        let after = crate::geometry::element_geometry(&doc, door).unwrap();
+        let bounds = |g: &crate::geometry::ElementGeometry| {
+            g.parts
+                .iter()
+                .flat_map(|p| p.faces())
+                .flat_map(|f| f.pts)
+                .fold((f64::MAX, f64::MIN), |(a, b), p| (a.min(p.x + p.y), b.max(p.x + p.y)))
+        };
+        let (b0, b1) = (bounds(&before), bounds(&after));
+        assert!((b0.0 - b1.0).abs() < 1.0 && (b0.1 - b1.1).abs() < 1.0, "{b0:?} {b1:?}");
+        // Same footprint, exterior on the other side.
+        let flipped = wall_outline(&doc, south).unwrap();
+        assert!(flipped[0].distance(outline[2]) < 1e-6, "{outline:?} {flipped:?}");
+        // Disallow Join at the west wall's start: its end stays square.
+        let west = walls[0];
+        doc.set_join_allowed(west, 0, false).unwrap();
+        let o = wall_outline(&doc, west).unwrap();
+        let w = doc.element(west).unwrap().as_wall().unwrap();
+        assert!((o[0].y - w.start.y).abs() < 1e-6 && (o[3].y - w.start.y).abs() < 1e-6, "{o:?}");
     }
 }

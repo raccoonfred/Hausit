@@ -250,6 +250,10 @@ pub struct Wall {
     /// the wall extends or shortens to meet their underside.
     #[serde(default)]
     pub attached_top: Vec<ElementId>,
+    /// Disallow Join at the start and end: the wall end stays square and
+    /// does not clean up with walls that meet it there.
+    #[serde(default)]
+    pub disallow_join: [bool; 2],
 }
 
 impl Wall {
@@ -321,12 +325,46 @@ pub struct Roof {
     /// i + 1). Empty: derived from `shape`.
     #[serde(default)]
     pub defines_slope: Vec<bool>,
+    /// A slope arrow (Revit's sketch tool): the roof is one plane rising
+    /// at `slope` from the tail towards the head. It replaces sloping
+    /// edges.
+    #[serde(default)]
+    pub slope_arrow: Option<SlopeArrow>,
+}
+
+/// A slope arrow across the shorter side of a footprint's bounding box,
+/// rising from one side to the other (a mono-pitch roof).
+pub fn default_slope_arrow(footprint: &[DVec2]) -> Option<SlopeArrow> {
+    let (min, max) = footprint
+        .iter()
+        .fold((DVec2::splat(f64::MAX), DVec2::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
+    if footprint.len() < 3 {
+        return None;
+    }
+    let c = (min + max) / 2.0;
+    let (tail, head) = if max.x - min.x >= max.y - min.y {
+        (DVec2::new(c.x, min.y), DVec2::new(c.x, max.y))
+    } else {
+        (DVec2::new(min.x, c.y), DVec2::new(max.x, c.y))
+    };
+    Some(SlopeArrow { tail, head })
+}
+
+/// The slope arrow of a roof: from `tail` (at the roof's base height)
+/// rising towards `head`.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SlopeArrow {
+    pub tail: DVec2,
+    pub head: DVec2,
 }
 
 impl Roof {
     /// Which footprint edges define slope.
     pub fn edge_slopes(&self) -> Vec<bool> {
         let n = self.footprint.len();
+        if self.slope_arrow.is_some() {
+            return vec![false; n];
+        }
         if self.defines_slope.len() == n {
             return self.defines_slope.clone();
         }
@@ -344,6 +382,18 @@ impl Roof {
 
     pub fn is_sloped(&self) -> bool {
         self.slope > 0.0 && self.edge_slopes().iter().any(|b| *b)
+    }
+
+    /// The underside plane `(a, b, c)`, z = a·x + b·y + c, of a roof
+    /// sloped by an arrow, with its base at `zb`.
+    pub fn arrow_plane(&self, zb: f64) -> Option<DVec3> {
+        let arrow = self.slope_arrow?;
+        let d = (arrow.head - arrow.tail).normalize_or_zero();
+        if d == DVec2::ZERO || self.slope <= 0.0 {
+            return None;
+        }
+        let tan = self.slope.to_radians().tan();
+        Some(DVec3::new(tan * d.x, tan * d.y, zb - tan * arrow.tail.dot(d)))
     }
 }
 

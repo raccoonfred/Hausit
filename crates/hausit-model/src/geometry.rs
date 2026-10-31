@@ -277,12 +277,12 @@ pub fn wall_outline(doc: &Document, id: ElementId) -> Option<[DVec2; 4]> {
     let n = perp(dir);
     let mut out = [w.start + n * h, w.end + n * h, w.end - n * h, w.start - n * h];
     // start: away = dir, so +n_away is our left.
-    if let Some((pl, pr)) = join_end(doc, id, w.start, dir, h) {
+    if let Some((pl, pr)) = join_end(doc, id, 0, dir, h) {
         out[0] = pl;
         out[3] = pr;
     }
     // end: away = -dir, so +n_away is our right.
-    if let Some((pr, pl)) = join_end(doc, id, w.end, -dir, h) {
+    if let Some((pr, pl)) = join_end(doc, id, 1, -dir, h) {
         out[1] = pl;
         out[2] = pr;
     }
@@ -291,8 +291,13 @@ pub fn wall_outline(doc: &Document, id: ElementId) -> Option<[DVec2; 4]> {
 
 /// Computes the cleaned-up corner points for one wall end. Returns the
 /// points on the `+perp(away)` and `-perp(away)` faces.
-fn join_end(doc: &Document, me: ElementId, p: DVec2, away: DVec2, h: f64) -> Option<(DVec2, DVec2)> {
-    let my_base = doc.element(me)?.as_wall()?.base_level;
+fn join_end(doc: &Document, me: ElementId, end: usize, away: DVec2, h: f64) -> Option<(DVec2, DVec2)> {
+    let mine = doc.element(me)?.as_wall()?;
+    if mine.disallow_join[end] {
+        return None;
+    }
+    let my_base = mine.base_level;
+    let p = if end == 0 { mine.start } else { mine.end };
     let n = perp(away);
     let mut corner = None;
     let mut corner_count = 0;
@@ -312,9 +317,15 @@ fn join_end(doc: &Document, me: ElementId, p: DVec2, away: DVec2, h: f64) -> Opt
             continue;
         }
         if w.start.distance(p) < JOIN_TOLERANCE {
+            if w.disallow_join[0] {
+                continue;
+            }
             corner = Some((od, oh));
             corner_count += 1;
         } else if w.end.distance(p) < JOIN_TOLERANCE {
+            if w.disallow_join[1] {
+                continue;
+            }
             corner = Some((-od, oh));
             corner_count += 1;
         } else {
@@ -510,7 +521,7 @@ fn attach_surfaces(doc: &Document, target: ElementId) -> Vec<(Vec<DVec2>, DVec3)
                         })
                         .collect()
                 }
-                None => vec![(r.footprint.clone(), DVec3::new(0.0, 0.0, zb))],
+                None => vec![(r.footprint.clone(), r.arrow_plane(zb).unwrap_or(DVec3::new(0.0, 0.0, zb)))],
             }
         }
         ElementData::Floor(f) => {
@@ -1135,6 +1146,9 @@ fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {
     let t = doc.type_of(id).map(|t| t.thickness()).unwrap_or(200.0);
     let zb = doc.level_elevation(r.level) + r.base_offset;
     let Some(sk) = roof_skeleton(r) else {
+        if let Some(plane) = r.arrow_plane(zb) {
+            return vec![tilted_slab(&r.footprint, plane, t / r.slope.to_radians().cos())];
+        }
         return vec![Part::prism(Material::Default, Prism::new(r.footprint.clone(), zb, zb + t))];
     };
     let tan = r.slope.to_radians().tan();
@@ -1193,6 +1207,44 @@ fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {
         material: Material::Default,
         shape: Shape::Faces(faces),
     }]
+}
+
+/// A slab whose underside lies on `plane` (z = a·x + b·y + c) over
+/// `outline`, `hv` thick measured vertically.
+fn tilted_slab(outline: &[DVec2], plane: DVec3, hv: f64) -> Part {
+    let z = |p: DVec2, dz: f64| DVec3::new(p.x, p.y, plane.x * p.x + plane.y * p.y + plane.z + dz);
+    let mut faces = vec![
+        Face {
+            pts: outline.iter().map(|p| z(*p, 0.0)).collect(),
+        }
+        .oriented(-DVec3::Z),
+        Face {
+            pts: outline.iter().map(|p| z(*p, hv)).collect(),
+        }
+        .oriented(DVec3::Z),
+    ];
+    let n = outline.len();
+    let ccw = polygon_area(outline) > 0.0;
+    for i in 0..n {
+        let (a, b) = (outline[i], outline[(i + 1) % n]);
+        let d = (b - a).normalize_or_zero();
+        let out = if ccw {
+            DVec3::new(d.y, -d.x, 0.0)
+        } else {
+            DVec3::new(-d.y, d.x, 0.0)
+        };
+        faces.push(
+            Face {
+                pts: vec![z(a, 0.0), z(b, 0.0), z(b, hv), z(a, hv)],
+            }
+            .oriented(out),
+        );
+    }
+    Part {
+        material_name: None,
+        material: Material::Default,
+        shape: Shape::Faces(faces),
+    }
 }
 
 #[cfg(test)]
@@ -1285,6 +1337,67 @@ mod tests {
             let west = top(walls[0]);
             assert!(west > ridge - 600.0, "overhang {overhang}: west wall top {west}, ridge {ridge}");
         }
+    }
+
+    /// A slope arrow makes a mono-pitch roof rising from tail to head,
+    /// and walls attached to it follow the plane.
+    #[test]
+    fn slope_arrow_roof() {
+        let mut doc = sample_project();
+        let roof = doc.elements_of(Category::Roofs).next().unwrap().id;
+        let walls: Vec<ElementId> = doc.elements_of(Category::Walls).map(|e| e.id).take(4).collect();
+        crate::params::set_element_parameter(&mut doc, roof, "Slope Arrow", crate::ParamValue::Bool(true)).unwrap();
+        let Some(ElementData::Roof(r)) = doc.element(roof).map(|e| e.data.clone()) else {
+            panic!()
+        };
+        let arrow = r.slope_arrow.unwrap();
+        let zb = doc.level_elevation(r.level) + r.base_offset;
+        let faces = element_geometry(&doc, roof).unwrap().parts[0].faces();
+        assert_eq!(faces.len(), 2 + r.footprint.len());
+        let z_at = |q: DVec2| {
+            faces
+                .iter()
+                .flat_map(|f| f.pts.clone())
+                .filter(|p| p.truncate().distance(q) < 1.0)
+                .map(|p| p.z)
+                .fold(f64::MAX, f64::min)
+        };
+        let (lo, hi) = r
+            .footprint
+            .iter()
+            .map(|p| (*p - arrow.tail).dot((arrow.head - arrow.tail).normalize()))
+            .fold((f64::MAX, f64::MIN), |(a, b), d| (a.min(d), b.max(d)));
+        let tan = r.slope.to_radians().tan();
+        let low = r.footprint.iter().map(|p| z_at(*p)).fold(f64::MAX, f64::min);
+        let high = r.footprint.iter().map(|p| z_at(*p)).fold(f64::MIN, f64::max);
+        assert!(
+            (low - (zb + lo * tan)).abs() < 1e-6 && (high - (zb + hi * tan)).abs() < 1e-6,
+            "{low} {high}"
+        );
+        // An attached wall's top follows the slope.
+        for w in &walls {
+            if let Some(ElementData::Wall(w)) = doc.element_mut(*w).map(|e| &mut e.data) {
+                w.attached_top = vec![roof];
+            }
+        }
+        let tops: Vec<f64> = walls
+            .iter()
+            .map(|w| {
+                element_geometry(&doc, *w)
+                    .unwrap()
+                    .parts
+                    .iter()
+                    .flat_map(|p| p.faces())
+                    .flat_map(|f| f.pts)
+                    .map(|p| p.z)
+                    .fold(f64::MIN, f64::max)
+            })
+            .collect();
+        let spread = tops.iter().fold(f64::MIN, |a, b| a.max(*b)) - tops.iter().fold(f64::MAX, |a, b| a.min(*b));
+        assert!(spread > 500.0, "walls follow the sloped roof: {tops:?}");
+        // Unticking removes the arrow: flat roof again.
+        crate::params::set_element_parameter(&mut doc, roof, "Slope Arrow", crate::ParamValue::Bool(false)).unwrap();
+        assert!(matches!(doc.element(roof).map(|e| &e.data), Some(ElementData::Roof(r)) if r.slope_arrow.is_none()));
     }
 
     #[test]

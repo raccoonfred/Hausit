@@ -172,6 +172,7 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             let idx = RoofShape::ALL.iter().position(|s| *s == r.shape).unwrap_or(0);
             p.push(Parameter::new("Roof Shape", G::Constraints, V::Choice(idx)).kind(ParamKind::Choice(shapes)));
             p.push(Parameter::new("Slope", G::Dimensions, V::Angle(r.slope)));
+            p.push(Parameter::new("Slope Arrow", G::Constraints, V::Bool(r.slope_arrow.is_some())));
             let t = doc.type_of(id).map(|t| t.thickness()).unwrap_or(0.0);
             p.push(Parameter::new("Thickness", G::Dimensions, V::Length(t)).ro());
             let area = hausit_core::geom::polygon_area(&r.footprint).abs();
@@ -429,6 +430,16 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Roof Shape", V::Choice(i)) if i < RoofShape::ALL.len() => {
                     r.shape = RoofShape::ALL[i];
                     r.defines_slope.clear();
+                    r.slope_arrow = None;
+                }
+                ("Slope Arrow", V::Bool(false)) => r.slope_arrow = None,
+                ("Slope Arrow", V::Bool(true)) => {
+                    if r.slope_arrow.is_none() {
+                        r.slope_arrow = crate::element::default_slope_arrow(&r.footprint);
+                        if r.slope <= 0.0 {
+                            r.slope = 5.0;
+                        }
+                    }
                 }
                 ("Slope", V::Angle(a)) if (0.0..80.0).contains(&a) => r.slope = a,
                 _ => return Err(bad()),
