@@ -139,8 +139,9 @@ impl Document {
 
     /// Lookup tables for this revision of the document.
     pub fn index(&self) -> std::sync::Arc<crate::index::DocIndex> {
-        self.index
-            .get(self.revision, || crate::index::DocIndex::build(self.elements.values()))
+        self.index.get(self.revision, || {
+            crate::index::DocIndex::build(self.elements.values(), |t| self.family_type(t).is_some_and(|t| t.is_curtain()))
+        })
     }
 
     pub fn element(&self, id: ElementId) -> Option<&Element> {

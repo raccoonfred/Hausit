@@ -335,7 +335,7 @@ fn arc_sides(w: &Wall, params: &[f64], h: f64, outline: &[DVec2; 4]) -> (Vec<DVe
 /// points on the `+perp(away)` and `-perp(away)` faces.
 fn join_end(doc: &Document, me: ElementId, end: usize, away: DVec2, h: f64) -> Option<(DVec2, DVec2)> {
     let mine = doc.element(me)?.as_wall()?;
-    if mine.disallow_join[end] {
+    if mine.disallow_join[end] || doc.is_curtain(me) {
         return None;
     }
     let my_base = mine.base_level;
@@ -351,7 +351,7 @@ fn join_end(doc: &Document, me: ElementId, end: usize, away: DVec2, h: f64) -> O
             continue;
         }
         let Some(w) = e.as_wall() else { continue };
-        if w.base_level != my_base {
+        if w.base_level != my_base || doc.is_curtain(id) {
             continue;
         }
         let oh = doc.type_of(e.id).map(|t| t.thickness()).unwrap_or(200.0) * 0.5;
@@ -411,6 +411,7 @@ fn join_end(doc: &Document, me: ElementId, end: usize, away: DVec2, h: f64) -> O
 /// Openings of a wall as (axis start, axis end, z bottom, z top).
 fn wall_holes(doc: &Document, id: ElementId, w: &Wall) -> Vec<(f64, f64, f64, f64)> {
     let zb = doc.wall_base_z(w);
+    let embedded = doc.embedded_openings(id);
     doc.openings_in(id)
         .filter_map(|(e, o)| {
             let t = doc.type_of(e.id)?;
@@ -418,6 +419,7 @@ fn wall_holes(doc: &Document, id: ElementId, w: &Wall) -> Vec<(f64, f64, f64, f6
             let z0 = doc.level_elevation(w.base_level) + o.sill_height;
             Some((o.offset - half, o.offset + half, z0.max(zb), z0 + hgt))
         })
+        .chain(embedded)
         .collect()
 }
 
@@ -426,6 +428,9 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
         return vec![];
     };
     let Some(outline) = wall_outline(doc, id) else { return vec![] };
+    if let Some(layout) = doc.curtain_layout(id) {
+        return curtain_parts(w, &layout);
+    }
     if let Some(arc) = w.arc() {
         return arc_wall_parts(doc, id, w, &arc, &outline);
     }
@@ -539,6 +544,79 @@ fn arc_wall_parts(doc: &Document, id: ElementId, w: &Wall, arc: &crate::element:
         }
         if zt > z + EPS {
             parts.push(Part::prism(Material::Default, Prism::new(poly, z, zt)));
+        }
+    }
+    parts
+}
+
+/// A curtain wall: flat glass panels between the grid lines (following
+/// an arc wall in facets), vertical mullions on the vertical grid lines
+/// and ends, horizontal ones on the horizontal lines, base and top.
+fn curtain_parts(w: &Wall, l: &crate::curtain::CurtainLayout) -> Vec<Part> {
+    let mut stations = l.u.clone();
+    if let Some(arc) = w.arc() {
+        // Panels between grid lines further apart than the arc step are
+        // split into facets, without mullions between them.
+        stations = arc_params(&arc, &l.u);
+    }
+    let pts: Vec<DVec2> = stations.iter().map(|s| w.point_at(*s)).collect();
+    // Normals at the stations, so neighbouring facets share their edges.
+    let normals: Vec<DVec2> = stations.iter().map(|s| perp(w.tangent_at(*s))).collect();
+    let (zb, zt) = (l.z[0], *l.z.last().unwrap());
+    let mut parts = Vec::new();
+    let quad = |i: usize, half: f64| {
+        let (a, b, na, nb) = (pts[i], pts[i + 1], normals[i] * half, normals[i + 1] * half);
+        vec![a + na, b + nb, b - nb, a - na]
+    };
+    let glass = |poly: Vec<DVec2>, z0: f64, z1: f64| Part {
+        material_name: None,
+        material: Material::Glass,
+        shape: Shape::Prism(Prism::new(poly, z0, z1)),
+    };
+    let metal = |poly: Vec<DVec2>, z0: f64, z1: f64| Part {
+        material_name: Some("Aluminium".into()),
+        material: Material::Default,
+        shape: Shape::Prism(Prism::new(poly, z0, z1)),
+    };
+    let (mw, md) = (l.mullion_width, l.mullion_depth);
+    for i in 0..pts.len() - 1 {
+        if pts[i].distance(pts[i + 1]) < EPS {
+            continue;
+        }
+        let panel = quad(i, l.panel_thickness / 2.0);
+        for k in 0..l.z.len() - 1 {
+            parts.push(glass(panel.clone(), l.z[k], l.z[k + 1]));
+        }
+        if mw > 0.0 && md > 0.0 {
+            let band = quad(i, md / 2.0);
+            for (k, z) in l.z.iter().enumerate() {
+                let (z0, z1) = match k {
+                    0 => (zb, zb + mw),
+                    _ if k == l.z.len() - 1 => (zt - mw, zt),
+                    _ => (z - mw / 2.0, z + mw / 2.0),
+                };
+                parts.push(metal(band.clone(), z0, z1));
+            }
+        }
+    }
+    if mw > 0.0 && md > 0.0 {
+        for (i, s) in l.u.iter().enumerate() {
+            let p = w.point_at(*s);
+            let d = w.tangent_at(*s);
+            let n = perp(d);
+            // End mullions sit inside the wall's length.
+            let (a0, a1) = match i {
+                0 => (0.0, mw),
+                _ if i == l.u.len() - 1 => (-mw, 0.0),
+                _ => (-mw / 2.0, mw / 2.0),
+            };
+            let poly = vec![
+                p + d * a0 + n * md / 2.0,
+                p + d * a1 + n * md / 2.0,
+                p + d * a1 - n * md / 2.0,
+                p + d * a0 - n * md / 2.0,
+            ];
+            parts.push(metal(poly, zb, zt));
         }
     }
     parts

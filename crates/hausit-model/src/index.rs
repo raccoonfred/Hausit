@@ -17,6 +17,8 @@ pub struct DocIndex {
     openings_by_host: HashMap<ElementId, Vec<ElementId>>,
     /// Walls by (base level, cell) of every cell their segment passes near.
     wall_cells: HashMap<(ElementId, i64, i64), Vec<ElementId>>,
+    /// Curtain walls, for embedding them in basic walls.
+    curtain_walls: Vec<ElementId>,
 }
 
 fn cell(p: DVec2) -> (i64, i64) {
@@ -24,13 +26,16 @@ fn cell(p: DVec2) -> (i64, i64) {
 }
 
 impl DocIndex {
-    pub(crate) fn build<'a>(elements: impl Iterator<Item = &'a crate::Element>) -> Self {
+    pub(crate) fn build<'a>(elements: impl Iterator<Item = &'a crate::Element>, is_curtain_type: impl Fn(ElementId) -> bool) -> Self {
         let mut ix = DocIndex::default();
         for e in elements {
             ix.by_category.entry(e.category()).or_default().push(e.id);
             match &e.data {
                 ElementData::Door(o) | ElementData::Window(o) => ix.openings_by_host.entry(o.host).or_default().push(e.id),
                 ElementData::Wall(w) => {
+                    if is_curtain_type(w.type_id) {
+                        ix.curtain_walls.push(e.id);
+                    }
                     // Margin covers wall thickness and join tolerance.
                     let m = DVec2::splat(1000.0);
                     let pts = w.centreline();
@@ -51,6 +56,10 @@ impl DocIndex {
             }
         }
         ix
+    }
+
+    pub fn curtain_walls(&self) -> &[ElementId] {
+        &self.curtain_walls
     }
 
     pub fn of_category(&self, cat: Category) -> &[ElementId] {

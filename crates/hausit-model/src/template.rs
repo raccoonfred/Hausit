@@ -113,6 +113,15 @@ pub fn load_default_types(doc: &mut Document) {
         vec![l(F::Structure, "Masonry - Concrete Block", 200.0)],
     );
 
+    use crate::curtain::{curtain_type_params, CURTAIN_WALL};
+    doc.add_type(Walls, CURTAIN_WALL, "Glazing - No Grid", curtain_type_params(0.0, 0.0, 0.0));
+    doc.add_type(
+        Walls,
+        CURTAIN_WALL,
+        "Storefront - 1500 Grid",
+        curtain_type_params(1500.0, 2200.0, 50.0),
+    );
+
     doc.add_type(Floors, "Floor", "Generic 150mm", with(Floors, &[("Thickness", len(150.0))]));
     doc.add_type(Floors, "Floor", "Generic 300mm", with(Floors, &[("Thickness", len(300.0))]));
     layered(
@@ -517,6 +526,7 @@ pub fn sample_project() -> Document {
             attached_top: vec![],
             disallow_join: [false; 2],
             arc_mid: None,
+            curtain: Default::default(),
         })));
     }
     let partition = doc.add_element(ElementData::Wall(Wall {
@@ -531,6 +541,7 @@ pub fn sample_project() -> Document {
         attached_top: vec![],
         disallow_join: [false; 2],
         arc_mid: None,
+        curtain: Default::default(),
     }));
 
     for (name, x) in [("Living", 3000.0), ("Bedroom", 9000.0)] {
@@ -868,6 +879,7 @@ pub fn industrial_sample() -> Document {
             attached_top: vec![],
             disallow_join: [false; 2],
             arc_mid: None,
+            curtain: Default::default(),
         })));
     }
     let slab = t(&doc, Category::Floors, "Concrete Slab - Industrial 250mm");

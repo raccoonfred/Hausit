@@ -92,6 +92,9 @@ pub enum Tool {
         first: Option<(ElementId, DVec2)>,
     },
     Split,
+    /// Curtain Grid: click a curtain wall to add a grid line, vertical in
+    /// plan and horizontal in elevations and sections.
+    CurtainGrid,
     /// Attach Top/Base (or Detach) of these walls to a roof or floor.
     Attach {
         walls: Vec<ElementId>,
@@ -165,6 +168,7 @@ impl Tool {
             Tool::Mirror { .. } => "Modify | Mirror",
             Tool::Trim { .. } => "Modify | Trim/Extend",
             Tool::Split => "Modify | Split Element",
+            Tool::CurtainGrid => "Modify | Place Curtain Grid",
             Tool::Attach { detach: false, .. } => "Modify | Walls > Attach Top/Base",
             Tool::Attach { .. } => "Modify | Walls > Detach Top/Base",
             Tool::Text => "Modify | Place Text",
@@ -224,6 +228,9 @@ impl Tool {
             Tool::Trim { first: None } => "Click the first wall, on the part you want to keep.",
             Tool::Trim { .. } => "Click the second wall, on the part you want to keep.",
             Tool::Split => "Click a wall where you want to split it.",
+            Tool::CurtainGrid => {
+                "Click a curtain wall: in plan to add a vertical grid line, in an elevation or section for a horizontal one."
+            }
             Tool::Attach { .. } => "Pick a roof or floor to attach the selected walls to.",
             Tool::Text => "Click where the text starts, then type it. Leader on the Options Bar adds an arrow.",
             Tool::Tag => "Click an element to tag it: doors show their Mark, windows their Type Mark, other elements their type.",
@@ -265,7 +272,7 @@ impl Tool {
         match self {
             Tool::Modify => true,
             Tool::Mirror { draw: false, .. } => matches!(cat, Category::Walls | Category::Grids | Category::RoomSeparation),
-            Tool::Trim { .. } | Tool::Split | Tool::WallFoundation => cat == Category::Walls,
+            Tool::Trim { .. } | Tool::Split | Tool::WallFoundation | Tool::CurtainGrid => cat == Category::Walls,
             Tool::Attach { .. } => matches!(cat, Category::Roofs | Category::Floors),
             Tool::Tag => hausit_model::annotation::TAGGABLE.contains(&cat),
             Tool::Demolish => hausit_model::phasing::is_phased(cat),
@@ -884,7 +891,7 @@ pub fn pick_host(app: &HausitApp, p: DVec2, width: f64, tol: f64) -> Option<Host
     let mut best: Option<(HostPick, f64)> = None;
     for e in app.doc.elements_of(Category::Walls) {
         let w = e.as_wall().unwrap();
-        if w.base_level != level || w.length() < width {
+        if w.base_level != level || w.length() < width || app.doc.is_curtain(e.id) {
             continue;
         }
         let half_t = app.doc.type_of(e.id).map(|t| t.thickness() / 2.0).unwrap_or(100.0);
@@ -993,6 +1000,7 @@ fn build_wall(app: &mut HausitApp, a: DVec2, b: DVec2, structural: bool) -> Opti
         attached_top: vec![],
         disallow_join: [false; 2],
         arc_mid: None,
+        curtain: Default::default(),
     })
 }
 
@@ -1453,6 +1461,24 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                     app.tool = tool;
                     return;
                 }
+            }
+        }
+        Tool::CurtainGrid => {
+            let plan = app
+                .active_view
+                .and_then(|v| app.doc.view(v))
+                .is_some_and(|v| matches!(v.kind, ViewKind::FloorPlan { .. } | ViewKind::CeilingPlan { .. }));
+            match app.hover.filter(|h| app.doc.is_curtain(*h)) {
+                Some(id) => {
+                    let w = app.doc.element(id).and_then(|e| e.as_wall()).cloned().unwrap();
+                    let (along, height) = if plan {
+                        (Some(w.param_of(p)), None)
+                    } else {
+                        (None, Some(p.y - app.doc.wall_base_z(&w)))
+                    };
+                    app.transact("Add Curtain Grid", |doc| doc.add_curtain_grid(id, along, height));
+                }
+                None => app.status = "Click a curtain wall to add a grid line to it.".into(),
             }
         }
         Tool::Split => {

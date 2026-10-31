@@ -258,6 +258,9 @@ pub struct Wall {
     /// `None` for a straight wall.
     #[serde(default)]
     pub arc_mid: Option<DVec2>,
+    /// Curtain walls: grid lines added to this instance.
+    #[serde(default)]
+    pub curtain: crate::curtain::CurtainGrids,
 }
 
 /// A circular arc: centre, radius, start angle and signed sweep (radians,

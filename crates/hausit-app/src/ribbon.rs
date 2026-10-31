@@ -320,6 +320,14 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
         tool_button(
             app,
             ui,
+            Icon::CurtainGrid,
+            "Curtain Grid",
+            "Curtain Grid: add a grid line to a curtain wall",
+            Tool::CurtainGrid,
+        );
+        tool_button(
+            app,
+            ui,
             Icon::Component,
             "Component",
             "Place a Component (CM)",

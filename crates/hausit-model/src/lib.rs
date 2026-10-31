@@ -13,6 +13,7 @@
 pub mod annotation;
 pub mod category;
 pub mod component;
+pub mod curtain;
 pub mod dimensions;
 pub mod document;
 pub mod editing;
@@ -35,6 +36,7 @@ pub mod view;
 
 pub use category::Category;
 pub use component::FamilyDef;
+pub use curtain::{CurtainGrids, CurtainLayout, CURTAIN_WALL};
 pub use document::{Document, ModelError, ProjectInfo};
 pub use editing::RefLine;
 pub use element::*;

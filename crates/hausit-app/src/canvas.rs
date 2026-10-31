@@ -100,6 +100,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
             | Tool::Mirror { draw: false, .. }
             | Tool::Trim { .. }
             | Tool::Split
+            | Tool::CurtainGrid
             | Tool::Attach { .. }
             | Tool::Tag
             | Tool::Demolish
@@ -188,7 +189,13 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         if let Some(p) = snapped {
             if app.tool == Tool::Modify {
                 select_click(app, app.hover, ctrl, shift);
-            } else if app.tool.is_sketch() || is_plan || matches!(app.tool, Tool::Level | Tool::Attach { .. } | Tool::Callout { .. }) {
+            } else if app.tool.is_sketch()
+                || is_plan
+                || matches!(
+                    app.tool,
+                    Tool::Level | Tool::Attach { .. } | Tool::Callout { .. } | Tool::CurtainGrid
+                )
+            {
                 tools::click(app, p);
             }
         }

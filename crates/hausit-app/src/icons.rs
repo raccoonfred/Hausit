@@ -43,6 +43,7 @@ pub enum Icon {
     Mirror,
     Trim,
     Split,
+    CurtainGrid,
     Attach,
     Beam,
     Brace,
@@ -123,6 +124,19 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 egui::StrokeKind::Middle,
             );
             p.circle_filled(at(20.5, 16.0), 1.4 * s, k(INK));
+        }
+        Icon::CurtainGrid => {
+            p.rect(
+                rect(4.0, 4.0, 28.0, 28.0),
+                0.0,
+                k(Color32::from_rgb(190, 225, 250)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            for x in [12.0, 20.0] {
+                seg((x, 4.0), (x, 28.0), ink);
+            }
+            seg((4.0, 16.0), (28.0, 16.0), Stroke::new(1.5, Color32::from_rgb(200, 40, 40)));
         }
         Icon::Window => {
             p.rect(

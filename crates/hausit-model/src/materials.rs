@@ -148,6 +148,7 @@ pub fn default_materials() -> Vec<MaterialDef> {
         m("Fabric - White", [246, 246, 244], None),
         m("Porcelain", [250, 250, 248], None),
         m("Stainless Steel", [196, 200, 204], Solid),
+        m("Aluminium", [178, 184, 190], Solid),
         m("Glass", [180, 210, 225], None),
         m("Rubber", [46, 46, 46], Solid),
         m("Cardboard", [200, 164, 112], None),
