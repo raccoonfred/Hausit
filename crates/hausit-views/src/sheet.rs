@@ -42,7 +42,7 @@ pub fn build(doc: &Document, sheet: &View, def: &SheetDef) -> DisplayList {
             }
         }
     }
-    title_block(&mut dl, doc, &sheet.name, def);
+    title_block(&mut dl, doc, sheet, def);
     dl
 }
 
@@ -339,7 +339,13 @@ fn sheet_scale(doc: &Document, def: &SheetDef) -> String {
 
 /// The title block: a border, and a strip down the right with the project
 /// and sheet information. An original design, sized from the A1 layout.
-fn title_block(dl: &mut DisplayList, doc: &Document, name: &str, def: &SheetDef) {
+fn title_block(dl: &mut DisplayList, doc: &Document, sheet: &View, def: &SheetDef) {
+    let name = sheet.name.as_str();
+    let revisions: Vec<ElementId> = doc
+        .sheet_revisions(sheet.id)
+        .into_iter()
+        .filter(|r| doc.revision_def(*r).is_some_and(|r| r.numbering != hausit_model::Numbering::None))
+        .collect();
     let (min, max) = border(def.size);
     let w = strip_width(def.size);
     let k = w / 180.0;
@@ -389,6 +395,16 @@ fn title_block(dl: &mut DisplayList, doc: &Document, name: &str, def: &SheetDef)
         match row {
             "number" => {
                 label(dl, mid, top, "SHEET NUMBER");
+                if let Some(rev) = doc.sheet_current_revision(sheet.id) {
+                    text(
+                        dl,
+                        DVec2::new(mid + pad, y + pad * 1.5),
+                        &format!("REV {}", doc.revision_number(rev)),
+                        3.0 * k,
+                        Anchor::BottomLeft,
+                        None,
+                    );
+                }
                 text(
                     dl,
                     DVec2::new(max.x - pad, y + pad * 1.5),
@@ -440,6 +456,31 @@ fn title_block(dl: &mut DisplayList, doc: &Document, name: &str, def: &SheetDef)
         }
         y = top;
         hline(dl, y, if row == "status" { MEDIUM } else { THIN });
+    }
+    // Revision schedule at the foot of the notes area: newest on top.
+    if !revisions.is_empty() {
+        let rh = 5.0 * k;
+        let th = 2.2 * k;
+        let (c1, c2) = (x0 + 14.0 * k, max.x - 30.0 * k);
+        // Above the "Drawn with Hausit" credit.
+        let y0 = y + pad + 3.0 * k;
+        let mut ry = y0;
+        let row = |dl: &mut DisplayList, ry: f64, cells: [&str; 3]| {
+            for (x, s) in [x0, c1, c2].into_iter().zip(cells) {
+                text(dl, DVec2::new(x + pad, ry + (rh - th) / 2.0), s, th, Anchor::BottomLeft, None);
+            }
+            dl.line(DVec2::new(x0, ry + rh), DVec2::new(max.x, ry + rh), THIN, None);
+        };
+        for r in revisions.iter().rev() {
+            let Some(def) = doc.revision_def(*r) else { continue };
+            row(dl, ry, [&doc.revision_number(*r), &def.description, &def.date]);
+            ry += rh;
+        }
+        row(dl, ry, ["REV", "DESCRIPTION", "DATE"]);
+        for x in [c1, c2] {
+            dl.line(DVec2::new(x, y0), DVec2::new(x, ry + rh), THIN, None);
+        }
+        dl.line(DVec2::new(x0, y0), DVec2::new(max.x, y0), THIN, None);
     }
     label(dl, x0, max.y, "NOTES");
     text(

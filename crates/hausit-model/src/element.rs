@@ -55,6 +55,7 @@ impl Element {
             | ElementData::DetailLine(_)
             | ElementData::FilledRegion(_)
             | ElementData::SpotElevation(_)
+            | ElementData::RevisionCloud(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
             | ElementData::Tag(_) => None,
@@ -86,6 +87,7 @@ impl Element {
             | ElementData::DetailLine(_)
             | ElementData::FilledRegion(_)
             | ElementData::SpotElevation(_)
+            | ElementData::RevisionCloud(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
             | ElementData::Tag(_) => {}
@@ -143,6 +145,7 @@ pub enum ElementData {
     Group(crate::groups::ModelGroup),
     AreaBoundary(crate::areas::AreaBoundary),
     Area(crate::areas::Area),
+    RevisionCloud(crate::revisions::RevisionCloud),
 }
 
 impl ElementData {
@@ -198,6 +201,7 @@ impl ElementData {
             ElementData::DetailLine(_) => Category::Lines,
             ElementData::FilledRegion(_) => Category::DetailItems,
             ElementData::SpotElevation(_) => Category::SpotElevations,
+            ElementData::RevisionCloud(_) => Category::RevisionClouds,
             ElementData::Group(_) => Category::ModelGroups,
             ElementData::AreaBoundary(_) => Category::AreaBoundary,
             ElementData::Area(_) => Category::Areas,

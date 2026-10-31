@@ -328,6 +328,43 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Text Size", G::Dimensions, V::Length(t.size)));
             p.push(Parameter::new("Leader", G::Other, V::Bool(t.leader.is_some())));
         }
+        ElementData::RevisionCloud(c) => {
+            let names: Vec<String> = doc.revisions.iter().map(|r| doc.revision_label(r.id)).collect();
+            let idx = doc.revision_sequence(c.revision).saturating_sub(1);
+            let locked = doc.cloud_locked(el.id);
+            let mut rev = Parameter::new("Revision", G::IdentityData, V::Choice(idx)).kind(ParamKind::Choice(names));
+            if locked {
+                rev = rev.ro();
+            }
+            p.push(rev);
+            let r = doc.revision_def(c.revision);
+            p.push(Parameter::new("Revision Number", G::IdentityData, V::Text(doc.revision_number(c.revision))).ro());
+            p.push(
+                Parameter::new(
+                    "Revision Date",
+                    G::IdentityData,
+                    V::Text(r.map(|r| r.date.clone()).unwrap_or_default()),
+                )
+                .ro(),
+            );
+            p.push(
+                Parameter::new(
+                    "Issued to",
+                    G::IdentityData,
+                    V::Text(r.map(|r| r.issued_to.clone()).unwrap_or_default()),
+                )
+                .ro(),
+            );
+            p.push(
+                Parameter::new(
+                    "Issued by",
+                    G::IdentityData,
+                    V::Text(r.map(|r| r.issued_by.clone()).unwrap_or_default()),
+                )
+                .ro(),
+            );
+            p.push(Parameter::new("Tag", G::Graphics, V::Bool(c.tag.is_some())));
+        }
         ElementData::DetailLine(l) => {
             let styles: Vec<String> = LineStyle::ALL[..4].iter().map(|s| s.label().to_string()).collect();
             let idx = LineStyle::ALL.iter().position(|s| *s == l.style).unwrap_or(0).min(3);
@@ -426,6 +463,11 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
         el.phase_demolished = d;
         return Ok(());
     }
+    // Revision clouds of issued revisions are locked.
+    if doc.cloud_locked(id) {
+        return Err(ModelError::Rejected("This revision is issued: its clouds can't be changed.".into()));
+    }
+    let revision_ids: Vec<ElementId> = doc.revisions.iter().map(|r| r.id).collect();
     let el = doc.element_mut(id).ok_or(ModelError::NotFound(id))?;
     match (name, &value) {
         ("Comments", V::Text(s)) => el.comments = s.clone(),
@@ -566,6 +608,11 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
             },
             ElementData::Tag(t) => match (name, value) {
                 ("Leader", V::Bool(b)) => t.leader = b,
+                _ => return Err(bad()),
+            },
+            ElementData::RevisionCloud(c) => match (name, value) {
+                ("Revision", V::Choice(i)) if i < revision_ids.len() => c.revision = revision_ids[i],
+                ("Tag", V::Bool(b)) => c.tag = b.then(|| c.tag.unwrap_or_else(|| crate::revisions::default_tag_point(&c.boundary))),
                 _ => return Err(bad()),
             },
             ElementData::DetailLine(l) => match (name, value) {

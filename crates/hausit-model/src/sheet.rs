@@ -60,6 +60,9 @@ pub struct SheetDef {
     pub drawn_by: String,
     pub checked_by: String,
     pub issue_date: String,
+    /// Revisions ticked in "Revisions on Sheet" (clouds add their own).
+    #[serde(default)]
+    pub revisions: Vec<ElementId>,
 }
 
 impl SheetDef {

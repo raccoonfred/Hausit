@@ -34,10 +34,11 @@ pub enum Category {
     ModelGroups,
     Areas,
     AreaBoundary,
+    RevisionClouds,
 }
 
 impl Category {
-    pub const ALL: [Category; 29] = [
+    pub const ALL: [Category; 30] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -67,6 +68,7 @@ impl Category {
         Category::ModelGroups,
         Category::Areas,
         Category::AreaBoundary,
+        Category::RevisionClouds,
     ];
 
     /// Categories of loadable components, placed with the Component tool.
@@ -150,6 +152,7 @@ impl Category {
             Category::ModelGroups => "Model Groups",
             Category::Areas => "Areas",
             Category::AreaBoundary => "Area Boundary",
+            Category::RevisionClouds => "Revision Clouds",
         }
     }
 
@@ -185,6 +188,7 @@ impl Category {
             Category::ModelGroups => "Model Group",
             Category::Areas => "Area",
             Category::AreaBoundary => "Area Boundary Line",
+            Category::RevisionClouds => "Revision Cloud",
         }
     }
 
@@ -198,6 +202,7 @@ impl Category {
                 | Category::Lines
                 | Category::DetailItems
                 | Category::SpotElevations
+                | Category::RevisionClouds
         )
     }
 
@@ -222,6 +227,7 @@ impl Category {
                 | Category::Lines
                 | Category::DetailItems
                 | Category::SpotElevations
+                | Category::RevisionClouds
                 | Category::Areas
                 | Category::AreaBoundary
         )

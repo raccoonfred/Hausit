@@ -254,6 +254,7 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         | ElementData::DetailLine(_)
         | ElementData::FilledRegion(_)
         | ElementData::SpotElevation(_)
+        | ElementData::RevisionCloud(_)
         | ElementData::Group(_)
         | ElementData::AreaBoundary(_)
         | ElementData::Area(_)

@@ -144,6 +144,7 @@ impl Document {
             ElementData::DetailLine(l) => l.view == view,
             ElementData::FilledRegion(r) => r.view == view,
             ElementData::SpotElevation(s) => s.view == view,
+            ElementData::RevisionCloud(c) => c.view == view,
             _ => false,
         }
     }
@@ -156,6 +157,7 @@ pub fn set_view(data: &mut ElementData, view: ElementId) {
         ElementData::DetailLine(l) => l.view = view,
         ElementData::FilledRegion(r) => r.view = view,
         ElementData::SpotElevation(s) => s.view = view,
+        ElementData::RevisionCloud(c) => c.view = view,
         _ => {}
     }
 }
@@ -171,6 +173,10 @@ pub fn map_points(data: &mut ElementData, f: &dyn Fn(DVec2) -> DVec2) {
         ElementData::SpotElevation(s) => {
             s.point = f(s.point);
             s.label_at = f(s.label_at);
+        }
+        ElementData::RevisionCloud(c) => {
+            c.boundary.iter_mut().for_each(|p| *p = f(*p));
+            c.tag = c.tag.map(f);
         }
         _ => {}
     }

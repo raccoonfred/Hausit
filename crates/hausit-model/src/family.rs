@@ -164,6 +164,7 @@ pub fn default_type_params(category: Category) -> TypeParams {
         | Category::Lines
         | Category::DetailItems
         | Category::SpotElevations
+        | Category::RevisionClouds
         | Category::ModelGroups
         | Category::Areas
         | Category::AreaBoundary

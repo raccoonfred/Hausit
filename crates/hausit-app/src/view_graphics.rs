@@ -32,6 +32,7 @@ fn is_annotation_tab(c: Category) -> bool {
             | Category::Lines
             | Category::DetailItems
             | Category::SpotElevations
+            | Category::RevisionClouds
     )
 }
 

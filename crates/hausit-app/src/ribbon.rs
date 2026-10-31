@@ -553,6 +553,16 @@ fn annotate(app: &mut HausitApp, ui: &mut Ui) {
             Tool::FilledRegion { pts: vec![] },
         );
     });
+    panel(ui, "Revision", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::RevisionCloud,
+            "Revision Cloud",
+            "Revision Cloud: mark changed work for a revision; sheets list the revisions clouded in their views",
+            Tool::RevisionCloud { pts: vec![] },
+        );
+    });
     panel(ui, "Color Fill", |ui| {
         tool_button(
             app,
@@ -769,6 +779,18 @@ fn manage(app: &mut HausitApp, ui: &mut Ui) {
             true,
         ) {
             app.dialogs.object_styles = Some((app.doc.object_styles.clone(), app.doc.line_weights.clone()));
+        }
+    });
+    panel(ui, "Revisions", |ui| {
+        if big(
+            ui,
+            Icon::Revisions,
+            "Sheet Issues/Revisions",
+            "Sheet Issues/Revisions: the project's revisions, their dates and whether they are issued",
+            app.dialogs.revisions.is_some(),
+            true,
+        ) {
+            app.dialogs.revisions = Some(crate::revisions::RevisionsDialog { selected: None });
         }
     });
     panel(ui, "Phasing", |ui| {

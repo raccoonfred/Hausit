@@ -52,6 +52,8 @@ pub enum Icon {
     AreaBoundary,
     Area,
     ColorLegend,
+    RevisionCloud,
+    Revisions,
     Attach,
     Beam,
     Brace,
@@ -187,6 +189,30 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 );
                 seg((14.0, y + 3.0), (28.0, y + 3.0), ink);
             }
+        }
+        Icon::RevisionCloud => {
+            let red = Stroke::new(1.6, Color32::from_rgb(200, 30, 30));
+            let c = at(16.0, 16.0);
+            for i in 0..10 {
+                let a = std::f32::consts::TAU * i as f32 / 10.0;
+                let b = std::f32::consts::TAU * (i as f32 + 1.0) / 10.0;
+                let m = (a + b) / 2.0;
+                let pt = |t: f32, r: f32| c + egui::vec2(t.cos(), t.sin()) * r * s;
+                p.add(egui::Shape::line(vec![pt(a, 11.0), pt(m, 14.0), pt(b, 11.0)], red));
+            }
+            poly(&[(12.0, 20.0), (20.0, 20.0), (16.0, 12.0)], Color32::WHITE, red);
+        }
+        Icon::Revisions => {
+            p.rect(rect(4.0, 4.0, 28.0, 28.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            for y in [11.0, 17.0, 23.0] {
+                seg((4.0, y), (28.0, y), line(1.0, INK));
+            }
+            seg((10.0, 4.0), (10.0, 28.0), line(1.0, INK));
+            poly(
+                &[(18.0, 25.0), (26.0, 25.0), (22.0, 18.0)],
+                Color32::WHITE,
+                Stroke::new(1.4, Color32::from_rgb(200, 30, 30)),
+            );
         }
         Icon::Group => {
             p.rect(

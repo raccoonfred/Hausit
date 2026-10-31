@@ -365,6 +365,13 @@ pub fn detailing(doc: &Document, view: &View, dl: &mut DisplayList) {
             dl.line(l.start, l.end, stroke(l.style).unwrap_or(THIN), Some(e.id));
         }
     }
+    for e in doc.elements_of(Category::RevisionClouds) {
+        let ElementData::RevisionCloud(c) = &e.data else { continue };
+        if c.view != view.id || c.boundary.len() < 2 {
+            continue;
+        }
+        revision_cloud(doc, c, scale, e.id, dl);
+    }
     for e in doc.elements_of(Category::SpotElevations) {
         let ElementData::SpotElevation(s) = &e.data else { continue };
         if s.view != view.id {
@@ -383,6 +390,48 @@ pub fn detailing(doc: &Document, view: &View, dl: &mut DisplayList) {
             hausit_core::format_length(z, doc.length_unit)
         );
         spot(dl, s.point, s.label_at, &text, scale, e.id);
+    }
+}
+
+/// Revision cloud colour.
+const CLOUD: [u8; 4] = [200, 30, 30, 255];
+
+/// A revision cloud: arcs bulging out along its boundary, and its tag, a
+/// triangle with the revision number.
+pub fn revision_cloud(doc: &Document, c: &hausit_model::RevisionCloud, scale: f64, id: ElementId, dl: &mut DisplayList) {
+    let pen = Stroke::new(1.2, CLOUD);
+    let outline = hausit_model::revisions::cloud_outline(&c.boundary, hausit_model::revisions::CLOUD_ARC * scale);
+    // Invisible fill so a click inside picks the cloud.
+    dl.push(Prim::Polygon(c.boundary.clone()), None, Some([255, 255, 255, 0]), Some(id));
+    dl.push(
+        Prim::Polyline {
+            pts: outline,
+            closed: true,
+        },
+        Some(pen),
+        None,
+        Some(id),
+    );
+    if let Some(t) = c.tag {
+        let s = 4.5 * scale;
+        let tri = vec![
+            t + DVec2::new(-s * 0.8, -s * 0.45),
+            t + DVec2::new(s * 0.8, -s * 0.45),
+            t + DVec2::new(0.0, s * 0.95),
+        ];
+        dl.push(Prim::Polygon(tri), Some(pen), Some([255, 255, 255, 255]), Some(id));
+        dl.push(
+            Prim::Text {
+                pos: t,
+                text: doc.revision_number(c.revision),
+                height: 2.2 * scale,
+                anchor: Anchor::Center,
+                angle: 0.0,
+            },
+            None,
+            None,
+            Some(id),
+        );
     }
 }
 

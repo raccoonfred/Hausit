@@ -64,6 +64,7 @@ pub fn from_str(s: &str) -> Result<Document, IoError> {
         hausit_model::annotation::tag_openings_in_plans(&mut doc);
     }
     doc.ensure_phases();
+    doc.ensure_revisions();
     doc.touch();
     Ok(doc)
 }

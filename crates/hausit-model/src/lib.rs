@@ -29,6 +29,7 @@ pub mod library;
 pub mod materials;
 pub mod params;
 pub mod phasing;
+pub mod revisions;
 pub mod rooms;
 pub mod schedule;
 pub mod sheet;
@@ -50,6 +51,7 @@ pub use groups::{ModelGroup, MODEL_GROUP};
 pub use history::History;
 pub use params::{ParamGroup, ParamKind, ParamValue, Parameter};
 pub use phasing::{Phase, PhaseDisplay, PhaseFilter, PhaseStatus};
+pub use revisions::{Numbering, Revision, RevisionCloud};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use sheet::{SheetDef, SheetSize, Viewport};
 pub use view::{

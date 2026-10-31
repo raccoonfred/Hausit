@@ -52,6 +52,9 @@ pub struct Document {
     /// Phases in time order (Manage ▸ Phases).
     #[serde(default)]
     pub phases: Vec<crate::phasing::Phase>,
+    /// Sheet Issues/Revisions, in sequence order.
+    #[serde(default)]
+    pub revisions: Vec<crate::revisions::Revision>,
     /// The phase new elements are created in: the active view's phase.
     #[serde(skip)]
     pub creation_phase: Option<ElementId>,
@@ -88,6 +91,7 @@ impl Document {
             families: Vec::new(),
             view_templates: Vec::new(),
             phases: Vec::new(),
+            revisions: Vec::new(),
             creation_phase: None,
             elements: IndexMap::new(),
             types: IndexMap::new(),
@@ -97,6 +101,7 @@ impl Document {
             index: Default::default(),
         };
         doc.ensure_phases();
+        doc.ensure_revisions();
         doc
     }
 
@@ -229,9 +234,10 @@ impl Document {
                     ElementData::RoomSeparation(l) => l.level == id,
                     // Annotation goes with its view; tags with what they tag.
                     ElementData::TextNote(t) => t.view == id,
-                    ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_) => {
-                        self.is_detail_of(&e.data, id)
-                    }
+                    ElementData::DetailLine(_)
+                    | ElementData::FilledRegion(_)
+                    | ElementData::SpotElevation(_)
+                    | ElementData::RevisionCloud(_) => self.is_detail_of(&e.data, id),
                     ElementData::AreaBoundary(_) | ElementData::Area(_) => self.is_area_of(&e.data, id),
                     ElementData::Tag(t) => t.view == id || t.host == id,
                     // Dimensions go with their view or any element they measure.
@@ -268,6 +274,9 @@ impl Document {
     /// top was constrained to a deleted level become unconnected.
     pub fn delete(&mut self, ids: &[ElementId]) -> Result<Vec<ElementId>, ModelError> {
         let all = self.dependents(ids);
+        if ids.iter().any(|id| self.cloud_locked(*id)) {
+            return Err(ModelError::Rejected("This revision is issued: its clouds can't be deleted.".into()));
+        }
         let levels_left = self.elements_of(Category::Levels).filter(|l| !all.contains(&l.id)).count();
         if levels_left == 0 {
             return Err(ModelError::Rejected("A project must have at least one level.".into()));
@@ -377,9 +386,10 @@ impl Document {
                     b.end += delta;
                 }
                 ElementData::Area(a) => a.point += delta,
-                d @ (ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_)) => {
-                    crate::detail::map_points(d, &|p| p + delta)
-                }
+                d @ (ElementData::DetailLine(_)
+                | ElementData::FilledRegion(_)
+                | ElementData::SpotElevation(_)
+                | ElementData::RevisionCloud(_)) => crate::detail::map_points(d, &|p| p + delta),
                 ElementData::Dimension(d) => {
                     d.line_point += delta;
                     for r in &mut d.refs {
@@ -593,9 +603,10 @@ impl Document {
                     t.position = f(t.position);
                     t.leader = t.leader.map(f);
                 }
-                d @ (ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_)) => {
-                    crate::detail::map_points(d, f)
-                }
+                d @ (ElementData::DetailLine(_)
+                | ElementData::FilledRegion(_)
+                | ElementData::SpotElevation(_)
+                | ElementData::RevisionCloud(_)) => crate::detail::map_points(d, f),
                 ElementData::Tag(t) => t.position = f(t.position),
                 ElementData::AreaBoundary(b) => {
                     b.start = f(b.start);

@@ -91,6 +91,23 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         ui.radio_value(&mut app.options.array_to_last, false, "2nd");
                         ui.radio_value(&mut app.options.array_to_last, true, "Last");
                     }
+                    Tool::RevisionCloud { .. } => {
+                        ui.label("Revision:");
+                        let current = crate::tools::cloud_revision(app);
+                        let mut pick = current;
+                        egui::ComboBox::from_id_salt("cloud_revision")
+                            .selected_text(current.map(|r| app.doc.revision_label(r)).unwrap_or_else(|| "<all issued>".into()))
+                            .width(200.0)
+                            .show_ui(ui, |ui| {
+                                for r in app.doc.revisions.iter().filter(|r| !r.issued) {
+                                    ui.selectable_value(&mut pick, Some(r.id), app.doc.revision_label(r.id));
+                                }
+                            });
+                        if pick != current {
+                            app.options.cloud_revision = pick;
+                        }
+                        ui.checkbox(&mut app.options.cloud_tag, "Tag on Placement");
+                    }
                     Tool::DetailLine { .. } | Tool::FilledRegion { .. } => {
                         let region = matches!(app.tool, Tool::FilledRegion { .. });
                         if region {

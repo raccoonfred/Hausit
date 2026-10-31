@@ -51,6 +51,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     .or(app.active_view)
                 {
                     view_properties(app, ui, v);
+                    crate::revisions::sheet_revisions(app, ui, v);
                 }
                 return;
             }

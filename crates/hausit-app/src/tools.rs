@@ -142,6 +142,10 @@ pub enum Tool {
     SpotElevation {
         point: Option<DVec2>,
     },
+    /// Revision cloud corners being sketched.
+    RevisionCloud {
+        pts: Vec<DVec2>,
+    },
     /// Area Boundary lines in an area plan.
     AreaBoundary {
         start: Option<DVec2>,
@@ -207,6 +211,7 @@ impl Tool {
             Tool::FilledRegion { .. } => "Modify | Create Filled Region Boundary",
             Tool::SpotElevation { .. } => "Modify | Spot Elevation",
             Tool::AreaBoundary { .. } => "Modify | Place Area Boundary",
+            Tool::RevisionCloud { .. } => "Modify | Create Revision Cloud Sketch",
             Tool::Area => "Modify | Place Area",
             Tool::ColorLegend => "Modify | Color Fill Legend",
             Tool::Offset => "Modify | Offset",
@@ -277,6 +282,8 @@ impl Tool {
                 "Click the point to mark: a floor, roof or stair in plan, any point in an elevation or section."
             }
             Tool::SpotElevation { .. } => "Click where the label goes.",
+            Tool::RevisionCloud { pts } if pts.len() < 3 => "Click the corners of the area to cloud.",
+            Tool::RevisionCloud { .. } => "Click more corners, then click the first corner again or press Enter to finish.",
             Tool::AreaBoundary { start: None } => "Click to enter area boundary start point, or Pick Walls in the options bar.",
             Tool::AreaBoundary { .. } => "Click to enter line end point. Esc ends the chain.",
             Tool::Area => "Click inside an area enclosed by area boundary lines to place an area.",
@@ -357,7 +364,7 @@ impl Tool {
             Tool::Rotate { center, .. } => Some(*center),
             Tool::Array { start } => *start,
             Tool::DetailLine { start } => *start,
-            Tool::FilledRegion { pts } => pts.last().copied(),
+            Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } => pts.last().copied(),
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start,
             Tool::Stair { pts } | Tool::Railing { pts } => pts.last().copied(),
             _ => None,
@@ -399,7 +406,7 @@ impl Tool {
             Tool::Dimension { refs } => refs.clear(),
             Tool::Trim { first } => *first = None,
             Tool::DetailLine { start } => *start = None,
-            Tool::FilledRegion { pts } => pts.clear(),
+            Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } => pts.clear(),
             Tool::SpotElevation { point } => *point = None,
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start = None,
             _ => {}
@@ -578,6 +585,9 @@ pub struct ToolOptions {
     /// Filled regions: index into the region patterns, and masking.
     pub region_pattern: usize,
     pub region_masking: bool,
+    /// Revision clouds: the revision to draw on, and whether to tag.
+    pub cloud_revision: Option<ElementId>,
+    pub cloud_tag: bool,
 }
 
 impl Default for ToolOptions {
@@ -611,6 +621,8 @@ impl Default for ToolOptions {
             line_style: hausit_model::LineStyle::Thin,
             region_pattern: 1,
             region_masking: false,
+            cloud_revision: None,
+            cloud_tag: true,
         }
     }
 }
@@ -1327,6 +1339,14 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
             let close = pts.len() >= 3 && pts[0].distance(p) < app.options.pick_tol;
             if close {
                 finish_region(app, std::mem::take(pts));
+            } else if pts.last().is_none_or(|q| q.distance(p) > 1.0) {
+                pts.push(p);
+            }
+        }
+        Tool::RevisionCloud { pts } => {
+            let close = pts.len() >= 3 && pts[0].distance(p) < app.options.pick_tol;
+            if close {
+                finish_cloud(app, std::mem::take(pts));
             } else if pts.last().is_none_or(|q| q.distance(p) > 1.0) {
                 pts.push(p);
             }
@@ -2193,6 +2213,41 @@ pub fn finish_region(app: &mut HausitApp, pts: Vec<DVec2>) {
     app.transact("Create Filled Region", |doc| Ok(doc.add_element(ElementData::FilledRegion(r))));
 }
 
+/// The revision new clouds go on: the one picked in the Options Bar, or
+/// else the latest revision not yet issued.
+pub fn cloud_revision(app: &HausitApp) -> Option<ElementId> {
+    app.options
+        .cloud_revision
+        .filter(|r| app.doc.revision_def(*r).is_some_and(|r| !r.issued))
+        .or_else(|| app.doc.revisions.iter().rev().find(|r| !r.issued).map(|r| r.id))
+}
+
+/// Creates a revision cloud around the corners clicked so far, tagged if
+/// the Options Bar says so.
+pub fn finish_cloud(app: &mut HausitApp, pts: Vec<DVec2>) {
+    let Some(view) = app.active_view else { return };
+    if pts.len() < 3 || hausit_core::geom::polygon_area(&pts).abs() < 1.0 {
+        app.status = "A revision cloud needs at least three corners.".into();
+        return;
+    }
+    let Some(revision) = cloud_revision(app) else {
+        app.dialogs.error = Some("All revisions are issued. Add a revision in Sheet Issues/Revisions first.".into());
+        return;
+    };
+    let scale = app.doc.view(view).map(|v| v.scale as f64).unwrap_or(100.0);
+    let tag = app
+        .options
+        .cloud_tag
+        .then(|| hausit_model::revisions::default_tag_point(&pts) + DVec2::splat(6.0 * scale));
+    let c = hausit_model::RevisionCloud {
+        view,
+        boundary: pts,
+        revision,
+        tag,
+    };
+    app.transact("Create Revision Cloud", |doc| Ok(doc.add_element(ElementData::RevisionCloud(c))));
+}
+
 /// Bounding-box centre of the selection in plan (Rotate's default centre).
 pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
     let mut pts: Vec<DVec2> = Vec::new();
@@ -2231,6 +2286,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::Group(g) => pts.push(g.origin),
             ElementData::AreaBoundary(b) => pts.extend([b.start, b.end]),
             ElementData::Area(a) => pts.push(a.point),
+            ElementData::RevisionCloud(c) => pts.extend(&c.boundary),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }
@@ -2623,6 +2679,9 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         if let Tool::FilledRegion { pts } = &mut app.tool {
             let pts = std::mem::take(pts);
             finish_region(app, pts);
+        } else if let Tool::RevisionCloud { pts } = &mut app.tool {
+            let pts = std::mem::take(pts);
+            finish_cloud(app, pts);
         }
     }
 
