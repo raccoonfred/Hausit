@@ -1177,11 +1177,15 @@ fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {
         } else {
             // Gable end: the band between the underside and the top,
             // following the roof profile from the edge's end back to its
-            // start.
+            // start. One quad per profile segment: the whole band is
+            // concave (a chevron under a ridge), and concave faces can
+            // fill wrongly once views split them. Views hide the seams
+            // between coplanar pieces.
             let profile: Vec<DVec3> = f.pts[1..].iter().chain(std::iter::once(&f.pts[0])).copied().collect();
-            let mut pts: Vec<DVec3> = profile.iter().map(|p| at(*p, 0.0)).collect();
-            pts.extend(profile.iter().rev().map(|p| at(*p, hv)));
-            faces.push(Face { pts }.oriented(out));
+            for w in profile.windows(2) {
+                let pts = vec![at(w[0], 0.0), at(w[1], 0.0), at(w[1], hv), at(w[0], hv)];
+                faces.push(Face { pts }.oriented(out));
+            }
         }
     }
     vec![Part {

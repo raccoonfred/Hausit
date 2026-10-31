@@ -211,11 +211,24 @@ pub fn triangulate(pts: &[DVec2]) -> Vec<[usize; 3]> {
             break;
         }
         if !clipped {
-            // Degenerate input: fall back to a fan over what is left.
-            for i in 1..idx.len() - 1 {
-                tris.push([idx[0], idx[i], idx[i + 1]]);
+            // Nearly degenerate input (slivers rounded to screen pixels):
+            // clip the smallest convex corner anyway. A fan over the rest
+            // could cover far more than the polygon.
+            let tri_area = |i: usize| {
+                let (a, b, c) = (pts[idx[(i + m - 1) % m]], pts[idx[i]], pts[idx[(i + 1) % m]]);
+                cross2(b - a, c - b)
+            };
+            let Some(i) = (0..m)
+                .filter(|&i| tri_area(i) > 0.0)
+                .min_by(|&x, &y| tri_area(x).total_cmp(&tri_area(y)))
+                .or_else(|| (0..m).min_by(|&x, &y| tri_area(x).abs().total_cmp(&tri_area(y).abs())))
+            else {
+                return tris;
+            };
+            if tri_area(i) > 0.0 {
+                tris.push([idx[(i + m - 1) % m], idx[i], idx[(i + 1) % m]]);
             }
-            return tris;
+            idx.remove(i);
         }
     }
     if idx.len() == 3 {
