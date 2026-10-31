@@ -437,6 +437,7 @@ pub fn add_default_view_templates(doc: &mut Document) {
         visual_style: Some(crate::VisualStyle::HiddenLine),
         cut_height: Some(1200.0),
         graphics: Some(Graphics::new()),
+        phase_filter: Some(crate::PhaseFilter::ShowAll),
     };
     id(
         doc,

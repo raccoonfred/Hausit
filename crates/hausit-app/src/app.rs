@@ -434,6 +434,8 @@ impl eframe::App for HausitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.handle_close_request(&ctx);
+        // New elements are created in the active view's phase.
+        self.doc.creation_phase = self.active_view.and_then(|v| self.doc.view(v)).and_then(|v| self.doc.view_phase(v));
         crate::tools::handle_shortcuts(self, &ctx);
 
         crate::ribbon::show(self, ui);

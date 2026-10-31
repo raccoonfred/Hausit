@@ -12,6 +12,12 @@ pub struct Element {
     /// "Comments" identity parameter.
     #[serde(default)]
     pub comments: String,
+    /// Phasing: the phase the element was created in (`None`: the latest
+    /// phase) and the phase it is demolished in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_created: Option<ElementId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase_demolished: Option<ElementId>,
     pub data: ElementData,
 }
 

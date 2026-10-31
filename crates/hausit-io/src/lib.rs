@@ -63,6 +63,7 @@ pub fn from_str(s: &str) -> Result<Document, IoError> {
     if env.version < 2 {
         hausit_model::annotation::tag_openings_in_plans(&mut doc);
     }
+    doc.ensure_phases();
     doc.touch();
     Ok(doc)
 }

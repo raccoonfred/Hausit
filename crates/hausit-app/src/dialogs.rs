@@ -98,6 +98,7 @@ pub struct Dialogs {
     pub tag_all: Option<Vec<(Category, bool)>>,
     pub vg: Option<crate::view_graphics::VgDialog>,
     pub templates: Option<crate::view_graphics::TemplatesDialog>,
+    pub phases: Option<crate::phases::PhasesDialog>,
 }
 
 impl Dialogs {
@@ -142,6 +143,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     tag_all(app, ctx);
     crate::view_graphics::show_templates(app, ctx);
     crate::view_graphics::show_vg(app, ctx);
+    crate::phases::show(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;

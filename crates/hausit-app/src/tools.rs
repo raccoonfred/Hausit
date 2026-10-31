@@ -101,6 +101,8 @@ pub enum Tool {
     Text,
     /// Tag by Category: click elements to tag them.
     Tag,
+    /// Demolish: click elements to demolish them in the view's phase.
+    Demolish,
 }
 
 impl Tool {
@@ -148,6 +150,7 @@ impl Tool {
             Tool::Attach { .. } => "Modify | Walls > Detach Top/Base",
             Tool::Text => "Modify | Place Text",
             Tool::Tag => "Modify | Tag",
+            Tool::Demolish => "Modify | Demolish",
         }
     }
 
@@ -200,6 +203,7 @@ impl Tool {
             Tool::Attach { .. } => "Pick a roof or floor to attach the selected walls to.",
             Tool::Text => "Click where the text starts, then type it. Leader on the Options Bar adds an arrow.",
             Tool::Tag => "Click an element to tag it: doors show their Mark, windows their Type Mark, other elements their type.",
+            Tool::Demolish => "Click an element to demolish it in this view's phase. Doors and windows go with their wall.",
         }
     }
 
@@ -230,6 +234,7 @@ impl Tool {
             Tool::Trim { .. } | Tool::Split | Tool::WallFoundation => cat == Category::Walls,
             Tool::Attach { .. } => matches!(cat, Category::Roofs | Category::Floors),
             Tool::Tag => hausit_model::annotation::TAGGABLE.contains(&cat),
+            Tool::Demolish => hausit_model::phasing::is_phased(cat),
             _ => false,
         }
     }
@@ -1314,6 +1319,33 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                     leader,
                 });
             }
+        }
+        Tool::Demolish => {
+            // Stays active for the next pick, as in Revit.
+            app.tool = Tool::Demolish;
+            let target = app
+                .hover
+                .filter(|h| app.doc.element(*h).is_some_and(|e| hausit_model::phasing::is_phased(e.category())));
+            let (Some(target), Some(view)) = (target, app.active_view.and_then(|v| app.doc.view(v))) else {
+                app.status = "Click a model element to demolish it.".into();
+                return;
+            };
+            let Some(phase) = app.doc.view_phase(view) else { return };
+            let name = app.doc.phase_name(Some(phase));
+            let mut n = 0;
+            app.transact("Demolish", |doc| {
+                n = doc.demolish(&[target], phase).len();
+                if n == 0 {
+                    return Err(hausit_model::ModelError::Rejected(
+                        "The element is created in a later phase than this view's.".into(),
+                    ));
+                }
+                Ok(())
+            });
+            if n > 0 {
+                app.status = format!("Demolished {n} element(s) in {name}.");
+            }
+            return;
         }
         Tool::Tag => {
             let host = app.hover.filter(|h| {

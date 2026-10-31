@@ -470,7 +470,7 @@ Goal: a small architecture practice can switch for new projects.
 1. Curtain walls, stacked walls, sweeps and reveals, arc walls.
 2. Family editor completeness: nested and shared families, formulas, type
    catalogs, hosted families, annotation families and tags.
-3. Phasing and the Demolish tool.
+3. Phasing and the Demolish tool. (Done: phases, Phase Created/Demolished, phase filters and graphic overrides, Demolish.)
 4. Groups, linked models, DWG/DXF import and link.
 5. Areas, area plans, colour schemes.
 6. Full schedules: material takeoff, sheet and view lists, key schedules,

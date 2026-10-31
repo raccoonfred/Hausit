@@ -43,6 +43,7 @@ pub enum ParamGroup {
     Structural,
     Dimensions,
     IdentityData,
+    Phasing,
     Other,
 }
 
@@ -54,6 +55,7 @@ impl ParamGroup {
             ParamGroup::Structural => "Structural",
             ParamGroup::Dimensions => "Dimensions",
             ParamGroup::IdentityData => "Identity Data",
+            ParamGroup::Phasing => "Phasing",
             ParamGroup::Other => "Other",
         }
     }
@@ -321,6 +323,17 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
     } else if el.category() == crate::Category::Rooms {
         p.push(Parameter::new("Comments", G::IdentityData, V::Text(el.comments.clone())));
     }
+    if crate::phasing::is_phased(el.category()) && !doc.phases.is_empty() {
+        let names: Vec<String> = doc.phases.iter().map(|p| p.name.clone()).collect();
+        p.push(
+            Parameter::new("Phase Created", G::Phasing, V::Choice(doc.phase_index(el.phase_created)))
+                .kind(ParamKind::Choice(names.clone())),
+        );
+        let mut demo = vec!["None".to_string()];
+        demo.extend(names);
+        let d = el.phase_demolished.map(|d| doc.phase_index(Some(d)) + 1).unwrap_or(0);
+        p.push(Parameter::new("Phase Demolished", G::Phasing, V::Choice(d)).kind(ParamKind::Choice(demo)));
+    }
     p.sort_by_key(|p| p.group);
     p
 }
@@ -341,6 +354,32 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
         if !new.trim().is_empty() {
             doc.rename_level_views(id, &l.name.clone(), new);
         }
+    }
+    // Phasing: an element cannot be demolished before it is created.
+    if let ("Phase Created" | "Phase Demolished", V::Choice(i)) = (name, &value) {
+        let el = doc.element(id).ok_or(ModelError::NotFound(id))?;
+        let (mut created, mut demolished) = (
+            doc.phase_index(el.phase_created),
+            el.phase_demolished.map(|d| doc.phase_index(Some(d))),
+        );
+        if name == "Phase Created" {
+            created = *i;
+        } else {
+            demolished = i.checked_sub(1);
+        }
+        if created >= doc.phases.len() || demolished.is_some_and(|d| d >= doc.phases.len()) {
+            return Err(bad());
+        }
+        if demolished.is_some_and(|d| d < created) {
+            return Err(ModelError::Rejected(
+                "An element cannot be demolished before the phase it is created in.".into(),
+            ));
+        }
+        let (c, d) = (doc.phases[created].id, demolished.map(|d| doc.phases[d].id));
+        let el = doc.element_mut(id).ok_or(ModelError::NotFound(id))?;
+        el.phase_created = Some(c);
+        el.phase_demolished = d;
+        return Ok(());
     }
     let el = doc.element_mut(id).ok_or(ModelError::NotFound(id))?;
     match (name, &value) {

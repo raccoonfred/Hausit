@@ -96,7 +96,13 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     app.options.pick_tol = xf.px(8.0);
     let picking = matches!(
         app.tool,
-        Tool::Modify | Tool::Mirror { draw: false, .. } | Tool::Trim { .. } | Tool::Split | Tool::Attach { .. } | Tool::Tag
+        Tool::Modify
+            | Tool::Mirror { draw: false, .. }
+            | Tool::Trim { .. }
+            | Tool::Split
+            | Tool::Attach { .. }
+            | Tool::Tag
+            | Tool::Demolish
     );
     if let (Some(p), true) = (pointer, picking) {
         // Tab cycles through overlapping elements, as in Revit.

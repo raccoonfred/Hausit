@@ -677,7 +677,18 @@ fn manage(app: &mut HausitApp, ui: &mut Ui) {
             app.dialogs.object_styles = Some((app.doc.object_styles.clone(), app.doc.line_weights.clone()));
         }
     });
-    panel(ui, "Phasing", |ui| planned(ui, Icon::Planned, "Phases", "Phases"));
+    panel(ui, "Phasing", |ui| {
+        if big(
+            ui,
+            Icon::Phases,
+            "Phases",
+            "Phases: the project's phases and how phase filters show them",
+            false,
+            true,
+        ) {
+            app.dialogs.phases = Some(crate::phases::PhasesDialog::new(&app.doc));
+        }
+    });
 }
 
 fn modify(app: &mut HausitApp, ui: &mut Ui) {
@@ -771,6 +782,14 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
             Tool::Trim { first: None },
         );
         tool_button(app, ui, Icon::Split, "Split", "Split Element (SL)", Tool::Split);
+        tool_button(
+            app,
+            ui,
+            Icon::Demolish,
+            "Demolish",
+            "Demolish: click elements to demolish them in this view's phase",
+            Tool::Demolish,
+        );
         if big(ui, Icon::Delete, "Delete", "Delete (DE)", false, !app.selection.is_empty()) {
             app.delete_selection();
         }

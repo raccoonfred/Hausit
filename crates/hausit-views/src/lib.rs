@@ -108,6 +108,73 @@ fn apply_graphics(doc: &Document, view: &View, dl: &mut DisplayList) {
     }
 }
 
+/// The model without the elements a view's phase and phase filter hide,
+/// or `None` when it hides nothing.
+fn phase_model(doc: &Document, view: &View) -> Option<Document> {
+    if matches!(view.kind, ViewKind::Schedule(_) | ViewKind::Sheet(_)) {
+        return None;
+    }
+    let hidden = doc.phase_hidden(view);
+    if hidden.is_empty() {
+        return None;
+    }
+    let mut d = doc.clone();
+    d.retain_elements(|e| !hidden.contains(&e.id));
+    Some(d)
+}
+
+/// Phase graphic overrides (Manage ▸ Phases ▸ Graphic Overrides): existing
+/// work grey, demolished work dashed and unfilled, temporary work dashed
+/// and halftone.
+fn apply_phase_graphics(doc: &Document, view: &View, dl: &mut DisplayList) {
+    use hausit_model::{PhaseDisplay, PhaseStatus};
+    if matches!(view.kind, ViewKind::Schedule(_) | ViewKind::Sheet(_)) {
+        return;
+    }
+    let shows = doc.phase_displays(view);
+    if !shows.values().any(|(_, d)| *d == PhaseDisplay::Overridden) {
+        return;
+    }
+    const GREY: Rgba = [128, 128, 128, 255];
+    for it in &mut dl.items {
+        let Some(&(status, PhaseDisplay::Overridden)) = it.element.and_then(|e| shows.get(&e)) else {
+            continue;
+        };
+        match status {
+            PhaseStatus::Existing => {
+                if let Some(s) = &mut it.stroke {
+                    s.color = GREY;
+                }
+                if let Some(f) = &mut it.fill {
+                    *f = halftone(*f);
+                }
+            }
+            PhaseStatus::Demolished => {
+                if let Some(s) = &mut it.stroke {
+                    s.dash = Dash::Dashed;
+                }
+                // Hatched cuts and shaded faces read as gone: outline only.
+                if it.fill.is_some() {
+                    it.fill = Some([255, 255, 255, 255]);
+                    if it.stroke.is_none() {
+                        it.stroke = Some(Stroke::new(1.0, BLACK).dashed(Dash::Dashed));
+                    }
+                }
+            }
+            PhaseStatus::Temporary => {
+                if let Some(s) = &mut it.stroke {
+                    s.dash = Dash::DashDot;
+                    s.color = halftone(s.color);
+                }
+                if let Some(f) = &mut it.fill {
+                    *f = halftone(*f);
+                }
+            }
+            PhaseStatus::New => {}
+        }
+    }
+}
+
 pub const THIN: Stroke = Stroke::new(1.0, BLACK);
 pub const MEDIUM: Stroke = Stroke::new(1.6, BLACK);
 pub const HEAVY: Stroke = Stroke::new(2.6, BLACK);
@@ -211,6 +278,15 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
     // The view as its template sets it.
     let effective = doc.effective_view(view);
     let view = &effective;
+    // Phasing: build from the model as it stands in the view's phase.
+    let phased;
+    let doc = match phase_model(doc, view) {
+        Some(d) => {
+            phased = d;
+            &phased
+        }
+        None => doc,
+    };
     let mut dl = match &view.kind {
         ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => {
             let mut dl = plan::floor_plan(doc, view, *level);
@@ -233,6 +309,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
     };
     annotate::callout_marks(doc, view, &mut dl);
     apply_graphics(doc, view, &mut dl);
+    apply_phase_graphics(doc, view, &mut dl);
     if let Some((lo, hi)) = view.crop {
         dl = crop(dl, lo, hi);
     }
@@ -344,6 +421,46 @@ mod tests {
         );
         let v = doc.view(plan).unwrap().clone();
         assert_eq!(pen(&doc, hausit_model::Category::Walls, true, &v).color, [200, 0, 0, 255]);
+    }
+
+    #[test]
+    fn phase_filters_hide_and_override() {
+        let mut doc = sample_project();
+        let (existing, new) = (doc.phases[0].id, doc.phases[1].id);
+        let wall = doc.elements_of(hausit_model::Category::Walls).next().unwrap().id;
+        doc.element_mut(wall).unwrap().phase_created = Some(existing);
+        doc.demolish(&[wall], new);
+        let plan = doc.views().find(|v| v.kind.plan_level().is_some()).unwrap().id;
+        let items = |doc: &Document| -> Vec<Item> {
+            build(doc, doc.view(plan).unwrap())
+                .items
+                .into_iter()
+                .filter(|i| i.element == Some(wall))
+                .collect()
+        };
+        // Show All: drawn dashed.
+        let all = items(&doc);
+        assert!(!all.is_empty());
+        assert!(all.iter().filter_map(|i| i.stroke).all(|s| s.dash == Dash::Dashed));
+        // Show Complete: gone, with its doors and windows.
+        doc.view_mut(plan).unwrap().phase_filter = hausit_model::PhaseFilter::ShowComplete;
+        assert!(items(&doc).is_empty());
+        // In the Existing phase it is new work: drawn by category.
+        let v = doc.view_mut(plan).unwrap();
+        v.phase = Some(existing);
+        v.phase_filter = hausit_model::PhaseFilter::ShowAll;
+        assert!(items(&doc).iter().filter_map(|i| i.stroke).all(|s| s.dash == Dash::Solid));
+        // Another wall from Existing, seen in New Construction: grey.
+        let other = doc.elements_of(hausit_model::Category::Walls).nth(1).unwrap().id;
+        doc.element_mut(other).unwrap().phase_created = Some(existing);
+        doc.view_mut(plan).unwrap().phase = Some(new);
+        let grey = build(&doc, doc.view(plan).unwrap())
+            .items
+            .into_iter()
+            .filter(|i| i.element == Some(other))
+            .filter_map(|i| i.stroke)
+            .all(|s| s.color == [128, 128, 128, 255]);
+        assert!(grey);
     }
 
     #[test]

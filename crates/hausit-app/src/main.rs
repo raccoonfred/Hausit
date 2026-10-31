@@ -17,6 +17,7 @@ mod families;
 mod family_editor;
 mod icons;
 mod options_bar;
+mod phases;
 mod properties;
 mod ribbon;
 mod schedule_view;

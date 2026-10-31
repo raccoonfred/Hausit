@@ -30,7 +30,6 @@ pub enum Icon {
     TypeProps,
     Finish,
     Cancel,
-    Planned,
     Sheet,
     PlaceView,
     Pdf,
@@ -56,6 +55,8 @@ pub enum Icon {
     LoadFamily,
     Text,
     Tag,
+    Demolish,
+    Phases,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -411,6 +412,31 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 k(INK),
             );
         }
+        Icon::Demolish => {
+            // A hammer over a broken wall.
+            p.rect(rect(3.0, 18.0, 29.0, 29.0), 0.0, k(BRICK), ink, egui::StrokeKind::Middle);
+            seg((14.0, 18.0), (17.0, 23.0), line(1.4, Color32::WHITE));
+            seg((17.0, 23.0), (15.0, 29.0), line(1.4, Color32::WHITE));
+            seg((8.0, 15.0), (22.0, 4.0), line(2.6, Color32::from_rgb(140, 100, 60)));
+            poly(&[(18.0, 3.0), (24.0, 0.5), (28.0, 6.0), (22.0, 9.0)], Color32::from_gray(110), ink);
+        }
+        Icon::Phases => {
+            // Three stages in time: existing grey, demolished dashed, new.
+            p.rect(
+                rect(3.0, 10.0, 11.0, 26.0),
+                0.0,
+                k(Color32::from_gray(190)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            p.add(Shape::dashed_line(
+                &[at(13.0, 26.0), at(13.0, 10.0), at(19.0, 10.0), at(19.0, 26.0)],
+                line(1.2, INK),
+                2.0 * s,
+                2.0 * s,
+            ));
+            p.rect(rect(21.0, 6.0, 29.0, 26.0), 0.0, k(BRICK), ink, egui::StrokeKind::Middle);
+        }
         Icon::Import => {
             p.rect(rect(6.0, 12.0, 26.0, 28.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
             seg((16.0, 2.0), (16.0, 20.0), line(2.2, BLUE));
@@ -611,11 +637,6 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 egui::FontId::proportional(6.5 * s),
                 Color32::WHITE,
             );
-        }
-        Icon::Planned => {
-            p.circle_stroke(at(16.0, 16.0), 11.0 * s, line(1.5, INK));
-            seg((16.0, 16.0), (16.0, 9.0), ink);
-            seg((16.0, 16.0), (21.0, 19.0), ink);
         }
     }
     let _ = vec2;

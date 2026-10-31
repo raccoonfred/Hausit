@@ -447,6 +447,47 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                 ui.end_row();
             });
         });
+    if v.kind.is_graphical() && !is_sheet {
+        let locked = v
+            .template
+            .and_then(|t| app.doc.view_template(t))
+            .is_some_and(|t| t.phase_filter.is_some());
+        egui::CollapsingHeader::new(RichText::new("Phasing").strong())
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("view_phasing").num_columns(2).show(ui, |ui| {
+                    ui.label("Phase Filter");
+                    ui.add_enabled_ui(!locked, |ui| {
+                        egui::ComboBox::from_id_salt("vp_phase_filter")
+                            .selected_text(v.phase_filter.label())
+                            .width(140.0)
+                            .show_ui(ui, |ui| {
+                                for f in hausit_model::PhaseFilter::ALL {
+                                    ui.selectable_value(&mut v.phase_filter, f, f.label());
+                                }
+                            });
+                    })
+                    .response
+                    .on_disabled_hover_text("Set by the view template");
+                    ui.end_row();
+                    ui.label("Phase");
+                    let current = app.doc.view_phase(&v);
+                    let mut pick = current;
+                    egui::ComboBox::from_id_salt("vp_phase")
+                        .selected_text(app.doc.phase_name(current))
+                        .width(140.0)
+                        .show_ui(ui, |ui| {
+                            for p in &app.doc.phases {
+                                ui.selectable_value(&mut pick, Some(p.id), p.name.clone());
+                            }
+                        });
+                    if pick != current {
+                        v.phase = pick;
+                    }
+                    ui.end_row();
+                });
+            });
+    }
     if let ViewKind::Schedule(_) = v.kind {
         crate::schedule_view::properties(app, ui, view_id);
         return;

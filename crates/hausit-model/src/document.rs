@@ -49,6 +49,12 @@ pub struct Document {
     pub families: Vec<crate::component::FamilyDef>,
     #[serde(default)]
     pub view_templates: Vec<crate::view::ViewTemplate>,
+    /// Phases in time order (Manage ▸ Phases).
+    #[serde(default)]
+    pub phases: Vec<crate::phasing::Phase>,
+    /// The phase new elements are created in: the active view's phase.
+    #[serde(skip)]
+    pub creation_phase: Option<ElementId>,
     elements: IndexMap<ElementId, Element>,
     types: IndexMap<ElementId, FamilyType>,
     views: IndexMap<ElementId, View>,
@@ -70,7 +76,7 @@ impl Document {
     /// A document with nothing in it. See [`crate::template`] for a usable
     /// starting project.
     pub fn empty() -> Self {
-        Document {
+        let mut doc = Document {
             project_info: ProjectInfo {
                 name: "Project Name".into(),
                 ..Default::default()
@@ -81,13 +87,17 @@ impl Document {
             materials: crate::materials::default_materials(),
             families: Vec::new(),
             view_templates: Vec::new(),
+            phases: Vec::new(),
+            creation_phase: None,
             elements: IndexMap::new(),
             types: IndexMap::new(),
             views: IndexMap::new(),
             next_id: 1,
             revision: 0,
             index: Default::default(),
-        }
+        };
+        doc.ensure_phases();
+        doc
     }
 
     pub fn revision(&self) -> u64 {
@@ -103,6 +113,11 @@ impl Document {
     /// Marks the document as changed.
     pub fn touch(&mut self) {
         self.revision += 1;
+    }
+
+    /// A fresh id, for things kept outside the element table (phases).
+    pub(crate) fn new_id(&mut self) -> ElementId {
+        self.alloc_id()
     }
 
     fn alloc_id(&mut self) -> ElementId {
@@ -137,6 +152,13 @@ impl Document {
         self.elements.get_mut(&id)
     }
 
+    /// Keeps only the elements `keep` accepts, without the cascade that
+    /// [`Document::delete`] does: for building filtered copies of the model.
+    pub fn retain_elements(&mut self, mut keep: impl FnMut(&Element) -> bool) {
+        self.elements.retain(|_, e| keep(e));
+        self.touch();
+    }
+
     pub fn contains(&self, id: ElementId) -> bool {
         self.elements.contains_key(&id) || self.types.contains_key(&id) || self.views.contains_key(&id)
     }
@@ -147,12 +169,18 @@ impl Document {
             Category::Doors | Category::Windows => self.next_mark(data.category()),
             _ => String::new(),
         };
+        let phase_created = crate::phasing::is_phased(data.category())
+            .then_some(self.creation_phase)
+            .flatten()
+            .filter(|p| self.phase(*p).is_some());
         self.elements.insert(
             id,
             Element {
                 id,
                 mark,
                 comments: String::new(),
+                phase_created,
+                phase_demolished: None,
                 data,
             },
         );

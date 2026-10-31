@@ -229,6 +229,11 @@ pub struct View {
     /// The view template that controls this view's settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<ElementId>,
+    /// Phasing: the phase the view shows (`None`: the latest) and how.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub phase: Option<ElementId>,
+    #[serde(default)]
+    pub phase_filter: crate::phasing::PhaseFilter,
 }
 
 /// Visibility/Graphics overrides of a view, by category.
@@ -295,6 +300,8 @@ pub struct ViewTemplate {
     pub cut_height: Option<f64>,
     #[serde(default)]
     pub graphics: Option<Graphics>,
+    #[serde(default)]
+    pub phase_filter: Option<crate::phasing::PhaseFilter>,
 }
 
 impl ViewTemplate {
@@ -309,6 +316,7 @@ impl ViewTemplate {
             visual_style: Some(view.visual_style),
             cut_height: plan.then_some(view.cut_height),
             graphics: Some(view.graphics.clone()),
+            phase_filter: Some(view.phase_filter),
         }
     }
 
@@ -328,6 +336,9 @@ impl ViewTemplate {
         }
         if let Some(g) = &self.graphics {
             view.graphics = g.clone();
+        }
+        if let Some(f) = self.phase_filter {
+            view.phase_filter = f;
         }
     }
 }
@@ -360,6 +371,8 @@ impl View {
             callout_of: None,
             graphics: Graphics::new(),
             template: None,
+            phase: None,
+            phase_filter: Default::default(),
         }
     }
 
