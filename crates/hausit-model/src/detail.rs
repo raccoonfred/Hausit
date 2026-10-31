@@ -90,8 +90,9 @@ pub const REGION_PATTERNS: [(&str, FillPattern); 5] = [
 ];
 
 /// Categories the top of which a spot elevation reads in plan.
-const SPOT_CATEGORIES: [Category; 5] = [
+const SPOT_CATEGORIES: [Category; 6] = [
     Category::Floors,
+    Category::Toposolid,
     Category::Roofs,
     Category::Stairs,
     Category::StructuralFoundations,

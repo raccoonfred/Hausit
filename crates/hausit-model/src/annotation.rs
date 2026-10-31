@@ -64,6 +64,7 @@ pub fn element_level(doc: &Document, id: ElementId) -> Option<ElementId> {
     Some(match &e.data {
         ElementData::Wall(w) => w.base_level,
         ElementData::Floor(f) => f.level,
+        ElementData::Toposolid(t) => t.level,
         ElementData::Roof(r) => r.level,
         ElementData::Door(o) | ElementData::Window(o) => return element_level(doc, o.host),
         ElementData::Column(c) => c.base_level,

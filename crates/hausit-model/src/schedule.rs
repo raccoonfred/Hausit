@@ -104,7 +104,9 @@ impl ScheduleField {
             | Category::Casework
             | Category::PlumbingFixtures
             | Category::SpecialtyEquipment
-            | Category::GenericModels => v.extend([Level]),
+            | Category::GenericModels
+            | Category::Planting => v.extend([Level]),
+            Category::Toposolid => v.extend([Level, Area]),
             Category::Levels
             | Category::Grids
             | Category::Rooms
@@ -115,6 +117,7 @@ impl ScheduleField {
             | Category::DetailItems
             | Category::SpotElevations
             | Category::RevisionClouds
+            | Category::PropertyLines
             | Category::ModelGroups
             | Category::AreaBoundary
             | Category::Areas
@@ -140,7 +143,9 @@ impl ScheduleField {
             | Category::Casework
             | Category::PlumbingFixtures
             | Category::SpecialtyEquipment
-            | Category::GenericModels => vec![Family, Type, Level, Count],
+            | Category::GenericModels
+            | Category::Planting => vec![Family, Type, Level, Count],
+            Category::Toposolid => vec![Type, Level, Area],
             Category::Rooms => vec![Number, Name, Level, Area, Perimeter, Volume],
             Category::Levels
             | Category::Grids
@@ -152,6 +157,7 @@ impl ScheduleField {
             | Category::DetailItems
             | Category::SpotElevations
             | Category::RevisionClouds
+            | Category::PropertyLines
             | Category::ModelGroups
             | Category::Areas
             | Category::AreaBoundary => {

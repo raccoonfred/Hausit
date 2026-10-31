@@ -194,6 +194,7 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             vec![Part::prism(Material::Default, Prism::new(f.boundary.clone(), top - t, top))]
         }
         ElementData::Roof(r) => roof_parts(doc, id, r),
+        ElementData::Toposolid(t) => toposolid_parts(doc, id, t),
         ElementData::Door(o) => opening_parts(doc, id, o, true),
         ElementData::Window(o) => opening_parts(doc, id, o, false),
         ElementData::Column(c) => {
@@ -255,6 +256,7 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         | ElementData::FilledRegion(_)
         | ElementData::SpotElevation(_)
         | ElementData::RevisionCloud(_)
+        | ElementData::PropertyLine(_)
         | ElementData::Group(_)
         | ElementData::AreaBoundary(_)
         | ElementData::Area(_)
@@ -1312,6 +1314,65 @@ pub fn roof_plan_lines(r: &Roof) -> Vec<(DVec2, DVec2)> {
         }
     }
     out
+}
+
+/// A toposolid: its triangulated top, vertical sides along the boundary,
+/// and a flat bottom one type thickness below its lowest point.
+fn toposolid_parts(doc: &Document, id: ElementId, t: &crate::site::Toposolid) -> Vec<Part> {
+    if t.boundary.len() < 3 {
+        return vec![];
+    }
+    let base = doc.level_elevation(t.level);
+    let thickness = doc.type_of(id).map(|ty| ty.thickness()).unwrap_or(300.0);
+    let material = doc
+        .type_of(id)
+        .and_then(|ty| match ty.params.get("Material") {
+            Some(crate::params::ParamValue::Text(s)) if !s.is_empty() => Some(s.clone()),
+            _ => None,
+        })
+        .unwrap_or_else(|| "Earth".into());
+    let surface = t.surface();
+    let lowest = surface.iter().flatten().map(|p| p.z).fold(f64::MAX, f64::min);
+    let zb = base + lowest.min(t.height_offset) - thickness;
+    let mut faces: Vec<Face> = surface
+        .iter()
+        .map(|tri| Face {
+            pts: tri.iter().map(|p| DVec3::new(p.x, p.y, p.z + base)).collect(),
+        })
+        .collect();
+    let mut bottom: Vec<DVec3> = t.boundary.iter().map(|p| DVec3::new(p.x, p.y, zb)).collect();
+    if polygon_area(&t.boundary) > 0.0 {
+        bottom.reverse();
+    }
+    faces.push(Face { pts: bottom });
+    let ccw = polygon_area(&t.boundary) > 0.0;
+    let n = t.boundary.len();
+    for i in 0..n {
+        let (a, b) = (t.boundary[i], t.boundary[(i + 1) % n]);
+        let d = (b - a).normalize_or_zero();
+        if d == DVec2::ZERO {
+            continue;
+        }
+        let out = if ccw { DVec2::new(d.y, -d.x) } else { DVec2::new(-d.y, d.x) };
+        let (za, zbb) = (
+            base + t.height_at(a).unwrap_or(t.height_offset),
+            base + t.height_at(b).unwrap_or(t.height_offset),
+        );
+        let face = Face {
+            pts: vec![
+                DVec3::new(a.x, a.y, zb),
+                DVec3::new(b.x, b.y, zb),
+                DVec3::new(b.x, b.y, zbb),
+                DVec3::new(a.x, a.y, za),
+            ],
+        };
+        faces.push(face.oriented(out.extend(0.0)));
+    }
+    vec![Part {
+        material: Material::Default,
+        material_name: Some(material),
+        shape: Shape::Faces(faces),
+    }]
 }
 
 fn roof_parts(doc: &Document, id: ElementId, r: &Roof) -> Vec<Part> {

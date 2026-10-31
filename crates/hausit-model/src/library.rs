@@ -46,6 +46,11 @@ pub const FILES: &[(&str, &str)] = &[
         "Generic Models/Equipment Plinth.hfam",
         include_str!("../library/Generic Models/Equipment Plinth.hfam"),
     ),
+    ("Planting/Shrub.hfam", include_str!("../library/Planting/Shrub.hfam")),
+    (
+        "Planting/Tree - Deciduous.hfam",
+        include_str!("../library/Planting/Tree - Deciduous.hfam"),
+    ),
     (
         "Plumbing Fixtures/Bath.hfam",
         include_str!("../library/Plumbing Fixtures/Bath.hfam"),

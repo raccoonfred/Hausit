@@ -1,0 +1,160 @@
+{
+  "name": "Tree - Deciduous",
+  "category": "Planting",
+  "description": "Deciduous tree: trunk and a rounded crown. Insertion point at the base of the trunk.",
+  "parameters": [
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 8000
+    },
+    {
+      "name": "Crown Diameter",
+      "type": "Length",
+      "default": 5000
+    },
+    {
+      "name": "Trunk Diameter",
+      "type": "Length",
+      "default": 300
+    },
+    {
+      "name": "Foliage",
+      "type": "Material",
+      "default": "Foliage"
+    }
+  ],
+  "types": [
+    {
+      "name": "Small 5m",
+      "values": {
+        "Height": 5000,
+        "Crown Diameter": 3000,
+        "Trunk Diameter": 200
+      }
+    },
+    {
+      "name": "Medium 8m",
+      "values": {}
+    },
+    {
+      "name": "Large 12m",
+      "values": {
+        "Height": 12000,
+        "Crown Diameter": 8000,
+        "Trunk Diameter": 500
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Trunk Diameter / 2",
+      "z": [
+        0,
+        "Height * 0.45"
+      ],
+      "material": "Timber - Softwood"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2 * 0.55",
+      "z": [
+        "Height * 0.35",
+        "Height * 0.42"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2 * 0.85",
+      "z": [
+        "Height * 0.42",
+        "Height * 0.52"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2 * 1.0",
+      "z": [
+        "Height * 0.52",
+        "Height * 0.68"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2 * 0.9",
+      "z": [
+        "Height * 0.68",
+        "Height * 0.8"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2 * 0.65",
+      "z": [
+        "Height * 0.8",
+        "Height * 0.92"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2 * 0.3",
+      "z": [
+        "Height * 0.92",
+        "Height * 1.0"
+      ],
+      "material": "Foliage"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Crown Diameter / 2"
+    },
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Trunk Diameter / 2"
+    }
+  ]
+}

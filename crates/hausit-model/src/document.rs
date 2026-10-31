@@ -55,6 +55,9 @@ pub struct Document {
     /// Sheet Issues/Revisions, in sequence order.
     #[serde(default)]
     pub revisions: Vec<crate::revisions::Revision>,
+    /// Contour settings for toposolids.
+    #[serde(default)]
+    pub site_settings: crate::site::SiteSettings,
     /// The phase new elements are created in: the active view's phase.
     #[serde(skip)]
     pub creation_phase: Option<ElementId>,
@@ -92,6 +95,7 @@ impl Document {
             view_templates: Vec::new(),
             phases: Vec::new(),
             revisions: Vec::new(),
+            site_settings: Default::default(),
             creation_phase: None,
             elements: IndexMap::new(),
             types: IndexMap::new(),
@@ -220,6 +224,8 @@ impl Document {
                     ElementData::Door(o) | ElementData::Window(o) => o.host == id,
                     ElementData::Wall(w) => w.base_level == id,
                     ElementData::Floor(f) => f.level == id,
+                    ElementData::Toposolid(t) => t.level == id,
+                    ElementData::PropertyLine(l) => l.level == id,
                     ElementData::Roof(r) => r.level == id,
                     ElementData::Column(c) => c.base_level == id,
                     ElementData::Framing(f) => f.level == id,
@@ -353,6 +359,11 @@ impl Document {
                     g.end += delta;
                 }
                 ElementData::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
+                ElementData::Toposolid(t) => {
+                    t.boundary.iter_mut().for_each(|p| *p += delta);
+                    t.points.iter_mut().for_each(|p| *p += delta.extend(0.0));
+                }
+                ElementData::PropertyLine(l) => l.points.iter_mut().for_each(|p| *p += delta),
                 ElementData::Roof(r) => r.footprint.iter_mut().for_each(|p| *p += delta),
                 ElementData::Column(c) => c.point += delta,
                 ElementData::Framing(f) => {
@@ -565,6 +576,11 @@ impl Document {
                     g.end = f(g.end);
                 }
                 ElementData::Floor(fl) => fl.boundary.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Toposolid(t) => {
+                    t.boundary.iter_mut().for_each(|p| *p = f(*p));
+                    t.points.iter_mut().for_each(|p| *p = f(p.truncate()).extend(p.z));
+                }
+                ElementData::PropertyLine(l) => l.points.iter_mut().for_each(|p| *p = f(*p)),
                 ElementData::Roof(r) => {
                     r.footprint.iter_mut().for_each(|p| *p = f(*p));
                     if let Some(a) = &mut r.slope_arrow {

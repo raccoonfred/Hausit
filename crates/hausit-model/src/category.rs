@@ -35,10 +35,13 @@ pub enum Category {
     Areas,
     AreaBoundary,
     RevisionClouds,
+    Toposolid,
+    PropertyLines,
+    Planting,
 }
 
 impl Category {
-    pub const ALL: [Category; 30] = [
+    pub const ALL: [Category; 33] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -69,25 +72,30 @@ impl Category {
         Category::Areas,
         Category::AreaBoundary,
         Category::RevisionClouds,
+        Category::Toposolid,
+        Category::PropertyLines,
+        Category::Planting,
     ];
 
     /// Categories of loadable components, placed with the Component tool.
-    pub const COMPONENTS: [Category; 5] = [
+    pub const COMPONENTS: [Category; 6] = [
         Category::Furniture,
         Category::Casework,
         Category::PlumbingFixtures,
         Category::SpecialtyEquipment,
         Category::GenericModels,
+        Category::Planting,
     ];
 
     /// Categories that have family types (and so appear under "Families").
-    pub const TYPED: [Category; 16] = [
+    pub const TYPED: [Category; 18] = [
         Category::Casework,
         Category::Ceilings,
         Category::Doors,
         Category::Floors,
         Category::Furniture,
         Category::GenericModels,
+        Category::Planting,
         Category::PlumbingFixtures,
         Category::Railings,
         Category::Roofs,
@@ -96,6 +104,7 @@ impl Category {
         Category::StructuralFoundations,
         Category::StructuralFraming,
         Category::Stairs,
+        Category::Toposolid,
         Category::Walls,
         Category::Windows,
     ];
@@ -153,6 +162,9 @@ impl Category {
             Category::Areas => "Areas",
             Category::AreaBoundary => "Area Boundary",
             Category::RevisionClouds => "Revision Clouds",
+            Category::Toposolid => "Toposolid",
+            Category::PropertyLines => "Property Lines",
+            Category::Planting => "Planting",
         }
     }
 
@@ -189,6 +201,9 @@ impl Category {
             Category::Areas => "Area",
             Category::AreaBoundary => "Area Boundary Line",
             Category::RevisionClouds => "Revision Cloud",
+            Category::Toposolid => "Toposolid",
+            Category::PropertyLines => "Property Line",
+            Category::Planting => "Planting",
         }
     }
 
@@ -230,6 +245,7 @@ impl Category {
                 | Category::RevisionClouds
                 | Category::Areas
                 | Category::AreaBoundary
+                | Category::PropertyLines
         )
     }
 }

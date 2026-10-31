@@ -148,6 +148,31 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(area * t)).ro());
             let _ = h;
         }
+        ElementData::Toposolid(t) => {
+            p.push(Parameter::new("Level", G::Constraints, V::Element(t.level)).kind(ParamKind::Level));
+            p.push(Parameter::new(
+                "Height Offset From Level",
+                G::Constraints,
+                V::Length(t.height_offset),
+            ));
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(hausit_core::geom::polygon_area(&t.boundary).abs())).ro());
+            p.push(
+                Parameter::new(
+                    "Perimeter",
+                    G::Dimensions,
+                    V::Length(hausit_core::geom::polygon_perimeter(&t.boundary)),
+                )
+                .ro(),
+            );
+            p.push(Parameter::new("Points", G::Other, V::Integer(t.points.len() as i64)).ro());
+        }
+        ElementData::PropertyLine(l) => {
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(doc.property_area(l))).ro());
+            let n = l.points.len();
+            let segs = if l.closed { n } else { n.saturating_sub(1) };
+            let length: f64 = (0..segs).map(|i| l.points[i].distance(l.points[(i + 1) % n])).sum();
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(length)).ro());
+        }
         ElementData::Floor(f) => {
             p.push(Parameter::new("Level", G::Constraints, V::Element(f.level)).kind(ParamKind::Level));
             p.push(Parameter::new(
@@ -503,6 +528,12 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Structural", V::Bool(b)) => w.structural = b,
                 _ => return Err(bad()),
             },
+            ElementData::Toposolid(t) => match (name, value) {
+                ("Level", V::Element(l)) if l.is_valid() => t.level = l,
+                ("Height Offset From Level", V::Length(v)) => t.height_offset = v,
+                _ => return Err(bad()),
+            },
+            ElementData::PropertyLine(_) => return Err(bad()),
             ElementData::Floor(f) => match (name, value) {
                 ("Level", V::Element(l)) if l.is_valid() => f.level = l,
                 ("Height Offset From Level", V::Length(v)) => f.height_offset = v,

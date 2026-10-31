@@ -142,6 +142,16 @@ pub enum Tool {
     SpotElevation {
         point: Option<DVec2>,
     },
+    /// Toposolid boundary sketch.
+    Toposolid {
+        sketch: Sketch,
+    },
+    /// Toposolid shape points: click to add or move a point.
+    TopoPoint,
+    /// Property line corners.
+    PropertyLine {
+        pts: Vec<DVec2>,
+    },
     /// Revision cloud corners being sketched.
     RevisionCloud {
         pts: Vec<DVec2>,
@@ -174,6 +184,9 @@ impl Tool {
             Tool::Door => "Modify | Place Door",
             Tool::Window => "Modify | Place Window",
             Tool::Floor { .. } => "Modify | Create Floor Boundary",
+            Tool::Toposolid { .. } => "Modify | Create Toposolid Boundary",
+            Tool::TopoPoint => "Modify | Toposolid | Add Point",
+            Tool::PropertyLine { .. } => "Modify | Create Property Line Sketch",
             Tool::Roof { .. } => "Modify | Create Roof Footprint",
             Tool::Level => "Modify | Place Level",
             Tool::Grid { .. } => "Modify | Place Grid",
@@ -227,7 +240,7 @@ impl Tool {
             Tool::Wall { .. } => "Click to enter wall end point, or type a length and press Enter. Esc ends the chain.",
             Tool::Door => "Click on a wall to place a door. The side you click is the side it swings to.",
             Tool::Window => "Click on a wall to place a window.",
-            Tool::Floor { .. } | Tool::Roof { .. } => {
+            Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } => {
                 "Sketch a closed loop: pick walls or draw lines. Finish Edit Mode (Enter) creates it; Ctrl+Z removes the last line."
             }
             Tool::Level => "Click in an elevation or section to place a level at that height.",
@@ -282,6 +295,9 @@ impl Tool {
                 "Click the point to mark: a floor, roof or stair in plan, any point in an elevation or section."
             }
             Tool::SpotElevation { .. } => "Click where the label goes.",
+            Tool::TopoPoint => "Click on a toposolid to add a point at the elevation in the options bar; click an existing point or corner to change its height.",
+            Tool::PropertyLine { pts } if pts.len() < 2 => "Click the corners of the property line.",
+            Tool::PropertyLine { .. } => "Click the first corner again to close it, or press Enter to finish an open line.",
             Tool::RevisionCloud { pts } if pts.len() < 3 => "Click the corners of the area to cloud.",
             Tool::RevisionCloud { .. } => "Click more corners, then click the first corner again or press Enter to finish.",
             Tool::AreaBoundary { start: None } => "Click to enter area boundary start point, or Pick Walls in the options bar.",
@@ -306,6 +322,7 @@ impl Tool {
             Tool::Door => Some(Category::Doors),
             Tool::Window => Some(Category::Windows),
             Tool::Floor { .. } => Some(Category::Floors),
+            Tool::Toposolid { .. } => Some(Category::Toposolid),
             Tool::Roof { .. } => Some(Category::Roofs),
             Tool::Column => Some(Category::StructuralColumns),
             Tool::Component { category } => Some(*category),
@@ -364,8 +381,8 @@ impl Tool {
             Tool::Rotate { center, .. } => Some(*center),
             Tool::Array { start } => *start,
             Tool::DetailLine { start } => *start,
-            Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } => pts.last().copied(),
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start,
+            Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } | Tool::PropertyLine { pts } => pts.last().copied(),
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => sketch.start,
             Tool::Stair { pts } | Tool::Railing { pts } => pts.last().copied(),
             _ => None,
         }
@@ -373,20 +390,20 @@ impl Tool {
 
     pub fn sketch(&self) -> Option<&Sketch> {
         match self {
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } => Some(sketch),
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => Some(sketch),
             _ => None,
         }
     }
 
     pub fn sketch_mut(&mut self) -> Option<&mut Sketch> {
         match self {
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } => Some(sketch),
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => Some(sketch),
             _ => None,
         }
     }
 
     pub fn is_sketch(&self) -> bool {
-        matches!(self, Tool::Floor { .. } | Tool::Roof { .. })
+        matches!(self, Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. })
     }
 
     /// Forgets in-progress input but stays in the tool.
@@ -406,9 +423,9 @@ impl Tool {
             Tool::Dimension { refs } => refs.clear(),
             Tool::Trim { first } => *first = None,
             Tool::DetailLine { start } => *start = None,
-            Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } => pts.clear(),
+            Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } | Tool::PropertyLine { pts } => pts.clear(),
             Tool::SpotElevation { point } => *point = None,
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start = None,
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => sketch.start = None,
             _ => {}
         }
     }
@@ -588,6 +605,8 @@ pub struct ToolOptions {
     /// Revision clouds: the revision to draw on, and whether to tag.
     pub cloud_revision: Option<ElementId>,
     pub cloud_tag: bool,
+    /// Toposolid points: height above the level.
+    pub topo_height: f64,
 }
 
 impl Default for ToolOptions {
@@ -623,6 +642,7 @@ impl Default for ToolOptions {
             region_masking: false,
             cloud_revision: None,
             cloud_tag: true,
+            topo_height: 1000.0,
         }
     }
 }
@@ -636,6 +656,9 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Door
             | Tool::Window
             | Tool::Floor { .. }
+            | Tool::Toposolid { .. }
+            | Tool::TopoPoint
+            | Tool::PropertyLine { .. }
             | Tool::Roof { .. }
             | Tool::Grid { .. }
             | Tool::Section { .. }
@@ -692,6 +715,10 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
     if needs_selection && app.selection.iter().all(|id| app.doc.element(*id).is_none()) {
         app.status = "Select elements first, then choose the modify tool.".into();
         return;
+    }
+    // A site boundary is drawn, not picked from walls.
+    if matches!(tool, Tool::Toposolid { .. }) {
+        app.options.sketch_mode = DrawShape::Line;
     }
     match &mut tool {
         // Components: the category of the type last used, or the first
@@ -1202,7 +1229,7 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 }
             }
         }
-        Tool::Floor { sketch, .. } | Tool::Roof { sketch } => {
+        Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => {
             let (slope, overhang) = if roof { (app.options.defines_slope, 0.0) } else { (false, 0.0) };
             let line = |a: DVec2, b: DVec2| SketchLine {
                 a,
@@ -1343,6 +1370,47 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 pts.push(p);
             }
         }
+        Tool::PropertyLine { pts } => {
+            let close = pts.len() >= 3 && pts[0].distance(p) < app.options.pick_tol;
+            if close {
+                finish_property_line(app, std::mem::take(pts), true);
+            } else if pts.last().is_none_or(|q| q.distance(p) > 1.0) {
+                pts.push(p);
+            }
+        }
+        Tool::TopoPoint => {
+            let Some(level) = app.active_level() else { return };
+            let Some(topo) = app.doc.toposolid_at(level, p).or_else(|| {
+                // A corner is on the edge, not strictly inside.
+                app.doc
+                    .elements_of(Category::Toposolid)
+                    .find(|e| match &e.data {
+                        ElementData::Toposolid(t) => t.level == level && t.boundary.iter().any(|b| b.distance(p) < app.options.pick_tol),
+                        _ => false,
+                    })
+                    .map(|e| e.id)
+            }) else {
+                app.status = "Click on a toposolid.".into();
+                app.tool = tool;
+                return;
+            };
+            // Snap to an existing point or corner.
+            let at = match app.doc.element(topo).map(|e| &e.data) {
+                Some(ElementData::Toposolid(t)) => t
+                    .boundary
+                    .iter()
+                    .copied()
+                    .chain(t.points.iter().map(|q| q.truncate()))
+                    .filter(|q| q.distance(p) < app.options.pick_tol)
+                    .min_by(|a, b| a.distance(p).total_cmp(&b.distance(p)))
+                    .unwrap_or(p),
+                _ => p,
+            };
+            let h = app.options.topo_height;
+            app.transact("Add Toposolid Point", |doc| doc.set_topo_point(topo, at, h));
+            app.tool = tool;
+            return;
+        }
         Tool::RevisionCloud { pts } => {
             let close = pts.len() >= 3 && pts[0].distance(p) < app.options.pick_tol;
             if close {
@@ -1400,7 +1468,12 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 level,
                 point: p,
                 rotation: app.options.component_rotation,
-                offset: 0.0,
+                // Site components stand on the toposolid under them.
+                offset: if category == Category::Planting {
+                    app.doc.topo_height_at(level, p).unwrap_or(0.0)
+                } else {
+                    0.0
+                },
             };
             app.transact("Place Component", |doc| Ok(doc.add_element(ElementData::Component(c))));
         }
@@ -2213,6 +2286,21 @@ pub fn finish_region(app: &mut HausitApp, pts: Vec<DVec2>) {
     app.transact("Create Filled Region", |doc| Ok(doc.add_element(ElementData::FilledRegion(r))));
 }
 
+/// Creates a property line through the corners clicked so far.
+pub fn finish_property_line(app: &mut HausitApp, pts: Vec<DVec2>, closed: bool) {
+    let Some(level) = app.active_level() else { return };
+    if pts.len() < 2 || (closed && pts.len() < 3) {
+        app.status = "A property line needs at least two corners.".into();
+        return;
+    }
+    let l = hausit_model::PropertyLine {
+        level,
+        points: pts,
+        closed,
+    };
+    app.transact("Create Property Line", |doc| Ok(doc.add_element(ElementData::PropertyLine(l))));
+}
+
 /// The revision new clouds go on: the one picked in the Options Bar, or
 /// else the latest revision not yet issued.
 pub fn cloud_revision(app: &HausitApp) -> Option<ElementId> {
@@ -2287,6 +2375,8 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::AreaBoundary(b) => pts.extend([b.start, b.end]),
             ElementData::Area(a) => pts.push(a.point),
             ElementData::RevisionCloud(c) => pts.extend(&c.boundary),
+            ElementData::Toposolid(t) => pts.extend(&t.boundary),
+            ElementData::PropertyLine(l) => pts.extend(&l.points),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }
@@ -2469,6 +2559,24 @@ pub fn finish_sketch(app: &mut HausitApp) {
     let pts: Vec<DVec2> = corners.iter().map(|c| c.0).collect();
     let tool = std::mem::replace(&mut app.tool, Tool::Modify);
     match tool {
+        Tool::Toposolid { .. } => {
+            let type_id = match app.type_for(Category::Toposolid) {
+                Some(t) => t,
+                None => match app.transact("Add Toposolid Type", |doc| Ok(doc.ensure_toposolid_type())) {
+                    Some(t) => t,
+                    None => return,
+                },
+            };
+            let t = hausit_model::Toposolid {
+                type_id,
+                level,
+                boundary: pts,
+                points: vec![],
+                height_offset: 0.0,
+            };
+            app.transact("Create Toposolid", |doc| Ok(doc.add_element(ElementData::Toposolid(t))));
+            app.status = "Toposolid created. Shape it with Add Point.".into();
+        }
         Tool::Floor { structural, .. } => {
             let Some(type_id) = app.type_for(Category::Floors) else { return };
             let f = Floor {
@@ -2682,6 +2790,9 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         } else if let Tool::RevisionCloud { pts } = &mut app.tool {
             let pts = std::mem::take(pts);
             finish_cloud(app, pts);
+        } else if let Tool::PropertyLine { pts } = &mut app.tool {
+            let pts = std::mem::take(pts);
+            finish_property_line(app, pts, false);
         }
     }
 

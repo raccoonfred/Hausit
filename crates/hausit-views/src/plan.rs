@@ -54,6 +54,44 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
+    // Toposolids on this level: their edge and contour lines.
+    for e in doc.elements_of(Category::Toposolid).filter(|_| !reflected) {
+        let ElementData::Toposolid(t) = &e.data else { continue };
+        if t.level != level || t.boundary.len() < 3 {
+            continue;
+        }
+        let edge = pen(doc, Category::Toposolid, false, view);
+        dl.push(Prim::Polygon(t.boundary.clone()), Some(edge), Some([255, 255, 255, 0]), Some(e.id));
+        let s = &doc.site_settings;
+        // Coarse views show only the primary contours.
+        for (a, b, primary) in t.contours(elev, s.contour_interval, s.primary_every) {
+            if !primary && view.detail_level == DetailLevel::Coarse {
+                continue;
+            }
+            let stroke = if primary {
+                Stroke::new(1.4, [120, 100, 80, 255])
+            } else {
+                Stroke::new(0.8, [160, 145, 125, 255])
+            };
+            dl.line(a, b, stroke, Some(e.id));
+        }
+    }
+    // Property lines: dash-dot.
+    for e in doc.elements_of(Category::PropertyLines).filter(|_| !reflected) {
+        let ElementData::PropertyLine(l) = &e.data else { continue };
+        if l.level == level && l.points.len() >= 2 {
+            dl.push(
+                Prim::Polyline {
+                    pts: l.points.clone(),
+                    closed: l.closed,
+                },
+                Some(Stroke::new(2.0, [0, 0, 0, 255]).dashed(crate::Dash::DashDot)),
+                None,
+                Some(e.id),
+            );
+        }
+    }
+
     // Floors on this level, in projection.
     for e in doc.elements_of(Category::Floors).filter(|_| !reflected) {
         let ElementData::Floor(f) = &e.data else { continue };

@@ -81,6 +81,7 @@ pub struct Dialogs {
     pub type_props: Option<TypeProps>,
     pub new_schedule: Option<NewSchedule>,
     pub new_area_plan: Option<NewAreaPlan>,
+    pub site_settings: bool,
     pub rename: Option<Rename>,
     pub project_info: bool,
     pub units: bool,
@@ -199,6 +200,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     type_properties(app, ctx);
     new_schedule(app, ctx);
     new_area_plan(app, ctx);
+    site_settings(app, ctx);
     rename(app, ctx);
     project_info(app, ctx);
     units(app, ctx);
@@ -459,6 +461,37 @@ fn new_schedule(app: &mut HausitApp, ctx: &Context) {
         Some(false) => app.dialogs.new_schedule = None,
         None => {}
     }
+}
+
+fn site_settings(app: &mut HausitApp, ctx: &Context) {
+    if !app.dialogs.site_settings {
+        return;
+    }
+    let mut s = app.doc.site_settings.clone();
+    let mut open = true;
+    egui::Window::new("Site Settings")
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            egui::Grid::new("site_settings").num_columns(2).show(ui, |ui| {
+                ui.label("Contour interval:");
+                length_edit(ui, "contour_interval", &mut s.contour_interval, app.doc.length_unit);
+                ui.end_row();
+                ui.label("Primary contour every:");
+                ui.add(egui::DragValue::new(&mut s.primary_every).range(0..=20));
+                ui.end_row();
+            });
+            ui.label(RichText::new("An interval of 0 hides contours.").small().color(Color32::DARK_GRAY));
+        });
+    s.contour_interval = s.contour_interval.max(0.0);
+    if s != app.doc.site_settings {
+        app.transact("Site Settings", |doc| {
+            doc.site_settings = s;
+            Ok(())
+        });
+    }
+    app.dialogs.site_settings = open;
 }
 
 fn new_area_plan(app: &mut HausitApp, ctx: &Context) {

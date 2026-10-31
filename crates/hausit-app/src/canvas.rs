@@ -119,8 +119,10 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         // Model elements win over datums and view marks drawn over them,
         // and over the rooms and regions they stand in.
         candidates.sort_by_key(|id| match app.doc.element(*id).map(|e| e.category()) {
-            Some(Category::Grids | Category::Levels | Category::Rooms | Category::DetailItems) => 1,
-            None => 2,
+            Some(Category::Grids | Category::Levels | Category::Rooms | Category::Areas | Category::DetailItems) => 1,
+            // The ground everything stands on comes last.
+            Some(Category::Toposolid) => 2,
+            None => 3,
             _ => 0,
         });
         if candidates != app.pick_candidates {
@@ -165,6 +167,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 | Tool::Window
                 | Tool::Room
                 | Tool::Area
+                | Tool::TopoPoint
                 | Tool::Dimension { .. }
                 | Tool::Trim { .. }
                 | Tool::Split
@@ -178,7 +181,10 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 .map(|s| matches!(s.kind, SnapKind::Nearest | SnapKind::Alignment))
                 .unwrap_or(true);
             let free_angle = (mode == DrawShape::Rectangle
-                && matches!(app.tool, Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. }))
+                && matches!(
+                    app.tool,
+                    Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. }
+                ))
                 || (mode == DrawShape::Arc && app.options.arc_end.is_some());
             if let (Some(anchor), true, false) = (app.tool.anchor(), weak, free_angle) {
                 if let Some(c) = tools::constrain(anchor, p, xf.px(1.0), shift) {
@@ -1318,7 +1324,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             painter.add(Shape::closed_line(r, s));
         }
         Tool::DetailLine { start: Some(a) } => seg(*a, p),
-        Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } if !pts.is_empty() => {
+        Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } | Tool::PropertyLine { pts } if !pts.is_empty() => {
             let mut sp: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
             sp.push(xf.to_screen(p));
             painter.add(Shape::line(sp, Stroke::new(1.5, SKETCH)));
@@ -1413,7 +1419,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             };
             paint_list(painter, &moved, &dl, Some((&app.selection, PREVIEW)));
         }
-        Tool::Floor { sketch, .. } | Tool::Roof { sketch } => {
+        Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => {
             let roof = matches!(app.tool, Tool::Roof { .. });
             match (app.options.sketch_mode, sketch.start) {
                 (DrawShape::PickWalls, _) => {

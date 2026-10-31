@@ -53,6 +53,10 @@ pub enum Icon {
     Area,
     ColorLegend,
     RevisionCloud,
+    Toposolid,
+    TopoPoint,
+    PropertyLine,
+    Tree,
     Revisions,
     Attach,
     Beam,
@@ -189,6 +193,75 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 );
                 seg((14.0, y + 3.0), (28.0, y + 3.0), ink);
             }
+        }
+        Icon::Toposolid => {
+            poly(
+                &[
+                    (3.0, 20.0),
+                    (10.0, 13.0),
+                    (16.0, 16.0),
+                    (23.0, 9.0),
+                    (29.0, 14.0),
+                    (29.0, 27.0),
+                    (3.0, 27.0),
+                ],
+                Color32::from_rgb(150, 122, 92),
+                ink,
+            );
+            poly(
+                &[
+                    (3.0, 20.0),
+                    (10.0, 13.0),
+                    (16.0, 16.0),
+                    (23.0, 9.0),
+                    (29.0, 14.0),
+                    (29.0, 17.0),
+                    (23.0, 12.0),
+                    (16.0, 19.0),
+                    (10.0, 16.0),
+                    (3.0, 23.0),
+                ],
+                Color32::from_rgb(118, 160, 84),
+                ink,
+            );
+        }
+        Icon::TopoPoint => {
+            poly(
+                &[(3.0, 24.0), (12.0, 18.0), (20.0, 21.0), (29.0, 16.0), (29.0, 28.0), (3.0, 28.0)],
+                Color32::from_rgb(150, 122, 92),
+                ink,
+            );
+            seg((16.0, 4.0), (16.0, 18.0), Stroke::new(1.5, Color32::from_rgb(40, 110, 230)));
+            p.circle_filled(at(16.0, 19.5), 2.6 * s, k(Color32::from_rgb(40, 110, 230)));
+        }
+        Icon::PropertyLine => {
+            let dd = Stroke::new(1.8, ink.color);
+            for (a, b) in [
+                ((4.0, 26.0), (9.0, 26.0)),
+                ((12.0, 26.0), (13.0, 26.0)),
+                ((16.0, 26.0), (21.0, 26.0)),
+                ((24.0, 26.0), (25.0, 26.0)),
+            ] {
+                seg(a, b, dd);
+            }
+            for (a, b) in [
+                ((28.0, 24.0), (28.0, 19.0)),
+                ((28.0, 16.0), (28.0, 15.0)),
+                ((28.0, 12.0), (28.0, 7.0)),
+            ] {
+                seg(a, b, dd);
+            }
+            seg((4.0, 6.0), (20.0, 6.0), dd);
+        }
+        Icon::Tree => {
+            p.rect(
+                rect(14.5, 18.0, 17.5, 29.0),
+                0.0,
+                k(Color32::from_rgb(140, 100, 60)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            p.circle(at(16.0, 12.0), 9.0 * s, k(Color32::from_rgb(92, 140, 70)), ink);
         }
         Icon::RevisionCloud => {
             let red = Stroke::new(1.6, Color32::from_rgb(200, 30, 30));

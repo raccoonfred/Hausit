@@ -61,6 +61,18 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         ui.separator();
                         ui.label(RichText::new("Space flips the exterior side").color(Color32::DARK_GRAY));
                     }
+                    Tool::Toposolid { .. } => {
+                        if app.options.sketch_mode == DrawShape::Line {
+                            ui.checkbox(&mut app.options.chain, "Chain");
+                        }
+                        finish_cancel(app, ui);
+                    }
+                    Tool::TopoPoint => {
+                        ui.label("Elevation:");
+                        let unit = app.doc.length_unit;
+                        length_edit(ui, "topo_height", &mut app.options.topo_height, unit);
+                        ui.label(RichText::new("above the level").color(Color32::DARK_GRAY));
+                    }
                     Tool::Floor { .. } => {
                         if app.options.sketch_mode == DrawShape::Line {
                             ui.checkbox(&mut app.options.chain, "Chain");

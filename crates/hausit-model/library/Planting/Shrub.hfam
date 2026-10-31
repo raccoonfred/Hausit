@@ -1,0 +1,99 @@
+{
+  "name": "Shrub",
+  "category": "Planting",
+  "description": "Rounded shrub. Insertion point at the centre, on the ground.",
+  "parameters": [
+    {
+      "name": "Height",
+      "type": "Length",
+      "default": 1200
+    },
+    {
+      "name": "Diameter",
+      "type": "Length",
+      "default": 1200
+    },
+    {
+      "name": "Foliage",
+      "type": "Material",
+      "default": "Foliage"
+    }
+  ],
+  "types": [
+    {
+      "name": "1200mm",
+      "values": {}
+    },
+    {
+      "name": "600mm",
+      "values": {
+        "Height": 600,
+        "Diameter": 700
+      }
+    }
+  ],
+  "solids": [
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2 * 0.7",
+      "z": [
+        "Height * 0",
+        "Height * 0.2"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2 * 1.0",
+      "z": [
+        "Height * 0.2",
+        "Height * 0.6"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2 * 0.8",
+      "z": [
+        "Height * 0.6",
+        "Height * 0.85"
+      ],
+      "material": "Foliage"
+    },
+    {
+      "shape": "Cylinder",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2 * 0.45",
+      "z": [
+        "Height * 0.85",
+        "Height * 1.0"
+      ],
+      "material": "Foliage"
+    }
+  ],
+  "plan": [
+    {
+      "shape": "Circle",
+      "center": [
+        0,
+        0
+      ],
+      "radius": "Diameter / 2"
+    }
+  ]
+}

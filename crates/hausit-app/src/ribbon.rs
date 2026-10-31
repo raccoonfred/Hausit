@@ -29,6 +29,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 RibbonTab::Structure => structure(app, ui),
                 RibbonTab::Insert => insert(app, ui),
                 RibbonTab::Annotate => annotate(app, ui),
+                RibbonTab::MassingSite => massing_site(app, ui),
                 RibbonTab::View => view_tab(app, ui),
                 RibbonTab::Manage => manage(app, ui),
                 RibbonTab::Modify => modify(app, ui),
@@ -751,6 +752,81 @@ fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
             app.open_views.len() > 1,
         ) {
             app.open_views.retain(|v| Some(*v) == app.active_view);
+        }
+    });
+}
+
+fn massing_site(app: &mut HausitApp, ui: &mut Ui) {
+    panel(ui, "Model Site", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::Toposolid,
+            "Toposolid",
+            "Toposolid: sketch the site's boundary; shape it with Add Point",
+            Tool::Toposolid {
+                sketch: tools::Sketch::default(),
+            },
+        );
+        tool_button(
+            app,
+            ui,
+            Icon::TopoPoint,
+            "Add Point",
+            "Modify Sub Elements: add or move a toposolid point at a height above the level",
+            Tool::TopoPoint,
+        );
+        if big(
+            ui,
+            Icon::Tree,
+            "Site Component",
+            "Site Component: trees and shrubs",
+            matches!(
+                app.tool,
+                Tool::Component {
+                    category: Category::Planting
+                }
+            ),
+            true,
+        ) {
+            // Bring the planting families in on first use.
+            if app.doc.types_of(Category::Planting).next().is_none() {
+                app.transact("Load Planting", |doc| {
+                    for name in ["Tree - Deciduous", "Shrub"] {
+                        if let Some(def) = hausit_model::library::family(name) {
+                            doc.load_family(def)?;
+                        }
+                    }
+                    Ok(())
+                });
+            }
+            app.options.last_component = Some(Category::Planting);
+            crate::tools::start(
+                app,
+                Tool::Component {
+                    category: Category::Planting,
+                },
+            );
+        }
+    });
+    panel(ui, "Modify Site", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::PropertyLine,
+            "Property Line",
+            "Property Line: the legal boundary of the site",
+            Tool::PropertyLine { pts: vec![] },
+        );
+        if big(
+            ui,
+            Icon::TypeProps,
+            "Site Settings",
+            "Site Settings: contour line interval",
+            app.dialogs.site_settings,
+            true,
+        ) {
+            app.dialogs.site_settings = true;
         }
     });
 }

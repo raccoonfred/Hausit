@@ -34,6 +34,7 @@ impl Element {
         match &self.data {
             ElementData::Wall(w) => Some(w.type_id),
             ElementData::Floor(f) => Some(f.type_id),
+            ElementData::Toposolid(t) => Some(t.type_id),
             ElementData::Roof(r) => Some(r.type_id),
             ElementData::Door(o) | ElementData::Window(o) => Some(o.type_id),
             ElementData::Column(c) => Some(c.type_id),
@@ -56,6 +57,7 @@ impl Element {
             | ElementData::FilledRegion(_)
             | ElementData::SpotElevation(_)
             | ElementData::RevisionCloud(_)
+            | ElementData::PropertyLine(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
             | ElementData::Tag(_) => None,
@@ -66,6 +68,7 @@ impl Element {
         match &mut self.data {
             ElementData::Wall(w) => w.type_id = t,
             ElementData::Floor(f) => f.type_id = t,
+            ElementData::Toposolid(s) => s.type_id = t,
             ElementData::Roof(r) => r.type_id = t,
             ElementData::Door(o) | ElementData::Window(o) => o.type_id = t,
             ElementData::Column(c) => c.type_id = t,
@@ -88,6 +91,7 @@ impl Element {
             | ElementData::FilledRegion(_)
             | ElementData::SpotElevation(_)
             | ElementData::RevisionCloud(_)
+            | ElementData::PropertyLine(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
             | ElementData::Tag(_) => {}
@@ -146,6 +150,8 @@ pub enum ElementData {
     AreaBoundary(crate::areas::AreaBoundary),
     Area(crate::areas::Area),
     RevisionCloud(crate::revisions::RevisionCloud),
+    Toposolid(crate::site::Toposolid),
+    PropertyLine(crate::site::PropertyLine),
 }
 
 impl ElementData {
@@ -160,6 +166,8 @@ impl ElementData {
                 v
             }
             ElementData::Floor(f) => vec![&mut f.level],
+            ElementData::Toposolid(t) => vec![&mut t.level],
+            ElementData::PropertyLine(l) => vec![&mut l.level],
             ElementData::Roof(r) => vec![&mut r.level],
             ElementData::Column(c) => vec![&mut c.base_level, &mut c.top_level],
             ElementData::Framing(f) => vec![&mut f.level],
@@ -202,6 +210,8 @@ impl ElementData {
             ElementData::FilledRegion(_) => Category::DetailItems,
             ElementData::SpotElevation(_) => Category::SpotElevations,
             ElementData::RevisionCloud(_) => Category::RevisionClouds,
+            ElementData::Toposolid(_) => Category::Toposolid,
+            ElementData::PropertyLine(_) => Category::PropertyLines,
             ElementData::Group(_) => Category::ModelGroups,
             ElementData::AreaBoundary(_) => Category::AreaBoundary,
             ElementData::Area(_) => Category::Areas,

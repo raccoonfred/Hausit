@@ -154,7 +154,13 @@ pub fn default_type_params(category: Category) -> TypeParams {
             p.insert("Material".into(), ParamValue::Text("Steel".into()));
         }
         // Loadable families bring their own parameters.
-        Category::Furniture | Category::Casework | Category::PlumbingFixtures | Category::SpecialtyEquipment | Category::GenericModels => {}
+        Category::Furniture
+        | Category::Casework
+        | Category::PlumbingFixtures
+        | Category::SpecialtyEquipment
+        | Category::GenericModels
+        | Category::Planting => {}
+        Category::Toposolid => return crate::site::toposolid_type_params(300.0, "Earth"),
         Category::Levels
         | Category::Grids
         | Category::Rooms
@@ -165,6 +171,7 @@ pub fn default_type_params(category: Category) -> TypeParams {
         | Category::DetailItems
         | Category::SpotElevations
         | Category::RevisionClouds
+        | Category::PropertyLines
         | Category::ModelGroups
         | Category::Areas
         | Category::AreaBoundary

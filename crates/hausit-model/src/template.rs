@@ -122,6 +122,12 @@ pub fn load_default_types(doc: &mut Document) {
         curtain_type_params(1500.0, 2200.0, 50.0),
     );
 
+    doc.add_type(
+        Category::Toposolid,
+        crate::site::TOPOSOLID,
+        "Toposolid - 300mm",
+        crate::site::toposolid_type_params(300.0, "Earth"),
+    );
     doc.add_type(Floors, "Floor", "Generic 150mm", with(Floors, &[("Thickness", len(150.0))]));
     doc.add_type(Floors, "Floor", "Generic 300mm", with(Floors, &[("Thickness", len(300.0))]));
     layered(

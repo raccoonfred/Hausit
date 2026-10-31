@@ -17,17 +17,19 @@ pub enum RibbonTab {
     Structure,
     Insert,
     Annotate,
+    MassingSite,
     View,
     Manage,
     Modify,
 }
 
 impl RibbonTab {
-    pub const ALL: [RibbonTab; 7] = [
+    pub const ALL: [RibbonTab; 8] = [
         RibbonTab::Architecture,
         RibbonTab::Structure,
         RibbonTab::Insert,
         RibbonTab::Annotate,
+        RibbonTab::MassingSite,
         RibbonTab::View,
         RibbonTab::Manage,
         RibbonTab::Modify,
@@ -38,6 +40,7 @@ impl RibbonTab {
             RibbonTab::Structure => "Structure",
             RibbonTab::Insert => "Insert",
             RibbonTab::Annotate => "Annotate",
+            RibbonTab::MassingSite => "Massing & Site",
             RibbonTab::View => "View",
             RibbonTab::Manage => "Manage",
             RibbonTab::Modify => "Modify",
