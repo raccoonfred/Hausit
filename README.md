@@ -20,6 +20,9 @@ and features are added and deepened over time.
 
    `cargo run --release -- --sample` opens a sample house straight away.
 
+On Windows, see the step-by-step [Windows install guide](docs/install-windows.md)
+(build tools, Rust, Git, shortcuts and troubleshooting).
+
 On Linux you may need the usual windowing libraries
 (`sudo apt install libxkbcommon-x11-0 libgtk-3-dev` on Debian/Ubuntu).
 Hausit uses your GPU through wgpu (Vulkan, Metal or DirectX 12) and falls
