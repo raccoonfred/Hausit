@@ -441,6 +441,14 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
         let d = el.phase_demolished.map(|d| doc.phase_index(Some(d)) + 1).unwrap_or(0);
         p.push(Parameter::new("Phase Demolished", G::Phasing, V::Choice(d)).kind(ParamKind::Choice(demo)));
     }
+    if doc.worksharing() {
+        let names: Vec<String> = doc.worksets.iter().map(|w| w.name.clone()).collect();
+        let i = el.workset.and_then(|w| doc.worksets.iter().position(|x| x.id == w)).unwrap_or(0);
+        p.push(Parameter::new("Workset", G::IdentityData, V::Choice(i)).kind(ParamKind::Choice(names)));
+    }
+    if !doc.option_sets.is_empty() {
+        p.push(Parameter::new("Design Option", G::IdentityData, V::Text(doc.option_label(el.design_option))).ro());
+    }
     p.sort_by_key(|p| p.group);
     p
 }
@@ -461,6 +469,11 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
         if !new.trim().is_empty() {
             doc.rename_level_views(id, &l.name.clone(), new);
         }
+    }
+    if let ("Workset", V::Choice(i)) = (name, &value) {
+        let w = doc.worksets.get(*i).map(|w| w.id).ok_or_else(bad)?;
+        doc.element_mut(id).ok_or(ModelError::NotFound(id))?.workset = Some(w);
+        return Ok(());
     }
     // Phasing: an element cannot be demolished before it is created.
     if let ("Phase Created" | "Phase Demolished", V::Choice(i)) = (name, &value) {

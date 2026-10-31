@@ -29,6 +29,7 @@ mod theme;
 mod tools;
 mod view_graphics;
 mod viewcube;
+mod worksharing;
 
 #[derive(Clone, Default)]
 struct Args {

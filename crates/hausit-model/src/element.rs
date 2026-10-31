@@ -18,6 +18,12 @@ pub struct Element {
     pub phase_created: Option<ElementId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_demolished: Option<ElementId>,
+    /// The workset the element is on, once worksharing is enabled.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workset: Option<ElementId>,
+    /// The design option the element belongs to (`None`: main model).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub design_option: Option<ElementId>,
     /// Pinned elements cannot be moved, rotated, mirrored or deleted.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pinned: bool,

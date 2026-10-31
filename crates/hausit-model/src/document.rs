@@ -58,6 +58,18 @@ pub struct Document {
     /// Contour settings for toposolids.
     #[serde(default)]
     pub site_settings: crate::site::SiteSettings,
+    /// Worksets, once worksharing is enabled.
+    #[serde(default)]
+    pub worksets: Vec<crate::worksharing::Workset>,
+    /// The workset new elements go on.
+    #[serde(default)]
+    pub active_workset: Option<ElementId>,
+    /// Design option sets.
+    #[serde(default)]
+    pub option_sets: Vec<crate::worksharing::OptionSet>,
+    /// The design option being edited: new elements go into it.
+    #[serde(default)]
+    pub editing_option: Option<ElementId>,
     /// The phase new elements are created in: the active view's phase.
     #[serde(skip)]
     pub creation_phase: Option<ElementId>,
@@ -96,6 +108,10 @@ impl Document {
             phases: Vec::new(),
             revisions: Vec::new(),
             site_settings: Default::default(),
+            worksets: Vec::new(),
+            active_workset: None,
+            option_sets: Vec::new(),
+            editing_option: None,
             creation_phase: None,
             elements: IndexMap::new(),
             types: IndexMap::new(),
@@ -183,6 +199,17 @@ impl Document {
             .then_some(self.creation_phase)
             .flatten()
             .filter(|p| self.phase(*p).is_some());
+        let workset = if !self.worksharing() {
+            None
+        } else if matches!(data.category(), Category::Levels | Category::Grids) {
+            self.worksets
+                .iter()
+                .find(|w| w.name == crate::worksharing::SHARED_LEVELS_AND_GRIDS)
+                .map(|w| w.id)
+                .or(self.active_workset)
+        } else {
+            self.active_workset
+        };
         self.elements.insert(
             id,
             Element {
@@ -191,6 +218,8 @@ impl Document {
                 comments: String::new(),
                 phase_created,
                 phase_demolished: None,
+                workset,
+                design_option: self.editing_option,
                 pinned: false,
                 data,
             },

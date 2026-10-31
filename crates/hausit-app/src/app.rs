@@ -18,18 +18,20 @@ pub enum RibbonTab {
     Insert,
     Annotate,
     MassingSite,
+    Collaborate,
     View,
     Manage,
     Modify,
 }
 
 impl RibbonTab {
-    pub const ALL: [RibbonTab; 8] = [
+    pub const ALL: [RibbonTab; 9] = [
         RibbonTab::Architecture,
         RibbonTab::Structure,
         RibbonTab::Insert,
         RibbonTab::Annotate,
         RibbonTab::MassingSite,
+        RibbonTab::Collaborate,
         RibbonTab::View,
         RibbonTab::Manage,
         RibbonTab::Modify,
@@ -41,6 +43,7 @@ impl RibbonTab {
             RibbonTab::Insert => "Insert",
             RibbonTab::Annotate => "Annotate",
             RibbonTab::MassingSite => "Massing & Site",
+            RibbonTab::Collaborate => "Collaborate",
             RibbonTab::View => "View",
             RibbonTab::Manage => "Manage",
             RibbonTab::Modify => "Modify",
@@ -506,6 +509,14 @@ impl HausitApp {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(format!("{} elements", self.doc.elements().count()));
                 ui.separator();
+                if !self.doc.option_sets.is_empty() {
+                    crate::worksharing::editing_option_combo(self, ui);
+                    ui.separator();
+                }
+                if self.doc.worksharing() {
+                    crate::worksharing::active_workset_combo(self, ui, "status_workset");
+                    ui.separator();
+                }
                 if !self.selection.is_empty() {
                     ui.label(format!("Selected: {}", self.selection.len()));
                     ui.separator();

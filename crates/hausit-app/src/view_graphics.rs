@@ -17,6 +17,10 @@ pub struct VgDialog {
     pub target: VgTarget,
     pub rows: Vec<(Category, CategoryGraphics)>,
     pub annotation: bool,
+    /// 0 model, 1 annotation, 2 worksets, 3 design options.
+    pub page: usize,
+    pub worksets: Vec<(ElementId, hausit_model::WorksetVisibility)>,
+    pub options: Vec<(ElementId, ElementId)>,
 }
 
 /// Categories on the Model tab and the Annotation tab.
@@ -68,6 +72,9 @@ pub fn open_for_active_view(app: &mut HausitApp) {
         target: VgTarget::View(view.id),
         rows: rows_of(&view.graphics),
         annotation: false,
+        page: 0,
+        worksets: view.workset_visibility.clone(),
+        options: view.option_choices.clone(),
     });
 }
 
@@ -77,6 +84,9 @@ pub fn open_for_template(app: &mut HausitApp, id: ElementId) {
         target: VgTarget::Template(id),
         rows: rows_of(t.graphics.as_ref().unwrap_or(&Graphics::new())),
         annotation: false,
+        page: 0,
+        worksets: vec![],
+        options: vec![],
     });
 }
 
@@ -131,12 +141,26 @@ pub fn show_vg(app: &mut HausitApp, ctx: &Context) {
         .resizable(true)
         .default_size([760.0, 560.0])
         .show(ctx, |ui| {
+            let for_view = matches!(d.target, VgTarget::View(_));
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut d.annotation, false, "Model Categories");
-                ui.selectable_value(&mut d.annotation, true, "Annotation Categories");
+                ui.selectable_value(&mut d.page, 0, "Model Categories");
+                ui.selectable_value(&mut d.page, 1, "Annotation Categories");
+                if for_view {
+                    ui.selectable_value(&mut d.page, 2, "Worksets");
+                    ui.selectable_value(&mut d.page, 3, "Design Options");
+                }
             });
+            d.annotation = d.page == 1;
             ui.separator();
+            if d.page == 2 {
+                crate::worksharing::vg_worksets(&app.doc, ui, &mut d.worksets);
+            } else if d.page == 3 {
+                crate::worksharing::vg_options(&app.doc, ui, &mut d.options);
+            }
             egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                if d.page >= 2 {
+                    return;
+                }
                 egui::Grid::new("vg_grid")
                     .num_columns(7)
                     .striped(true)
@@ -215,6 +239,8 @@ pub fn show_vg(app: &mut HausitApp, ctx: &Context) {
                     VgTarget::View(v) => {
                         if let Some(v) = doc.view_mut(v) {
                             v.graphics = graphics;
+                            v.workset_visibility = d.worksets;
+                            v.option_choices = d.options;
                         }
                     }
                     VgTarget::Template(t) => {

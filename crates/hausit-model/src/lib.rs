@@ -38,6 +38,7 @@ pub mod stairs;
 pub mod styles;
 pub mod template;
 pub mod view;
+pub mod worksharing;
 
 pub use areas::{Area, AreaBoundary, AreaScheme, ColorBy};
 pub use category::Category;
@@ -59,5 +60,6 @@ pub use site::{PropertyLine, SiteSettings, Toposolid};
 pub use view::{
     CardinalDirection, CategoryGraphics, DetailLevel, Graphics, SectionBox, TempHide, View, ViewKind, ViewRange, ViewTemplate, VisualStyle,
 };
+pub use worksharing::{DesignOption, OptionSet, Workset, WorksetVisibility};
 
 pub use hausit_core::{DVec2, DVec3, ElementId};

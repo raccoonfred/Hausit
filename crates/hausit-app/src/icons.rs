@@ -54,6 +54,8 @@ pub enum Icon {
     ColorLegend,
     RevisionCloud,
     Toposolid,
+    Worksets,
+    DesignOptions,
     TopoPoint,
     PropertyLine,
     Tree,
@@ -193,6 +195,32 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 );
                 seg((14.0, y + 3.0), (28.0, y + 3.0), ink);
             }
+        }
+        Icon::Worksets => {
+            for (i, c) in [(155, 194, 230), (169, 209, 142), (244, 177, 131)].into_iter().enumerate() {
+                let o = 5.0 * i as f32;
+                poly(
+                    &[(4.0 + o, 6.0 + o), (20.0 + o, 6.0 + o), (20.0 + o, 18.0 + o), (4.0 + o, 18.0 + o)],
+                    Color32::from_rgb(c.0, c.1, c.2),
+                    ink,
+                );
+            }
+        }
+        Icon::DesignOptions => {
+            seg((16.0, 4.0), (16.0, 12.0), ink);
+            seg((16.0, 12.0), (7.0, 20.0), ink);
+            seg((16.0, 12.0), (25.0, 20.0), ink);
+            p.circle(at(16.0, 6.0), 2.5 * s, k(Color32::WHITE), ink);
+            poly(
+                &[(3.0, 20.0), (11.0, 20.0), (11.0, 28.0), (3.0, 28.0)],
+                Color32::from_rgb(169, 209, 142),
+                ink,
+            );
+            poly(
+                &[(21.0, 20.0), (29.0, 20.0), (29.0, 28.0), (21.0, 28.0)],
+                Color32::from_rgb(220, 220, 220),
+                ink,
+            );
         }
         Icon::Toposolid => {
             poly(

@@ -30,6 +30,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 RibbonTab::Insert => insert(app, ui),
                 RibbonTab::Annotate => annotate(app, ui),
                 RibbonTab::MassingSite => massing_site(app, ui),
+                RibbonTab::Collaborate => collaborate(app, ui),
                 RibbonTab::View => view_tab(app, ui),
                 RibbonTab::Manage => manage(app, ui),
                 RibbonTab::Modify => modify(app, ui),
@@ -756,6 +757,28 @@ fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
     });
 }
 
+fn collaborate(app: &mut HausitApp, ui: &mut Ui) {
+    panel(ui, "Manage Collaboration", |ui| {
+        if big(
+            ui,
+            Icon::Worksets,
+            "Worksets",
+            "Worksets: enable worksharing, add worksets, open or close them",
+            app.dialogs.worksets.is_some(),
+            true,
+        ) {
+            app.dialogs.worksets = Some(Default::default());
+        }
+        if app.doc.worksharing() {
+            ui.vertical(|ui| {
+                ui.add_space(8.0);
+                ui.label("Active Workset:");
+                crate::worksharing::active_workset_combo(app, ui, "ribbon_workset");
+            });
+        }
+    });
+}
+
 fn massing_site(app: &mut HausitApp, ui: &mut Ui) {
     panel(ui, "Model Site", |ui| {
         tool_button(
@@ -856,6 +879,28 @@ fn manage(app: &mut HausitApp, ui: &mut Ui) {
         ) {
             app.dialogs.object_styles = Some((app.doc.object_styles.clone(), app.doc.line_weights.clone()));
         }
+    });
+    panel(ui, "Design Options", |ui| {
+        if big(
+            ui,
+            Icon::DesignOptions,
+            "Design Options",
+            "Design Options: option sets with alternatives, one primary; edit, accept or delete them",
+            app.dialogs.design_options.is_some(),
+            true,
+        ) {
+            app.dialogs.design_options = Some(Default::default());
+        }
+        ui.vertical(|ui| {
+            ui.add_space(8.0);
+            ui.add_enabled_ui(!app.selection.is_empty(), |ui| {
+                ui.menu_button("Add to Set", |ui| crate::worksharing::add_to_set_menu(app, ui))
+                    .response
+                    .on_hover_text("Move the selected main model elements into design options");
+            });
+            ui.label("Editing:");
+            crate::worksharing::editing_option_combo(app, ui);
+        });
     });
     panel(ui, "Revisions", |ui| {
         if big(

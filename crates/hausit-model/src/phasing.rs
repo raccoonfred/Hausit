@@ -209,6 +209,7 @@ impl Document {
         let mut hidden = self.phase_hidden(view);
         hidden.extend(view.hidden_elements.iter().copied());
         hidden.extend(self.outside_view_range(view));
+        hidden.extend(self.worksharing_hidden(view));
         if let Some(t) = &view.temp_hide {
             for e in self.elements() {
                 let listed = t.elements.contains(&e.id) || t.categories.contains(&e.category());

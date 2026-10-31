@@ -261,6 +261,13 @@ pub struct View {
     pub color_scheme: Option<crate::areas::ColorBy>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color_legend: Option<DVec2>,
+    /// Visibility/Graphics ▸ Worksets: per-workset overrides.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workset_visibility: Vec<(ElementId, crate::worksharing::WorksetVisibility)>,
+    /// Visibility/Graphics ▸ Design Options: (set, option) the view shows;
+    /// sets not listed are "Automatic".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub option_choices: Vec<(ElementId, ElementId)>,
 }
 
 /// View Range of a plan (besides the cut plane), as offsets from its level:
@@ -438,6 +445,8 @@ impl View {
             area_scheme: None,
             color_scheme: None,
             color_legend: None,
+            workset_visibility: Vec::new(),
+            option_choices: Vec::new(),
         }
     }
 

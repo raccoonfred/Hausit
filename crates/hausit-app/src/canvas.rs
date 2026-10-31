@@ -113,7 +113,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         candidates.retain(|id| {
             app.doc
                 .element(*id)
-                .map(|e| app.tool.picks(e.category()))
+                .map(|e| app.tool.picks(e.category()) && app.doc.option_editable(e.id))
                 .unwrap_or(app.tool == Tool::Modify)
         });
         // Model elements win over datums and view marks drawn over them,
