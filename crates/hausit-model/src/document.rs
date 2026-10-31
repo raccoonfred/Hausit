@@ -229,6 +229,9 @@ impl Document {
                     ElementData::RoomSeparation(l) => l.level == id,
                     // Annotation goes with its view; tags with what they tag.
                     ElementData::TextNote(t) => t.view == id,
+                    ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_) => {
+                        self.is_detail_of(&e.data, id)
+                    }
                     ElementData::Tag(t) => t.view == id || t.host == id,
                     // Dimensions go with their view or any element they measure.
                     ElementData::Dimension(d) => {
@@ -343,6 +346,9 @@ impl Document {
                     }
                 }
                 ElementData::Tag(t) => t.position += delta,
+                d @ (ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_)) => {
+                    crate::detail::map_points(d, &|p| p + delta)
+                }
                 ElementData::Dimension(d) => {
                     d.line_point += delta;
                     for r in &mut d.refs {
@@ -534,6 +540,9 @@ impl Document {
                 ElementData::TextNote(t) => {
                     t.position = f(t.position);
                     t.leader = t.leader.map(f);
+                }
+                d @ (ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_)) => {
+                    crate::detail::map_points(d, f)
                 }
                 ElementData::Tag(t) => t.position = f(t.position),
                 ElementData::Dimension(d) => {
@@ -808,7 +817,7 @@ impl Document {
                     ElementData::TextNote(t) => t.view == id,
                     ElementData::Tag(t) => t.view == id,
                     ElementData::Dimension(d) => d.view == id,
-                    _ => false,
+                    d => self.is_detail_of(d, id),
                 })
                 .cloned()
                 .collect();
@@ -817,7 +826,7 @@ impl Document {
                     ElementData::TextNote(t) => t.view = new,
                     ElementData::Tag(t) => t.view = new,
                     ElementData::Dimension(d) => d.view = new,
-                    _ => {}
+                    d => crate::detail::set_view(d, new),
                 }
                 let nid = self.alloc_id();
                 e.id = nid;

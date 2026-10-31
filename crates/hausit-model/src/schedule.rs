@@ -111,6 +111,9 @@ impl ScheduleField {
             | Category::RoomSeparation
             | Category::Dimensions
             | Category::TextNotes
+            | Category::Lines
+            | Category::DetailItems
+            | Category::SpotElevations
             | Category::Tags => return vec![],
         }
         v
@@ -135,7 +138,15 @@ impl ScheduleField {
             | Category::SpecialtyEquipment
             | Category::GenericModels => vec![Family, Type, Level, Count],
             Category::Rooms => vec![Number, Name, Level, Area, Perimeter, Volume],
-            Category::Levels | Category::Grids | Category::RoomSeparation | Category::Dimensions | Category::TextNotes | Category::Tags => {
+            Category::Levels
+            | Category::Grids
+            | Category::RoomSeparation
+            | Category::Dimensions
+            | Category::TextNotes
+            | Category::Tags
+            | Category::Lines
+            | Category::DetailItems
+            | Category::SpotElevations => {
                 vec![]
             }
         }

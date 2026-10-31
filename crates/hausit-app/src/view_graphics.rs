@@ -23,7 +23,15 @@ pub struct VgDialog {
 fn is_annotation_tab(c: Category) -> bool {
     matches!(
         c,
-        Category::Levels | Category::Grids | Category::Dimensions | Category::TextNotes | Category::Tags | Category::RoomSeparation
+        Category::Levels
+            | Category::Grids
+            | Category::Dimensions
+            | Category::TextNotes
+            | Category::Tags
+            | Category::RoomSeparation
+            | Category::Lines
+            | Category::DetailItems
+            | Category::SpotElevations
     )
 }
 

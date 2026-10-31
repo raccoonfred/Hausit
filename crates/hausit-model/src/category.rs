@@ -26,10 +26,15 @@ pub enum Category {
     Dimensions,
     TextNotes,
     Tags,
+    /// Detail lines.
+    Lines,
+    /// Filled regions.
+    DetailItems,
+    SpotElevations,
 }
 
 impl Category {
-    pub const ALL: [Category; 23] = [
+    pub const ALL: [Category; 26] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -53,6 +58,9 @@ impl Category {
         Category::Dimensions,
         Category::TextNotes,
         Category::Tags,
+        Category::Lines,
+        Category::DetailItems,
+        Category::SpotElevations,
     ];
 
     /// Categories of loadable components, placed with the Component tool.
@@ -130,6 +138,9 @@ impl Category {
             Category::Dimensions => "Dimensions",
             Category::TextNotes => "Text Notes",
             Category::Tags => "Tags",
+            Category::Lines => "Lines",
+            Category::DetailItems => "Detail Items",
+            Category::SpotElevations => "Spot Elevations",
         }
     }
 
@@ -159,12 +170,23 @@ impl Category {
             Category::Dimensions => "Dimension",
             Category::TextNotes => "Text Note",
             Category::Tags => "Tag",
+            Category::Lines => "Detail Line",
+            Category::DetailItems => "Filled Region",
+            Category::SpotElevations => "Spot Elevation",
         }
     }
 
     /// View-specific annotation: drawn only in the view it was placed in.
     pub fn is_annotation(self) -> bool {
-        matches!(self, Category::Dimensions | Category::TextNotes | Category::Tags)
+        matches!(
+            self,
+            Category::Dimensions
+                | Category::TextNotes
+                | Category::Tags
+                | Category::Lines
+                | Category::DetailItems
+                | Category::SpotElevations
+        )
     }
 
     /// Hosted categories are placed in a wall.
@@ -185,6 +207,9 @@ impl Category {
                 | Category::Dimensions
                 | Category::TextNotes
                 | Category::Tags
+                | Category::Lines
+                | Category::DetailItems
+                | Category::SpotElevations
         )
     }
 }

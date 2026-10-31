@@ -51,6 +51,9 @@ impl Element {
             | ElementData::RoomSeparation(_)
             | ElementData::Dimension(_)
             | ElementData::TextNote(_)
+            | ElementData::DetailLine(_)
+            | ElementData::FilledRegion(_)
+            | ElementData::SpotElevation(_)
             | ElementData::Tag(_) => None,
         }
     }
@@ -76,6 +79,9 @@ impl Element {
             | ElementData::RoomSeparation(_)
             | ElementData::Dimension(_)
             | ElementData::TextNote(_)
+            | ElementData::DetailLine(_)
+            | ElementData::FilledRegion(_)
+            | ElementData::SpotElevation(_)
             | ElementData::Tag(_) => {}
         }
     }
@@ -125,6 +131,9 @@ pub enum ElementData {
     Dimension(Dimension),
     TextNote(TextNote),
     Tag(Tag),
+    DetailLine(crate::detail::DetailLine),
+    FilledRegion(crate::detail::FilledRegion),
+    SpotElevation(crate::detail::SpotElevation),
 }
 
 impl ElementData {
@@ -176,6 +185,9 @@ impl ElementData {
             ElementData::Dimension(_) => Category::Dimensions,
             ElementData::TextNote(_) => Category::TextNotes,
             ElementData::Tag(_) => Category::Tags,
+            ElementData::DetailLine(_) => Category::Lines,
+            ElementData::FilledRegion(_) => Category::DetailItems,
+            ElementData::SpotElevation(_) => Category::SpotElevations,
         }
     }
 }

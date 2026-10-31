@@ -161,6 +161,9 @@ pub fn default_type_params(category: Category) -> TypeParams {
         | Category::RoomSeparation
         | Category::Dimensions
         | Category::TextNotes
+        | Category::Lines
+        | Category::DetailItems
+        | Category::SpotElevations
         | Category::Tags => {}
     }
     p.insert("Type Mark".into(), ParamValue::Text(String::new()));

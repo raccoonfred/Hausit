@@ -193,7 +193,13 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 || is_plan
                 || matches!(
                     app.tool,
-                    Tool::Level | Tool::Attach { .. } | Tool::Callout { .. } | Tool::CurtainGrid
+                    Tool::Level
+                        | Tool::Attach { .. }
+                        | Tool::Callout { .. }
+                        | Tool::CurtainGrid
+                        | Tool::DetailLine { .. }
+                        | Tool::FilledRegion { .. }
+                        | Tool::SpotElevation { .. }
                 )
             {
                 tools::click(app, p);
@@ -1302,6 +1308,14 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             painter.extend(shapes);
             painter.add(Shape::closed_line(r, s));
         }
+        Tool::DetailLine { start: Some(a) } => seg(*a, p),
+        Tool::FilledRegion { pts } if !pts.is_empty() => {
+            let mut sp: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
+            sp.push(xf.to_screen(p));
+            painter.add(Shape::line(sp, Stroke::new(1.5, SKETCH)));
+            painter.circle_stroke(xf.to_screen(pts[0]), 5.0, Stroke::new(1.0, SKETCH));
+        }
+        Tool::SpotElevation { point: Some(a) } => seg(*a, p),
         Tool::LinearDimension { pts } => {
             for q in pts {
                 painter.circle_filled(xf.to_screen(*q), 3.5, SELECT);

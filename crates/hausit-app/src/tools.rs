@@ -125,6 +125,19 @@ pub enum Tool {
     Array {
         start: Option<DVec2>,
     },
+    /// Detail Line: straight lines in the current view, chained.
+    DetailLine {
+        start: Option<DVec2>,
+    },
+    /// Filled Region: click the boundary's corners; clicking the first
+    /// one again (or Enter) closes it.
+    FilledRegion {
+        pts: Vec<DVec2>,
+    },
+    /// Spot Elevation: the point, then where the label goes.
+    SpotElevation {
+        point: Option<DVec2>,
+    },
 }
 
 impl Tool {
@@ -177,6 +190,9 @@ impl Tool {
             Tool::Align { .. } => "Modify | Align",
             Tool::Elevation => "Modify | Elevation",
             Tool::LinearDimension { .. } => "Modify | Place Dimensions",
+            Tool::DetailLine { .. } => "Modify | Place Detail Lines",
+            Tool::FilledRegion { .. } => "Modify | Create Filled Region Boundary",
+            Tool::SpotElevation { .. } => "Modify | Spot Elevation",
             Tool::Offset => "Modify | Offset",
             Tool::Array { .. } => "Modify | Array",
         }
@@ -236,6 +252,14 @@ impl Tool {
             Tool::Tag => "Click an element to tag it: doors show their Mark, windows their Type Mark, other elements their type.",
             Tool::Demolish => "Click an element to demolish it in this view's phase. Doors and windows go with their wall.",
             Tool::LinearDimension { pts } if pts.len() < 2 => "Click a point to dimension from, then a point to dimension to.",
+            Tool::DetailLine { start: None } => "Click to start a detail line.",
+            Tool::DetailLine { .. } => "Click to end the line. Esc ends the chain.",
+            Tool::FilledRegion { pts } if pts.len() < 3 => "Click the corners of the region.",
+            Tool::FilledRegion { .. } => "Click more corners, then click the first corner again or press Enter to finish.",
+            Tool::SpotElevation { point: None } => {
+                "Click the point to mark: a floor, roof or stair in plan, any point in an elevation or section."
+            }
+            Tool::SpotElevation { .. } => "Click where the label goes.",
             Tool::LinearDimension { .. } => {
                 "Move up or down for a horizontal dimension, left or right for a vertical one, and click to place it."
             }
@@ -310,6 +334,8 @@ impl Tool {
             Tool::Move { base } | Tool::Copy { base } => *base,
             Tool::Rotate { center, .. } => Some(*center),
             Tool::Array { start } => *start,
+            Tool::DetailLine { start } => *start,
+            Tool::FilledRegion { pts } => pts.last().copied(),
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start,
             Tool::Stair { pts } | Tool::Railing { pts } => pts.last().copied(),
             _ => None,
@@ -349,6 +375,9 @@ impl Tool {
             Tool::Rotate { from, .. } => *from = None,
             Tool::Dimension { refs } => refs.clear(),
             Tool::Trim { first } => *first = None,
+            Tool::DetailLine { start } => *start = None,
+            Tool::FilledRegion { pts } => pts.clear(),
+            Tool::SpotElevation { point } => *point = None,
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start = None,
             _ => {}
         }
@@ -365,6 +394,7 @@ impl Tool {
             Tool::Rotate { from, .. } => from.is_some(),
             Tool::Dimension { refs } => !refs.is_empty(),
             Tool::Trim { first } => first.is_some(),
+            Tool::SpotElevation { point } => point.is_some(),
             _ => self.anchor().is_some(),
         };
         if in_progress {
@@ -518,6 +548,11 @@ pub struct ToolOptions {
     pub array_to_last: bool,
     /// Arc walls: the end point, once picked (the next click sets the arc).
     pub arc_end: Option<DVec2>,
+    /// Detail lines and region borders.
+    pub line_style: hausit_model::LineStyle,
+    /// Filled regions: index into the region patterns, and masking.
+    pub region_pattern: usize,
+    pub region_masking: bool,
 }
 
 impl Default for ToolOptions {
@@ -547,6 +582,9 @@ impl Default for ToolOptions {
             array_count: 3,
             array_to_last: false,
             arc_end: None,
+            line_style: hausit_model::LineStyle::Thin,
+            region_pattern: 1,
+            region_masking: false,
         }
     }
 }
@@ -1234,6 +1272,44 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 pts.clear();
             }
         }
+        Tool::DetailLine { start } => match *start {
+            None => *start = Some(p),
+            Some(a) if a.distance(p) > 1.0 => {
+                if let Some(view) = app.active_view {
+                    let l = hausit_model::DetailLine {
+                        view,
+                        start: a,
+                        end: p,
+                        style: app.options.line_style,
+                    };
+                    app.transact("Create Detail Line", |doc| Ok(doc.add_element(ElementData::DetailLine(l))));
+                }
+                *start = if app.options.chain { Some(p) } else { None };
+            }
+            _ => {}
+        },
+        Tool::FilledRegion { pts } => {
+            let close = pts.len() >= 3 && pts[0].distance(p) < app.options.pick_tol;
+            if close {
+                finish_region(app, std::mem::take(pts));
+            } else if pts.last().is_none_or(|q| q.distance(p) > 1.0) {
+                pts.push(p);
+            }
+        }
+        Tool::SpotElevation { point } => match *point {
+            None => *point = Some(p),
+            Some(at) => {
+                if let Some(view) = app.active_view {
+                    let s = hausit_model::SpotElevation {
+                        view,
+                        point: at,
+                        label_at: p,
+                    };
+                    app.transact("Create Spot Elevation", |doc| Ok(doc.add_element(ElementData::SpotElevation(s))));
+                }
+                *point = None;
+            }
+        },
         Tool::Elevation => {
             app.tool = Tool::Elevation;
             let direction = elevation_direction(app, p);
@@ -1956,13 +2032,38 @@ pub fn pick_dim_ref(app: &HausitApp, p: DVec2, tol: f64) -> Option<(DimRef, (DVe
     best.map(|b| (b.1, b.2))
 }
 
+/// Creates a filled region from the corners clicked so far, with the
+/// Options Bar's pattern.
+pub fn finish_region(app: &mut HausitApp, pts: Vec<DVec2>) {
+    let Some(view) = app.active_view else { return };
+    if pts.len() < 3 || hausit_core::geom::polygon_area(&pts).abs() < 1.0 {
+        app.status = "A filled region needs at least three corners.".into();
+        return;
+    }
+    let (_, pattern) =
+        hausit_model::detail::REGION_PATTERNS[app.options.region_pattern.min(hausit_model::detail::REGION_PATTERNS.len() - 1)];
+    let r = hausit_model::FilledRegion {
+        view,
+        boundary: pts,
+        pattern,
+        color: if pattern == hausit_model::materials::FillPattern::Solid {
+            [150, 150, 150]
+        } else {
+            [0, 0, 0]
+        },
+        masking: app.options.region_masking,
+        border: app.options.line_style,
+    };
+    app.transact("Create Filled Region", |doc| Ok(doc.add_element(ElementData::FilledRegion(r))));
+}
+
 /// Bounding-box centre of the selection in plan (Rotate's default centre).
 pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
     let mut pts: Vec<DVec2> = Vec::new();
     for id in &app.selection {
         let Some(e) = app.doc.element(*id) else { continue };
         match &e.data {
-            ElementData::Wall(w) => pts.extend([w.start, w.end]),
+            ElementData::Wall(w) => pts.extend(w.centreline()),
             ElementData::Grid(g) => pts.extend([g.start, g.end]),
             ElementData::Floor(f) => pts.extend(&f.boundary),
             ElementData::Roof(r) => pts.extend(&r.footprint),
@@ -1988,6 +2089,9 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             }
             ElementData::TextNote(t) => pts.push(t.position),
             ElementData::Tag(t) => pts.push(t.position),
+            ElementData::DetailLine(l) => pts.extend([l.start, l.end]),
+            ElementData::FilledRegion(r) => pts.extend(&r.boundary),
+            ElementData::SpotElevation(s) => pts.push(s.point),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }
@@ -2376,6 +2480,12 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
     if enter && matches!(app.tool, Tool::Stair { .. } | Tool::Railing { .. }) && app.options.typed.is_empty() {
         finish_path_tool(app);
     }
+    if enter && app.options.typed.is_empty() {
+        if let Tool::FilledRegion { pts } = &mut app.tool {
+            let pts = std::mem::take(pts);
+            finish_region(app, pts);
+        }
+    }
 
     // While drawing, digits go to the typed-length box.
     if app.tool.anchor().is_some() && !app.tool.is_sketch() || (app.tool.is_sketch() && app.tool.anchor().is_some()) {
@@ -2488,6 +2598,10 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "TX" => {
             start(app, Tool::Text);
+            true
+        }
+        "DL" => {
+            start(app, Tool::DetailLine { start: None });
             true
         }
         "TG" => {

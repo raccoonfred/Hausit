@@ -251,6 +251,9 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         | ElementData::RoomSeparation(_)
         | ElementData::Dimension(_)
         | ElementData::TextNote(_)
+        | ElementData::DetailLine(_)
+        | ElementData::FilledRegion(_)
+        | ElementData::SpotElevation(_)
         | ElementData::Tag(_) => return None,
     };
     if parts.is_empty() {

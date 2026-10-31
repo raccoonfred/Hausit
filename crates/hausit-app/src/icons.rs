@@ -44,6 +44,9 @@ pub enum Icon {
     Trim,
     Split,
     CurtainGrid,
+    DetailLine,
+    Region,
+    SpotElevation,
     Attach,
     Beam,
     Brace,
@@ -124,6 +127,27 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 egui::StrokeKind::Middle,
             );
             p.circle_filled(at(20.5, 16.0), 1.4 * s, k(INK));
+        }
+        Icon::DetailLine => {
+            seg((5.0, 26.0), (27.0, 6.0), Stroke::new(2.0, ink.color));
+            seg((5.0, 16.0), (15.0, 6.0), ink);
+        }
+        Icon::Region => {
+            poly(
+                &[(4.0, 8.0), (26.0, 5.0), (28.0, 26.0), (8.0, 27.0)],
+                Color32::from_rgb(210, 210, 210),
+                ink,
+            );
+            for i in 0..4 {
+                let o = 6.0 * i as f32;
+                seg((8.0 + o, 26.0), (14.0 + o, 8.0), Stroke::new(1.0, Color32::from_gray(90)));
+            }
+        }
+        Icon::SpotElevation => {
+            poly(&[(10.0, 22.0), (14.0, 22.0), (10.0, 26.0)], Color32::BLACK, ink);
+            poly(&[(10.0, 22.0), (6.0, 22.0), (10.0, 18.0)], Color32::BLACK, ink);
+            seg((12.0, 20.0), (20.0, 12.0), ink);
+            seg((20.0, 12.0), (30.0, 12.0), ink);
         }
         Icon::CurtainGrid => {
             p.rect(

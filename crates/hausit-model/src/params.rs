@@ -1,6 +1,7 @@
 //! Generic parameter access, so the UI can show and edit any element in a
 //! Revit-style Properties palette without knowing its concrete type.
 
+use crate::detail::{LineStyle, REGION_PATTERNS};
 use crate::document::{Document, ModelError};
 use crate::element::{ElementData, FramingKind, RoofShape, TopConstraint};
 use hausit_core::{DVec2, ElementId};
@@ -39,6 +40,7 @@ impl ParamValue {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ParamGroup {
     Constraints,
+    Graphics,
     Construction,
     Structural,
     Dimensions,
@@ -51,6 +53,7 @@ impl ParamGroup {
     pub fn label(self) -> &'static str {
         match self {
             ParamGroup::Constraints => "Constraints",
+            ParamGroup::Graphics => "Graphics",
             ParamGroup::Construction => "Construction",
             ParamGroup::Structural => "Structural",
             ParamGroup::Dimensions => "Dimensions",
@@ -314,6 +317,25 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Text Size", G::Dimensions, V::Length(t.size)));
             p.push(Parameter::new("Leader", G::Other, V::Bool(t.leader.is_some())));
         }
+        ElementData::DetailLine(l) => {
+            let styles: Vec<String> = LineStyle::ALL[..4].iter().map(|s| s.label().to_string()).collect();
+            let idx = LineStyle::ALL.iter().position(|s| *s == l.style).unwrap_or(0).min(3);
+            p.push(Parameter::new("Line Style", G::Graphics, V::Choice(idx)).kind(ParamKind::Choice(styles)));
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(l.start.distance(l.end))).ro());
+        }
+        ElementData::FilledRegion(r) => {
+            let names: Vec<String> = REGION_PATTERNS.iter().map(|(n, _)| n.to_string()).collect();
+            let idx = REGION_PATTERNS.iter().position(|(_, f)| *f == r.pattern).unwrap_or(0);
+            p.push(Parameter::new("Fill Pattern", G::Graphics, V::Choice(idx)).kind(ParamKind::Choice(names)));
+            p.push(Parameter::new("Masking", G::Graphics, V::Bool(r.masking)));
+            let styles: Vec<String> = LineStyle::ALL.iter().map(|s| s.label().to_string()).collect();
+            let idx = LineStyle::ALL.iter().position(|s| *s == r.border).unwrap_or(0);
+            p.push(Parameter::new("Line Style", G::Graphics, V::Choice(idx)).kind(ParamKind::Choice(styles)));
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(hausit_core::geom::polygon_area(&r.boundary).abs())).ro());
+        }
+        ElementData::SpotElevation(sp) => {
+            p.push(Parameter::new("Elevation", G::Dimensions, V::Length(doc.spot_height(sp))).ro());
+        }
         ElementData::Tag(t) => {
             let host = doc.element(t.host).map(|h| h.category().singular()).unwrap_or("Nothing");
             p.push(Parameter::new("Tagged Element", G::Other, V::Text(host.to_string())).ro());
@@ -521,7 +543,17 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Leader", V::Bool(b)) => t.leader = b,
                 _ => return Err(bad()),
             },
-            ElementData::RoomSeparation(_) | ElementData::Dimension(_) => return Err(bad()),
+            ElementData::DetailLine(l) => match (name, value) {
+                ("Line Style", V::Choice(i)) if i < 4 => l.style = LineStyle::ALL[i],
+                _ => return Err(bad()),
+            },
+            ElementData::FilledRegion(r) => match (name, value) {
+                ("Fill Pattern", V::Choice(i)) if i < REGION_PATTERNS.len() => r.pattern = REGION_PATTERNS[i].1,
+                ("Masking", V::Bool(b)) => r.masking = b,
+                ("Line Style", V::Choice(i)) if i < LineStyle::ALL.len() => r.border = LineStyle::ALL[i],
+                _ => return Err(bad()),
+            },
+            ElementData::RoomSeparation(_) | ElementData::Dimension(_) | ElementData::SpotElevation(_) => return Err(bad()),
         },
     }
     doc.touch();

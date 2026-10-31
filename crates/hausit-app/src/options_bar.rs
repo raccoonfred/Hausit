@@ -91,6 +91,37 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         ui.radio_value(&mut app.options.array_to_last, false, "2nd");
                         ui.radio_value(&mut app.options.array_to_last, true, "Last");
                     }
+                    Tool::DetailLine { .. } | Tool::FilledRegion { .. } => {
+                        let region = matches!(app.tool, Tool::FilledRegion { .. });
+                        if region {
+                            ui.label("Pattern:");
+                            let pats = hausit_model::detail::REGION_PATTERNS;
+                            egui::ComboBox::from_id_salt("region_pat")
+                                .selected_text(pats[app.options.region_pattern.min(pats.len() - 1)].0)
+                                .show_ui(ui, |ui| {
+                                    for (i, (name, _)) in pats.iter().enumerate() {
+                                        ui.selectable_value(&mut app.options.region_pattern, i, *name);
+                                    }
+                                });
+                            ui.checkbox(&mut app.options.region_masking, "Masking");
+                        }
+                        ui.label(if region { "Border:" } else { "Line Style:" });
+                        let styles = if region {
+                            &hausit_model::LineStyle::ALL[..]
+                        } else {
+                            &hausit_model::LineStyle::ALL[..4]
+                        };
+                        egui::ComboBox::from_id_salt("line_style")
+                            .selected_text(app.options.line_style.label())
+                            .show_ui(ui, |ui| {
+                                for s in styles {
+                                    ui.selectable_value(&mut app.options.line_style, *s, s.label());
+                                }
+                            });
+                        if !region {
+                            ui.checkbox(&mut app.options.chain, "Chain");
+                        }
+                    }
                     Tool::Text | Tool::Tag => {
                         ui.checkbox(&mut app.options.leader, "Leader");
                     }

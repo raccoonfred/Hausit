@@ -290,6 +290,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
     let mut dl = match &view.kind {
         ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => {
             let mut dl = plan::floor_plan(doc, view, *level);
+            annotate::detailing(doc, view, &mut dl);
             annotate::notes_and_tags(doc, view, None, &mut dl);
             dl
         }
@@ -300,6 +301,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
             let mut dl = project::project(doc, view, &frame);
             if !matches!(view.kind, ViewKind::ThreeD) {
                 annotate::levels_and_grids(doc, view, &frame, &mut dl);
+                annotate::detailing(doc, view, &mut dl);
                 annotate::notes_and_tags(doc, view, Some(&frame), &mut dl);
             }
             dl

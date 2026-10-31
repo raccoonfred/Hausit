@@ -512,6 +512,34 @@ fn annotate(app: &mut HausitApp, ui: &mut Ui) {
             Tool::LinearDimension { pts: vec![] },
         );
     });
+    panel(ui, "Detail", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::DetailLine,
+            "Detail Line",
+            "Detail Line (DL): lines in this view only",
+            Tool::DetailLine { start: None },
+        );
+        tool_button(
+            app,
+            ui,
+            Icon::Region,
+            "Region",
+            "Filled Region: a patterned or solid area in this view; Masking hides what is under it",
+            Tool::FilledRegion { pts: vec![] },
+        );
+    });
+    panel(ui, "Spot", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::SpotElevation,
+            "Spot Elevation",
+            "Spot Elevation: the height of a point (the top of a floor, roof or stair in plan)",
+            Tool::SpotElevation { point: None },
+        );
+    });
     panel(ui, "Text", |ui| {
         tool_button(
             app,

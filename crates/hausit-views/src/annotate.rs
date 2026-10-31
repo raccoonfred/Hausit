@@ -2,7 +2,7 @@
 //! elevation marks.
 
 use crate::frame::ViewFrame;
-use crate::{Anchor, Dash, DisplayList, Prim, Stroke, GRID_COLOR, THIN};
+use crate::{Anchor, Dash, DisplayList, Prim, Stroke, GRID_COLOR, HEAVY, MEDIUM, THIN};
 use hausit_core::geom::perp;
 use hausit_core::{DVec2, DVec3, ElementId};
 use hausit_model::geometry::model_bounds;
@@ -312,6 +312,121 @@ pub fn notes_and_tags(doc: &Document, view: &View, frame: Option<&ViewFrame>, dl
             e.id,
         );
     }
+}
+
+/// Detail lines, filled regions and spot elevations placed in this view.
+/// Regions go first so lines and labels draw over them.
+pub fn detailing(doc: &Document, view: &View, dl: &mut DisplayList) {
+    use hausit_model::detail::LineStyle;
+    let scale = view.scale as f64;
+    let stroke = |style: LineStyle| match style {
+        LineStyle::Thin => Some(THIN),
+        LineStyle::Medium => Some(MEDIUM),
+        LineStyle::Wide => Some(HEAVY),
+        LineStyle::Hidden => Some(THIN.dashed(Dash::Dashed)),
+        LineStyle::Invisible => None,
+    };
+    for e in doc.elements_of(Category::DetailItems) {
+        let ElementData::FilledRegion(r) = &e.data else { continue };
+        if r.view != view.id || r.boundary.len() < 3 {
+            continue;
+        }
+        let [cr, cg, cb] = r.color;
+        let fill = if r.masking {
+            [255, 255, 255, 255]
+        } else if r.pattern == hausit_model::materials::FillPattern::Solid {
+            [cr, cg, cb, 255]
+        } else {
+            // Transparent, but still pickable.
+            [255, 255, 255, 1]
+        };
+        dl.push(Prim::Polygon(r.boundary.clone()), None, Some(fill), Some(e.id));
+        if !r.masking && r.pattern != hausit_model::materials::FillPattern::Solid {
+            let pen = Stroke::new(0.8, [cr, cg, cb, 255]);
+            for (a, b) in crate::hatch::pattern_lines(&r.boundary, r.pattern, DVec2::X, scale) {
+                dl.line(a, b, pen, Some(e.id));
+            }
+        }
+        if let Some(s) = stroke(r.border) {
+            dl.push(
+                Prim::Polyline {
+                    pts: r.boundary.clone(),
+                    closed: true,
+                },
+                Some(s),
+                None,
+                Some(e.id),
+            );
+        }
+    }
+    for e in doc.elements_of(Category::Lines) {
+        let ElementData::DetailLine(l) = &e.data else { continue };
+        if l.view == view.id {
+            dl.line(l.start, l.end, stroke(l.style).unwrap_or(THIN), Some(e.id));
+        }
+    }
+    for e in doc.elements_of(Category::SpotElevations) {
+        let ElementData::SpotElevation(s) = &e.data else { continue };
+        if s.view != view.id {
+            continue;
+        }
+        let z = doc.spot_height(s);
+        let text = format!(
+            "{}{}",
+            if z >= 0.5 {
+                "+"
+            } else if z <= -0.5 {
+                ""
+            } else {
+                "±"
+            },
+            hausit_core::format_length(z, doc.length_unit)
+        );
+        spot(dl, s.point, s.label_at, &text, scale, e.id);
+    }
+}
+
+/// A spot elevation: a small target at the point, a leader with a
+/// shoulder, and the height over the shoulder.
+fn spot(dl: &mut DisplayList, at: DVec2, label: DVec2, text: &str, scale: f64, id: ElementId) {
+    let r = 1.2 * scale;
+    dl.push(
+        Prim::Circle { center: at, radius: r },
+        Some(THIN),
+        Some([255, 255, 255, 255]),
+        Some(id),
+    );
+    dl.push(
+        Prim::Polygon(vec![at, at + DVec2::new(r, 0.0), at + DVec2::new(0.0, r)]),
+        None,
+        Some([0, 0, 0, 255]),
+        Some(id),
+    );
+    dl.push(
+        Prim::Polygon(vec![at, at - DVec2::new(r, 0.0), at - DVec2::new(0.0, r)]),
+        None,
+        Some([0, 0, 0, 255]),
+        Some(id),
+    );
+    let h = 2.5 * scale;
+    let width = text_width(text, h) + h * 0.4;
+    let toward = if label.x >= at.x { 1.0 } else { -1.0 };
+    let end = label + DVec2::new(width * toward, 0.0);
+    let d = (label - at).normalize_or_zero();
+    dl.line(at + d * r, label, THIN, Some(id));
+    dl.line(label, end, THIN, Some(id));
+    dl.push(
+        Prim::Text {
+            pos: (label + end) * 0.5 + DVec2::new(0.0, h * 0.7),
+            text: text.to_string(),
+            height: h,
+            anchor: Anchor::Center,
+            angle: 0.0,
+        },
+        None,
+        None,
+        Some(id),
+    );
 }
 
 /// Rough width of text on paper, for boxes and picking.
