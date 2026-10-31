@@ -116,9 +116,10 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 .map(|e| app.tool.picks(e.category()))
                 .unwrap_or(app.tool == Tool::Modify)
         });
-        // Model elements win over datums and view marks drawn over them.
+        // Model elements win over datums and view marks drawn over them,
+        // and over the rooms and regions they stand in.
         candidates.sort_by_key(|id| match app.doc.element(*id).map(|e| e.category()) {
-            Some(Category::Grids | Category::Levels) => 1,
+            Some(Category::Grids | Category::Levels | Category::Rooms | Category::DetailItems) => 1,
             None => 2,
             _ => 0,
         });
@@ -134,11 +135,14 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         }
     }
     if !app.selection.is_empty() {
-        paint_list(&painter, &xf, &dl, Some((&app.selection, SELECT)));
+        // Groups highlight their members.
+        let shown = app.doc.with_group_members(&app.selection);
+        paint_list(&painter, &xf, &dl, Some((&shown, SELECT)));
     }
     if let Some(h) = app.hover {
+        let h = crate::groups::pick_target(app, h);
         if !app.selection.contains(&h) {
-            paint_list(&painter, &xf, &dl, Some((&[h], HOVER)));
+            paint_list(&painter, &xf, &dl, Some((&app.doc.with_group_members(&[h]), HOVER)));
         }
     }
 
@@ -558,6 +562,7 @@ pub fn hit_test(dl: &DisplayList, xf: &Xform, p: Pos2) -> Option<ElementId> {
 }
 
 fn select_click(app: &mut HausitApp, hit: Option<ElementId>, ctrl: bool, shift: bool) {
+    let hit = hit.map(|h| crate::groups::pick_target(app, h));
     match hit {
         Some(id) if shift => app.selection.retain(|s| *s != id),
         Some(id) if ctrl => {
@@ -632,6 +637,7 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
         for (e, b) in boxes {
             let hit = if crossing { r.intersects(b) } else { r.contains_rect(b) };
             // Views (section/elevation marks) are only picked by clicking.
+            let e = crate::groups::pick_target(app, e);
             if hit && app.doc.element(e).is_some() {
                 if shift {
                     app.selection.retain(|s| *s != e);

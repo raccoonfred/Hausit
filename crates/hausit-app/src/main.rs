@@ -15,6 +15,7 @@ mod canvas;
 mod dialogs;
 mod families;
 mod family_editor;
+mod groups;
 mod hide_isolate;
 mod icons;
 mod options_bar;

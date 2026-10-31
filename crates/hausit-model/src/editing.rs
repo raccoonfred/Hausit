@@ -156,7 +156,7 @@ impl Document {
         out
     }
 
-    /// Radial Array: `count` items in all, turned `angle` (radians) apart
+    /// Radial Array: `count` items in all, turned `angle` (degrees) apart
     /// about `center`.
     pub fn array_radial(&mut self, ids: &[ElementId], center: DVec2, angle: f64, count: usize) -> Vec<ElementId> {
         let mut out = Vec::new();

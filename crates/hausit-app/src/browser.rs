@@ -106,6 +106,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     });
                 }
             });
+            crate::groups::browser_node(app, ui);
         });
 }
 

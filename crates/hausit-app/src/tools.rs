@@ -125,6 +125,10 @@ pub enum Tool {
     Array {
         start: Option<DVec2>,
     },
+    /// Place another instance of a model group: click its origin.
+    PlaceGroup {
+        type_id: ElementId,
+    },
     /// Detail Line: straight lines in the current view, chained.
     DetailLine {
         start: Option<DVec2>,
@@ -191,6 +195,7 @@ impl Tool {
             Tool::Elevation => "Modify | Elevation",
             Tool::LinearDimension { .. } => "Modify | Place Dimensions",
             Tool::DetailLine { .. } => "Modify | Place Detail Lines",
+            Tool::PlaceGroup { .. } => "Modify | Place Group",
             Tool::FilledRegion { .. } => "Modify | Create Filled Region Boundary",
             Tool::SpotElevation { .. } => "Modify | Spot Elevation",
             Tool::Offset => "Modify | Offset",
@@ -253,6 +258,7 @@ impl Tool {
             Tool::Demolish => "Click an element to demolish it in this view's phase. Doors and windows go with their wall.",
             Tool::LinearDimension { pts } if pts.len() < 2 => "Click a point to dimension from, then a point to dimension to.",
             Tool::DetailLine { start: None } => "Click to start a detail line.",
+            Tool::PlaceGroup { .. } => "Click to place the group's origin.",
             Tool::DetailLine { .. } => "Click to end the line. Esc ends the chain.",
             Tool::FilledRegion { pts } if pts.len() < 3 => "Click the corners of the region.",
             Tool::FilledRegion { .. } => "Click more corners, then click the first corner again or press Enter to finish.",
@@ -1272,6 +1278,12 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 pts.clear();
             }
         }
+        Tool::PlaceGroup { type_id } => {
+            let t = *type_id;
+            if let Some(g) = app.transact("Place Group", |doc| doc.place_group(t, p)) {
+                app.status = format!("Placed {}.", app.doc.describe(g));
+            }
+        }
         Tool::DetailLine { start } => match *start {
             None => *start = Some(p),
             Some(a) if a.distance(p) > 1.0 => {
@@ -2092,6 +2104,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::DetailLine(l) => pts.extend([l.start, l.end]),
             ElementData::FilledRegion(r) => pts.extend(&r.boundary),
             ElementData::SpotElevation(s) => pts.push(s.point),
+            ElementData::Group(g) => pts.push(g.origin),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }
@@ -2598,6 +2611,10 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "TX" => {
             start(app, Tool::Text);
+            true
+        }
+        "GP" => {
+            crate::groups::create_group(app);
             true
         }
         "DL" => {

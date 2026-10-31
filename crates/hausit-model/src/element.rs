@@ -45,6 +45,7 @@ impl Element {
             ElementData::Ceiling(c) => Some(c.type_id),
             ElementData::Component(c) => Some(c.type_id),
             ElementData::DirectShape(_) => None,
+            ElementData::Group(g) => Some(g.type_id),
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -72,7 +73,8 @@ impl Element {
             ElementData::Railing(r) => r.type_id = t,
             ElementData::Ceiling(c) => c.type_id = t,
             ElementData::Component(c) => c.type_id = t,
-            ElementData::DirectShape(_) => {}
+            // A group's type is changed by placing the other group.
+            ElementData::DirectShape(_) | ElementData::Group(_) => {}
             ElementData::Level(_)
             | ElementData::Grid(_)
             | ElementData::Room(_)
@@ -134,6 +136,7 @@ pub enum ElementData {
     DetailLine(crate::detail::DetailLine),
     FilledRegion(crate::detail::FilledRegion),
     SpotElevation(crate::detail::SpotElevation),
+    Group(crate::groups::ModelGroup),
 }
 
 impl ElementData {
@@ -159,6 +162,7 @@ impl ElementData {
             ElementData::DirectShape(d) => vec![&mut d.level],
             ElementData::Room(r) => vec![&mut r.level, &mut r.upper_limit],
             ElementData::RoomSeparation(l) => vec![&mut l.level],
+            ElementData::Group(g) => vec![&mut g.level],
             _ => vec![],
         }
     }
@@ -188,6 +192,7 @@ impl ElementData {
             ElementData::DetailLine(_) => Category::Lines,
             ElementData::FilledRegion(_) => Category::DetailItems,
             ElementData::SpotElevation(_) => Category::SpotElevations,
+            ElementData::Group(_) => Category::ModelGroups,
         }
     }
 }

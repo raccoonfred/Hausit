@@ -97,6 +97,10 @@ pub struct HausitApp {
     pub shortcut: (String, f64),
     /// Copy to Clipboard: the elements copied (Ctrl+C), pasted with Ctrl+V.
     pub clipboard: Vec<ElementId>,
+    /// Edit Group mode: the group whose members are picked one by one,
+    /// and the model before the edit (for Cancel).
+    pub group_edit: Option<ElementId>,
+    pub group_edit_before: Option<Box<Document>>,
     pub title: String,
 }
 
@@ -124,6 +128,8 @@ impl Default for HausitApp {
             dialogs: Dialogs::default(),
             shortcut: (String::new(), 0.0),
             clipboard: Vec::new(),
+            group_edit: None,
+            group_edit_before: None,
             title: String::new(),
         };
         app.saved_revision = app.doc.revision();

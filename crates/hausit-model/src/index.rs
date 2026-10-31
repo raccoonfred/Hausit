@@ -19,6 +19,8 @@ pub struct DocIndex {
     wall_cells: HashMap<(ElementId, i64, i64), Vec<ElementId>>,
     /// Curtain walls, for embedding them in basic walls.
     curtain_walls: Vec<ElementId>,
+    /// The model group each grouped element belongs to.
+    group_of: HashMap<ElementId, ElementId>,
 }
 
 fn cell(p: DVec2) -> (i64, i64) {
@@ -32,6 +34,11 @@ impl DocIndex {
             ix.by_category.entry(e.category()).or_default().push(e.id);
             match &e.data {
                 ElementData::Door(o) | ElementData::Window(o) => ix.openings_by_host.entry(o.host).or_default().push(e.id),
+                ElementData::Group(g) => {
+                    for m in &g.members {
+                        ix.group_of.insert(*m, e.id);
+                    }
+                }
                 ElementData::Wall(w) => {
                     if is_curtain_type(w.type_id) {
                         ix.curtain_walls.push(e.id);
@@ -56,6 +63,10 @@ impl DocIndex {
             }
         }
         ix
+    }
+
+    pub fn group_of(&self, id: ElementId) -> Option<ElementId> {
+        self.group_of.get(&id).copied()
     }
 
     pub fn curtain_walls(&self) -> &[ElementId] {

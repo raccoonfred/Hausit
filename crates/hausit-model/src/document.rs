@@ -244,6 +244,9 @@ impl Document {
                     }
                     _ => false,
                 };
+                // A group's members go with it.
+                let dep =
+                    dep || matches!(self.elements.get(&id).map(|g| &g.data), Some(ElementData::Group(g)) if g.members.contains(&e.id));
                 if dep && !out.contains(&e.id) {
                     out.push(e.id);
                 }
@@ -289,8 +292,27 @@ impl Document {
             self.elements.shift_remove(id);
             self.views.shift_remove(id);
         }
+        // Deleted members leave their groups; empty groups go.
+        let mut empty = Vec::new();
+        for e in self.elements.values_mut() {
+            if let ElementData::Group(g) = &mut e.data {
+                g.members.retain(|m| !all.contains(m));
+                if g.members.is_empty() {
+                    empty.push(e.id);
+                }
+            }
+        }
+        for id in empty {
+            self.elements.shift_remove(&id);
+        }
         self.touch();
         Ok(all)
+    }
+
+    /// Removes one element without its dependents.
+    pub(crate) fn remove_element_only(&mut self, id: ElementId) {
+        self.elements.shift_remove(&id);
+        self.touch();
     }
 
     /// Railings hosted by stairs among `ids` that are not in `ids` themselves.
@@ -304,6 +326,8 @@ impl Document {
 
     /// Moves elements by `delta` in plan. Hosted openings move with walls.
     pub fn translate(&mut self, ids: &[ElementId], delta: DVec2) {
+        let expanded = self.with_group_members(ids);
+        let ids = &expanded[..];
         for id in ids {
             let Some(e) = self.elements.get_mut(id) else { continue };
             match &mut e.data {
@@ -346,6 +370,7 @@ impl Document {
                     }
                 }
                 ElementData::Tag(t) => t.position += delta,
+                ElementData::Group(g) => g.origin += delta,
                 d @ (ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_)) => {
                     crate::detail::map_points(d, &|p| p + delta)
                 }
@@ -389,6 +414,25 @@ impl Document {
     pub fn copy(&mut self, ids: &[ElementId], delta: DVec2) -> Vec<ElementId> {
         let mut map = std::collections::HashMap::new();
         let mut new_ids = Vec::new();
+        // Groups first: each copy is a new instance of the same type with
+        // copies of the members.
+        let groups: Vec<crate::groups::ModelGroup> = ids.iter().filter_map(|id| self.group(*id).cloned()).collect();
+        let in_groups: Vec<ElementId> = groups.iter().flat_map(|g| g.members.iter().copied()).collect();
+        for g in groups {
+            let members = self.copy(&g.members, delta);
+            new_ids.push(self.add_element(ElementData::Group(crate::groups::ModelGroup {
+                members,
+                origin: g.origin + delta,
+                ..g
+            })));
+        }
+        let ids: Vec<ElementId> = ids
+            .iter()
+            .copied()
+            .filter(|i| !in_groups.contains(i) && self.group(*i).is_none())
+            .collect();
+        let ids = &ids[..];
+        let group_copies = new_ids.len();
         // Hosts first so openings and wall foundations can be re-hosted.
         let hosted = |e: &Element| e.category().is_hosted() || matches!(e.data, ElementData::WallFooting(_) | ElementData::Railing(_));
         let mut order: Vec<ElementId> = ids
@@ -432,7 +476,7 @@ impl Document {
             new_ids.push(nid);
         }
         self.translate(
-            &new_ids
+            &new_ids[group_copies..]
                 .iter()
                 .copied()
                 .filter(|i| self.element(*i).map(|e| !e.category().is_hosted()).unwrap_or(false))
@@ -481,6 +525,8 @@ impl Document {
     /// Applies a plan transform. Mirrored walls are reversed so their
     /// exterior stays outside, and their openings keep their positions.
     fn transform(&mut self, ids: &[ElementId], f: &dyn Fn(DVec2) -> DVec2, mirror: bool, angle: f64) {
+        let expanded = self.with_group_members(ids);
+        let ids = &expanded[..];
         let mut reversed: Vec<(ElementId, f64)> = Vec::new();
         for id in ids {
             let Some(e) = self.elements.get_mut(id) else { continue };
@@ -545,6 +591,10 @@ impl Document {
                     crate::detail::map_points(d, f)
                 }
                 ElementData::Tag(t) => t.position = f(t.position),
+                ElementData::Group(g) => {
+                    g.origin = f(g.origin);
+                    g.rotation = if mirror { 2.0 * angle - g.rotation } else { g.rotation + angle };
+                }
                 ElementData::Dimension(d) => {
                     if let Some(m) = d.measure {
                         d.measure = Some((f(d.line_point + m) - f(d.line_point)).normalize_or_zero());

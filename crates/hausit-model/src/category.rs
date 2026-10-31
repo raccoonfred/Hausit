@@ -31,10 +31,11 @@ pub enum Category {
     /// Filled regions.
     DetailItems,
     SpotElevations,
+    ModelGroups,
 }
 
 impl Category {
-    pub const ALL: [Category; 26] = [
+    pub const ALL: [Category; 27] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -61,6 +62,7 @@ impl Category {
         Category::Lines,
         Category::DetailItems,
         Category::SpotElevations,
+        Category::ModelGroups,
     ];
 
     /// Categories of loadable components, placed with the Component tool.
@@ -141,6 +143,7 @@ impl Category {
             Category::Lines => "Lines",
             Category::DetailItems => "Detail Items",
             Category::SpotElevations => "Spot Elevations",
+            Category::ModelGroups => "Model Groups",
         }
     }
 
@@ -173,6 +176,7 @@ impl Category {
             Category::Lines => "Detail Line",
             Category::DetailItems => "Filled Region",
             Category::SpotElevations => "Spot Elevation",
+            Category::ModelGroups => "Model Group",
         }
     }
 

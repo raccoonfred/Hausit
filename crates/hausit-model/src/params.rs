@@ -333,6 +333,14 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Line Style", G::Graphics, V::Choice(idx)).kind(ParamKind::Choice(styles)));
             p.push(Parameter::new("Area", G::Dimensions, V::Area(hausit_core::geom::polygon_area(&r.boundary).abs())).ro());
         }
+        ElementData::Group(g) => {
+            p.push(
+                Parameter::new("Reference Level", G::Constraints, V::Element(g.level))
+                    .kind(ParamKind::Level)
+                    .ro(),
+            );
+            p.push(Parameter::new("Members", G::Other, V::Integer(g.members.len() as i64)).ro());
+        }
         ElementData::SpotElevation(sp) => {
             p.push(Parameter::new("Elevation", G::Dimensions, V::Length(doc.spot_height(sp))).ro());
         }
@@ -553,7 +561,9 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Line Style", V::Choice(i)) if i < LineStyle::ALL.len() => r.border = LineStyle::ALL[i],
                 _ => return Err(bad()),
             },
-            ElementData::RoomSeparation(_) | ElementData::Dimension(_) | ElementData::SpotElevation(_) => return Err(bad()),
+            ElementData::RoomSeparation(_) | ElementData::Dimension(_) | ElementData::SpotElevation(_) | ElementData::Group(_) => {
+                return Err(bad())
+            }
         },
     }
     doc.touch();

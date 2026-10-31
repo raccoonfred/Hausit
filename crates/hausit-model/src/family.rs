@@ -164,6 +164,7 @@ pub fn default_type_params(category: Category) -> TypeParams {
         | Category::Lines
         | Category::DetailItems
         | Category::SpotElevations
+        | Category::ModelGroups
         | Category::Tags => {}
     }
     p.insert("Type Mark".into(), ParamValue::Text(String::new()));

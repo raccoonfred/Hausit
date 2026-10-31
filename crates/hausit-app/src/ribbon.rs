@@ -209,7 +209,7 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
 // ----- ribbon building blocks -------------------------------------------------
 
 /// A titled ribbon panel, like Revit's "Build" or "Datum".
-fn panel(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
+pub fn panel(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
     ui.vertical(|ui| {
         let row = ui
             .horizontal(|ui| {
@@ -225,7 +225,7 @@ fn panel(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
 }
 
 /// A large ribbon button: icon over label.
-fn big(ui: &mut Ui, icon: Icon, label: &str, tip: &str, active: bool, enabled: bool) -> bool {
+pub fn big(ui: &mut Ui, icon: Icon, label: &str, tip: &str, active: bool, enabled: bool) -> bool {
     // Wide enough for the label.
     let font = egui::FontId::proportional(11.5);
     let text_w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font.clone(), Color32::BLACK).size().x);
@@ -903,6 +903,7 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
             app.delete_selection();
         }
     });
+    crate::groups::group_panel(app, ui);
     panel(ui, "View", |ui| {
         if big(
             ui,
