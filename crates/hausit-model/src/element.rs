@@ -613,6 +613,10 @@ pub enum DimRef {
         point: DVec2,
         dir: DVec2,
     },
+    /// A fixed point (Linear dimensions between points).
+    Point {
+        point: DVec2,
+    },
 }
 
 /// Text placed in a view, as Revit's Text tool makes. Its position is
@@ -655,4 +659,8 @@ pub struct Dimension {
     pub refs: Vec<DimRef>,
     /// A point the dimension line passes through.
     pub line_point: DVec2,
+    /// Linear dimensions: the direction measured in (horizontal or
+    /// vertical). `None`: aligned, across its references.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub measure: Option<DVec2>,
 }

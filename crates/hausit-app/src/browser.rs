@@ -137,7 +137,33 @@ fn view_item(app: &mut HausitApp, ui: &mut Ui, id: ElementId, name: &str) {
             });
             ui.close();
         }
-        let is_plan = matches!(app.doc.view(id).map(|v| &v.kind), Some(ViewKind::FloorPlan { .. }));
+        let graphical = app
+            .doc
+            .view(id)
+            .is_some_and(|v| v.kind.is_graphical() && !matches!(v.kind, ViewKind::Sheet(_)));
+        if graphical {
+            ui.menu_button("Duplicate View", |ui| {
+                for (label, detailing) in [("Duplicate", false), ("Duplicate with Detailing", true)] {
+                    if ui.button(label).clicked() {
+                        if let Some(Some(new)) = app.transact("Duplicate View", |doc| Ok(doc.duplicate_view(id, detailing))) {
+                            app.open_view(new);
+                        }
+                        ui.close();
+                    }
+                }
+            });
+        }
+        // A level keeps at least one floor plan; extra ones can go.
+        let is_plan = match app.doc.view(id).map(|v| &v.kind) {
+            Some(ViewKind::FloorPlan { level }) => {
+                app.doc
+                    .views()
+                    .filter(|v| matches!(v.kind, ViewKind::FloorPlan { level: l } if l == *level))
+                    .count()
+                    < 2
+            }
+            _ => false,
+        };
         if ui
             .add_enabled(!is_plan, egui::Button::new("Delete"))
             .on_disabled_hover_text("Delete the level to remove its plan.")

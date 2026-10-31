@@ -25,6 +25,7 @@ pub fn ref_segment(doc: &Document, r: &DimRef) -> Option<(DVec2, DVec2)> {
             _ => None,
         },
         DimRef::Line { point, dir } => Some((point, point + dir)),
+        DimRef::Point { point } => Some((point, point)),
     }
 }
 
@@ -48,11 +49,16 @@ pub fn layout(doc: &Document, d: &Dimension) -> Option<DimLayout> {
     if segs.len() < 2 || segs.len() != d.refs.len() {
         return None;
     }
-    let along = (segs[0].1 - segs[0].0).normalize_or_zero();
-    if along == DVec2::ZERO {
+    let n = match d.measure {
+        Some(m) => m.normalize_or_zero(),
+        None => {
+            let along = (segs[0].1 - segs[0].0).normalize_or_zero();
+            DVec2::new(-along.y, along.x)
+        }
+    };
+    if n == DVec2::ZERO {
         return None;
     }
-    let n = DVec2::new(-along.y, along.x);
     let mut items: Vec<(f64, DVec2)> = segs
         .iter()
         .map(|(a, b)| {
@@ -108,14 +114,29 @@ mod tests {
             view: hausit_core::ElementId::INVALID,
             refs: vec![DimRef::Wall { wall: west, side: 0 }, DimRef::Wall { wall: part, side: 0 }],
             line_point: DVec2::new(0.0, -2000.0),
+            measure: None,
         };
         let l = layout(&doc, &d).unwrap();
         assert!((l.values[0].abs() - 6000.0).abs() < 1e-6, "{:?}", l.values);
         // Exterior face of the west wall is 175 mm further out.
         let d2 = Dimension {
             refs: vec![DimRef::Wall { wall: west, side: 1 }, DimRef::Wall { wall: part, side: 0 }],
-            ..d
+            ..d.clone()
         };
         assert!((layout(&doc, &d2).unwrap().values[0].abs() - 6175.0).abs() < 1e-6);
+        // Linear: two points measured horizontally ignore their y offset.
+        let d3 = Dimension {
+            refs: vec![
+                DimRef::Point {
+                    point: DVec2::new(0.0, 0.0),
+                },
+                DimRef::Point {
+                    point: DVec2::new(3000.0, 4000.0),
+                },
+            ],
+            measure: Some(DVec2::X),
+            ..d
+        };
+        assert!((layout(&doc, &d3).unwrap().values[0].abs() - 3000.0).abs() < 1e-6);
     }
 }

@@ -391,7 +391,7 @@ pub fn new_project() -> Document {
         CardinalDirection::South,
         CardinalDirection::West,
     ] {
-        doc.add_view(d.label(), ViewKind::Elevation { direction: d });
+        doc.add_view(d.label(), ViewKind::Elevation { direction: d, at: None });
     }
     add_default_view_templates(&mut doc);
     doc
@@ -661,6 +661,7 @@ pub fn sample_project() -> Document {
             view: plan,
             refs,
             line_point,
+            measure: None,
         }));
     }
 

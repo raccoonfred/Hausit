@@ -367,6 +367,29 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                         length_edit(ui, "vp_cut", &mut v.cut_height, unit);
                         ui.end_row();
                     }
+                    if let Some(r) = &mut v.view_range {
+                        for (label, value) in [
+                            ("Top Offset", &mut r.top),
+                            ("Bottom Offset", &mut r.bottom),
+                            ("View Depth Offset", &mut r.depth),
+                        ] {
+                            ui.label(label);
+                            length_edit(ui, &format!("vp_{label}"), value, unit);
+                            ui.end_row();
+                        }
+                    }
+                    if v.kind.is_graphical() && !matches!(v.kind, ViewKind::ThreeD) {
+                        ui.label("Crop View");
+                        let mut on = v.crop.is_some();
+                        if ui.checkbox(&mut on, "").changed() {
+                            v.crop = if on { crate::canvas::crop_around_view(app, view_id) } else { None };
+                            v.crop_visible = on;
+                        }
+                        ui.end_row();
+                        ui.label("Crop Region Visible");
+                        ui.add_enabled(v.crop.is_some(), egui::Checkbox::without_text(&mut v.crop_visible));
+                        ui.end_row();
+                    }
                     if let ViewKind::Section { far_clip, .. } = &mut v.kind {
                         ui.label("Far Clip Offset");
                         length_edit(ui, "vp_far", far_clip, unit);

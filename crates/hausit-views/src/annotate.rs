@@ -102,16 +102,23 @@ pub fn view_marks(doc: &Document, plan: &View, dl: &mut DisplayList) {
                     None => label(dl, c, v.name.trim_start_matches("Section ").to_string(), 0.8),
                 }
             }
-            ViewKind::Elevation { direction } => {
-                let Some(b) = model_bounds(doc) else { continue };
-                let c = b.center();
+            ViewKind::Elevation { direction, at } => {
                 let out = direction.outward();
-                let half = match direction {
-                    CardinalDirection::North | CardinalDirection::South => b.size().y / 2.0,
-                    _ => b.size().x / 2.0,
-                };
                 let r = BUBBLE_R * scale * 1.2;
-                let p = DVec2::new(c.x, c.y) + out * (half + 4.0 * r);
+                let p = match at {
+                    // A placed mark points away from where it looks.
+                    Some(at) => *at,
+                    None => {
+                        let Some(b) = model_bounds(doc) else { continue };
+                        let c = b.center();
+                        let half = match direction {
+                            CardinalDirection::North | CardinalDirection::South => b.size().y / 2.0,
+                            _ => b.size().x / 2.0,
+                        };
+                        DVec2::new(c.x, c.y) + out * (half + 4.0 * r)
+                    }
+                };
+
                 dl.push(
                     Prim::Circle { center: p, radius: r },
                     Some(THIN),

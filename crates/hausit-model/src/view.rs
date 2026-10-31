@@ -91,6 +91,11 @@ pub enum ViewKind {
     ThreeD,
     Elevation {
         direction: CardinalDirection,
+        /// Where its mark stands. `None`: a building elevation outside the
+        /// model; a placed elevation (interior or exterior) clips at its
+        /// mark and shows what lies in front of it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<DVec2>,
     },
     /// Section line drawn in plan; the view looks to the right of start→end.
     Section {
@@ -240,6 +245,33 @@ pub struct View {
     /// Temporary Hide/Isolate: not saved, as in Revit.
     #[serde(skip)]
     pub temp_hide: Option<TempHide>,
+    /// Plans: View Range beyond the cut plane. `None` in files from before
+    /// it existed: nothing is left out by height.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view_range: Option<ViewRange>,
+    /// Crop Region Visible: draws the crop boundary, which can be dragged.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub crop_visible: bool,
+}
+
+/// View Range of a plan (besides the cut plane), as offsets from its level:
+/// elements entirely above Top or below View Depth are not shown.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ViewRange {
+    pub top: f64,
+    pub bottom: f64,
+    pub depth: f64,
+}
+
+impl Default for ViewRange {
+    /// Revit's architectural plans: Top 2300, Bottom and View Depth at the level.
+    fn default() -> Self {
+        ViewRange {
+            top: 2300.0,
+            bottom: 0.0,
+            depth: 0.0,
+        }
+    }
 }
 
 /// Temporary Hide/Isolate (HH, HI, HC, IC): what is hidden, or isolated,
@@ -361,6 +393,7 @@ impl ViewTemplate {
 
 impl View {
     pub fn new(id: ElementId, name: &str, kind: ViewKind) -> Self {
+        let kind_is_plan = matches!(kind, ViewKind::FloorPlan { .. });
         let visual_style = match kind {
             ViewKind::ThreeD => VisualStyle::Shaded,
             _ => VisualStyle::HiddenLine,
@@ -391,6 +424,8 @@ impl View {
             phase_filter: Default::default(),
             hidden_elements: Default::default(),
             temp_hide: None,
+            view_range: kind_is_plan.then(ViewRange::default),
+            crop_visible: false,
         }
     }
 

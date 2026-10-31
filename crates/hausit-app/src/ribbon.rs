@@ -495,7 +495,14 @@ fn annotate(app: &mut HausitApp, ui: &mut Ui) {
             "Aligned Dimension (DI)",
             Tool::Dimension { refs: vec![] },
         );
-        planned(ui, Icon::Dimension, "Linear", "Linear Dimension");
+        tool_button(
+            app,
+            ui,
+            Icon::Dimension,
+            "Linear",
+            "Linear Dimension: pick two points; it measures horizontally or vertically",
+            Tool::LinearDimension { pts: vec![] },
+        );
     });
     panel(ui, "Text", |ui| {
         tool_button(
@@ -582,6 +589,24 @@ fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
             "Section: draw a section line in a plan",
             Tool::Section { start: None },
         );
+        tool_button(
+            app,
+            ui,
+            Icon::Elevation,
+            "Elevation",
+            "Elevation: click in a plan; it looks at the nearest wall",
+            Tool::Elevation,
+        );
+        if big(
+            ui,
+            Icon::Plan,
+            "Plan Views",
+            "Plan Views: floor or ceiling plans for existing levels",
+            false,
+            true,
+        ) {
+            app.dialogs.plan_views = Some(crate::dialogs::PlanViews::new(&app.doc));
+        }
         tool_button(
             app,
             ui,

@@ -45,7 +45,7 @@ pub use phasing::{Phase, PhaseDisplay, PhaseFilter, PhaseStatus};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use sheet::{SheetDef, SheetSize, Viewport};
 pub use view::{
-    CardinalDirection, CategoryGraphics, DetailLevel, Graphics, SectionBox, TempHide, View, ViewKind, ViewTemplate, VisualStyle,
+    CardinalDirection, CategoryGraphics, DetailLevel, Graphics, SectionBox, TempHide, View, ViewKind, ViewRange, ViewTemplate, VisualStyle,
 };
 
 pub use hausit_core::{DVec2, DVec3, ElementId};

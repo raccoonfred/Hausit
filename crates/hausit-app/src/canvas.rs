@@ -205,6 +205,9 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
 
     // Dragging selected elements and wall end grips, then window /
     // crossing selection.
+    if !is_3d && !is_sheet {
+        crop_region(app, ui, &response, &painter, &xf, view_id);
+    }
     if is_plan {
         direct_drag(app, ui, &response, &painter, &dl, &xf);
     }
@@ -559,6 +562,7 @@ fn box_select(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: 
         d.get_temp::<DirectDrag>(egui::Id::unique("direct_drag")).is_some()
             || d.get_temp::<(usize, f32)>(egui::Id::unique("box_grip")).is_some()
             || d.get_temp::<DVec2>(egui::Id::unique("viewport_drag")).is_some()
+            || d.get_temp::<usize>(egui::Id::unique("crop_edge")).is_some()
     }) {
         return;
     }
@@ -800,7 +804,8 @@ fn direct_drag(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter:
         painter.circle(c, 4.5, grip_fill, Stroke::new(1.0, Color32::WHITE));
     }
 
-    if response.drag_started_by(egui::PointerButton::Primary) {
+    let cropping = ui.ctx().data(|d| d.get_temp::<usize>(egui::Id::unique("crop_edge")).is_some());
+    if response.drag_started_by(egui::PointerButton::Primary) && !cropping {
         // Where the button went down, not where the drag threshold was crossed.
         if let Some(sp) = ui.input(|i| i.pointer.press_origin()) {
             let grip = grips.iter().find(|g| xf.to_screen(g.2).distance(sp) < 8.0);
@@ -1165,6 +1170,28 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             painter.extend(shapes);
             painter.add(Shape::closed_line(r, s));
         }
+        Tool::LinearDimension { pts } => {
+            for q in pts {
+                painter.circle_filled(xf.to_screen(*q), 3.5, SELECT);
+            }
+            if pts.len() == 2 {
+                let view = app.active_view.unwrap_or(ElementId::INVALID);
+                let d = hausit_model::Dimension {
+                    view,
+                    refs: pts.iter().map(|q| hausit_model::DimRef::Point { point: *q }).collect(),
+                    line_point: p,
+                    measure: Some(tools::linear_direction(pts[0], pts[1], p)),
+                };
+                if let Some(l) = hausit_model::dimensions::layout(&app.doc, &d) {
+                    let scale = app.doc.view(view).map(|v| v.scale as f64).unwrap_or(100.0);
+                    let mut dl = DisplayList::default();
+                    hausit_views::draw_dimension(&mut dl, &l, scale, unit, None);
+                    paint_list(painter, xf, &dl, None);
+                }
+            } else if let Some(a) = pts.first() {
+                painter.line_segment([xf.to_screen(*a), xf.to_screen(p)], Stroke::new(1.0, PREVIEW));
+            }
+        }
         Tool::Dimension { refs } => {
             let hovered = tools::pick_dim_ref(app, p, app.options.pick_tol);
             if let Some((_, (a, b))) = hovered {
@@ -1181,6 +1208,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
                     view,
                     refs: refs.clone(),
                     line_point: p,
+                    measure: None,
                 };
                 if let Some(l) = hausit_model::dimensions::layout(&app.doc, &d) {
                     let scale = app.doc.view(view).map(|v| v.scale as f64).unwrap_or(100.0);
@@ -1514,4 +1542,86 @@ pub fn hide_category_in_view(app: &mut HausitApp) {
         Ok(())
     });
     app.selection.clear();
+}
+
+/// A crop region around what a view shows now, with a margin: what Crop
+/// View starts from.
+pub fn crop_around_view(app: &HausitApp, view_id: ElementId) -> Option<(DVec2, DVec2)> {
+    let mut v = app.doc.view(view_id)?.clone();
+    v.crop = None;
+    let (min, max) = hausit_views::build(&app.doc, &v).bounds()?;
+    let pad = DVec2::splat(v.scale as f64 * 5.0);
+    Some((min - pad, max + pad))
+}
+
+/// Crop Region Visible: the crop boundary, whose edges drag in or out.
+fn crop_region(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter: &egui::Painter, xf: &Xform, view_id: ElementId) {
+    let Some(view) = app.doc.view(view_id) else { return };
+    let (Some((lo, hi)), true) = (view.crop, view.crop_visible) else {
+        return;
+    };
+    if app.tool != Tool::Modify {
+        let r = Rect::from_two_pos(xf.to_screen(lo), xf.to_screen(hi));
+        painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_gray(90)), egui::StrokeKind::Middle);
+        return;
+    }
+    let id = egui::Id::unique("crop_edge");
+    let edges = |lo: DVec2, hi: DVec2| -> [(Pos2, Pos2); 4] {
+        let (a, b, c, d) = (
+            xf.to_screen(lo),
+            xf.to_screen(DVec2::new(hi.x, lo.y)),
+            xf.to_screen(hi),
+            xf.to_screen(DVec2::new(lo.x, hi.y)),
+        );
+        // Left, right, bottom, top.
+        [(a, d), (b, c), (a, b), (d, c)]
+    };
+    let dragging = ui.ctx().data(|d| d.get_temp::<usize>(id));
+    let cur = ui.input(|i| i.pointer.latest_pos());
+    let (mut lo2, mut hi2) = (lo, hi);
+    if let (Some(k), Some(c)) = (dragging, cur) {
+        let p = xf.to_view(c);
+        match k {
+            0 => lo2.x = p.x.min(hi.x - 100.0),
+            1 => hi2.x = p.x.max(lo.x + 100.0),
+            2 => lo2.y = p.y.min(hi.y - 100.0),
+            _ => hi2.y = p.y.max(lo.y + 100.0),
+        }
+    }
+    let near = |p: Pos2| {
+        edges(lo, hi).iter().position(|(a, b)| {
+            distance_to_segment(
+                DVec2::new(p.x as f64, p.y as f64),
+                DVec2::new(a.x as f64, a.y as f64),
+                DVec2::new(b.x as f64, b.y as f64),
+            ) < 6.0
+        })
+    };
+    let hot = cur.and_then(near);
+    for (k, (a, b)) in edges(lo2, hi2).iter().enumerate() {
+        let on = dragging == Some(k) || (dragging.is_none() && hot == Some(k));
+        let s = if on {
+            Stroke::new(2.5, SELECT)
+        } else {
+            Stroke::new(1.0, Color32::from_gray(90))
+        };
+        painter.line_segment([*a, *b], s);
+    }
+    if hot.is_some() || dragging.is_some() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+    }
+    if response.drag_started_by(egui::PointerButton::Primary) {
+        if let Some(k) = ui.input(|i| i.pointer.press_origin()).and_then(near) {
+            ui.ctx().data_mut(|d| d.insert_temp(id, k));
+        }
+    }
+    if dragging.is_some() && response.drag_stopped() {
+        ui.ctx().data_mut(|d| d.remove::<usize>(id));
+        app.transact("Resize Crop Region", |doc| {
+            if let Some(v) = doc.view_mut(view_id) {
+                v.crop = Some((lo2, hi2));
+            }
+            Ok(())
+        });
+    }
 }

@@ -235,7 +235,7 @@ impl Document {
                             || d.refs.iter().any(|r| match r {
                                 DimRef::Wall { wall, .. } => *wall == id,
                                 DimRef::Grid { grid } => *grid == id,
-                                DimRef::Line { .. } => false,
+                                DimRef::Line { .. } | DimRef::Point { .. } => false,
                             })
                     }
                     _ => false,
@@ -342,7 +342,7 @@ impl Document {
                 ElementData::Dimension(d) => {
                     d.line_point += delta;
                     for r in &mut d.refs {
-                        if let DimRef::Line { point, .. } = r {
+                        if let DimRef::Line { point, .. } | DimRef::Point { point } = r {
                             *point += delta;
                         }
                     }
@@ -527,10 +527,14 @@ impl Document {
                 ElementData::Dimension(d) => {
                     d.line_point = f(d.line_point);
                     for r in &mut d.refs {
-                        if let DimRef::Line { point, dir } = r {
-                            let p2 = f(*point + *dir);
-                            *point = f(*point);
-                            *dir = (p2 - *point).normalize_or_zero();
+                        match r {
+                            DimRef::Line { point, dir } => {
+                                let p2 = f(*point + *dir);
+                                *point = f(*point);
+                                *dir = (p2 - *point).normalize_or_zero();
+                            }
+                            DimRef::Point { point } => *point = f(*point),
+                            _ => {}
                         }
                     }
                 }
@@ -764,6 +768,78 @@ impl Document {
         self.views.insert(id, View::new(id, name, kind));
         self.touch();
         id
+    }
+
+    /// Duplicate View: a copy of the view's settings ("Duplicate"), or with
+    /// its text notes, tags and dimensions too ("Duplicate with Detailing").
+    pub fn duplicate_view(&mut self, id: ElementId, with_detailing: bool) -> Option<ElementId> {
+        let src = self.view(id)?.clone();
+        if !src.kind.is_graphical() || matches!(src.kind, ViewKind::Sheet(_)) {
+            return None;
+        }
+        let new = self.alloc_id();
+        let name = self.unique_view_name(&format!("{} Copy", src.name));
+        let mut v = src.clone();
+        v.id = new;
+        v.name = name;
+        v.temp_hide = None;
+        // Callouts stay with the original view.
+        self.views.insert(new, v);
+        if with_detailing {
+            let annotations: Vec<Element> = self
+                .elements
+                .values()
+                .filter(|e| match &e.data {
+                    ElementData::TextNote(t) => t.view == id,
+                    ElementData::Tag(t) => t.view == id,
+                    ElementData::Dimension(d) => d.view == id,
+                    _ => false,
+                })
+                .cloned()
+                .collect();
+            for mut e in annotations {
+                match &mut e.data {
+                    ElementData::TextNote(t) => t.view = new,
+                    ElementData::Tag(t) => t.view = new,
+                    ElementData::Dimension(d) => d.view = new,
+                    _ => {}
+                }
+                let nid = self.alloc_id();
+                e.id = nid;
+                self.elements.insert(nid, e);
+            }
+        }
+        self.touch();
+        Some(new)
+    }
+
+    /// View ▸ Plan Views: floor (or ceiling) plans for levels, named after
+    /// them. With `skip_existing`, levels that already have one are left.
+    pub fn create_plan_views(&mut self, levels: &[ElementId], ceiling: bool, skip_existing: bool) -> Vec<ElementId> {
+        let mut out = Vec::new();
+        for &l in levels {
+            let has = self.views().any(|v| match v.kind {
+                ViewKind::FloorPlan { level } => !ceiling && level == l,
+                ViewKind::CeilingPlan { level } => ceiling && level == l,
+                _ => false,
+            });
+            if has && skip_existing {
+                continue;
+            }
+            let base = self.level_name(l);
+            let name = if self.views().any(|v| v.name == base) {
+                self.unique_view_name(&format!("{base} -"))
+            } else {
+                base
+            };
+            let kind = if ceiling {
+                ViewKind::CeilingPlan { level: l }
+            } else {
+                ViewKind::FloorPlan { level: l }
+            };
+            out.push(self.add_view(&name, kind));
+        }
+        out
     }
 
     // ----- view templates --------------------------------------------------

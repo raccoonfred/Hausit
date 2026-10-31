@@ -464,6 +464,27 @@ mod tests {
     }
 
     #[test]
+    fn placed_elevation_sees_what_is_in_front() {
+        let mut doc = sample_project();
+        let walls: Vec<_> = doc.elements_of(hausit_model::Category::Walls).map(|e| e.id).collect();
+        // Standing in the bedroom, looking east at the wall at x = 12000.
+        let v = doc.add_view(
+            "Elevation 1",
+            ViewKind::Elevation {
+                direction: hausit_model::CardinalDirection::West,
+                at: Some(DVec2::new(9000.0, 4000.0)),
+            },
+        );
+        let dl = build(&doc, doc.view(v).unwrap());
+        let shows = |id| dl.items.iter().any(|i| i.element == Some(id));
+        assert!(shows(walls[2]), "east wall");
+        assert!(!shows(walls[0]), "west wall is behind the mark");
+        // Duplicate with detailing keeps the settings under a new name.
+        let d = doc.duplicate_view(v, true).unwrap();
+        assert_eq!(doc.view(d).unwrap().name, "Elevation 1 Copy 1");
+    }
+
+    #[test]
     fn every_view_builds() {
         let doc = sample_project();
         for v in doc.views() {

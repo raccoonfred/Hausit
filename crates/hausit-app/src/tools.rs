@@ -110,6 +110,13 @@ pub enum Tool {
     /// Offset: click a wall, grid or line to offset it (Options Bar
     /// distance, Copy).
     Offset,
+    /// Elevation: click in a plan; it looks at the nearest wall.
+    Elevation,
+    /// Linear dimension: two points, then where the line goes. It
+    /// measures horizontally or vertically, as the cursor leads.
+    LinearDimension {
+        pts: Vec<DVec2>,
+    },
     /// Linear Array of the selection: start, then end of the first step
     /// (or of the whole run with "Move To: Last").
     Array {
@@ -164,6 +171,8 @@ impl Tool {
             Tool::Tag => "Modify | Tag",
             Tool::Demolish => "Modify | Demolish",
             Tool::Align { .. } => "Modify | Align",
+            Tool::Elevation => "Modify | Elevation",
+            Tool::LinearDimension { .. } => "Modify | Place Dimensions",
             Tool::Offset => "Modify | Offset",
             Tool::Array { .. } => "Modify | Array",
         }
@@ -219,6 +228,11 @@ impl Tool {
             Tool::Text => "Click where the text starts, then type it. Leader on the Options Bar adds an arrow.",
             Tool::Tag => "Click an element to tag it: doors show their Mark, windows their Type Mark, other elements their type.",
             Tool::Demolish => "Click an element to demolish it in this view's phase. Doors and windows go with their wall.",
+            Tool::LinearDimension { pts } if pts.len() < 2 => "Click a point to dimension from, then a point to dimension to.",
+            Tool::LinearDimension { .. } => {
+                "Move up or down for a horizontal dimension, left or right for a vertical one, and click to place it."
+            }
+            Tool::Elevation => "Click in a plan to place an elevation. It looks at the nearest wall, up, down, left or right.",
             Tool::Align { reference: None } => "Pick a reference line or point to align to: a wall face or centreline, a grid, a line.",
             Tool::Align { .. } => "Pick the entity to align: a parallel wall face or centreline, grid or line, or a column or component.",
             Tool::Offset => "Click a wall, grid or line. It is offset by the Options Bar distance to the side of the cursor.",
@@ -533,6 +547,7 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Roof { .. }
             | Tool::Grid { .. }
             | Tool::Section { .. }
+            | Tool::Elevation
             | Tool::Column
             | Tool::Component { .. }
             | Tool::Beam { .. }
@@ -1127,6 +1142,31 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
             }
             _ => {}
         },
+        Tool::LinearDimension { pts } => {
+            if pts.len() < 2 {
+                if pts.last().is_none_or(|q| q.distance(p) > 1.0) {
+                    pts.push(p);
+                }
+            } else if let Some(view) = app.active_view {
+                let d = Dimension {
+                    view,
+                    refs: pts.iter().map(|q| DimRef::Point { point: *q }).collect(),
+                    line_point: p,
+                    measure: Some(linear_direction(pts[0], pts[1], p)),
+                };
+                app.transact("Create Dimension", |doc| Ok(doc.add_element(ElementData::Dimension(d))));
+                pts.clear();
+            }
+        }
+        Tool::Elevation => {
+            app.tool = Tool::Elevation;
+            let direction = elevation_direction(app, p);
+            let name = app.doc.unique_view_name("Elevation");
+            let kind = ViewKind::Elevation { direction, at: Some(p) };
+            app.transact("Create Elevation", |doc| Ok(doc.add_view(&name, kind)));
+            app.status = format!("Created {name}, looking {}. Open it from the Project Browser.", direction.label());
+            return;
+        }
         Tool::Callout { start } => match *start {
             None => *start = Some(p),
             Some(a) if (p - a).abs().min_element() > 10.0 => {
@@ -1293,6 +1333,7 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                         view,
                         refs: std::mem::take(refs),
                         line_point: p,
+                        measure: None,
                     };
                     app.transact("Create Dimension", |doc| Ok(doc.add_element(ElementData::Dimension(d))));
                 }
@@ -2439,5 +2480,46 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         app.shortcut.0.clear();
     } else if app.shortcut.0.len() > 2 {
         app.shortcut.0 = tail(1).to_string();
+    }
+}
+
+/// The way an elevation placed at `p` looks: towards the nearest wall,
+/// along the axis it faces most. Returns the elevation's direction in the
+/// sense of [`hausit_model::CardinalDirection`] (the side it stands on).
+fn elevation_direction(app: &HausitApp, p: DVec2) -> hausit_model::CardinalDirection {
+    use hausit_model::CardinalDirection as C;
+    let level = app.active_level();
+    let nearest = app
+        .doc
+        .elements_of(Category::Walls)
+        .filter_map(|e| e.as_wall().map(|w| (e.id, w.clone())))
+        .filter(|(_, w)| level.is_none_or(|l| w.base_level == l))
+        .map(|(_, w)| closest_on_segment(p, w.start, w.end).0)
+        .min_by(|a, b| a.distance(p).total_cmp(&b.distance(p)));
+    let look = nearest.map(|q| q - p).unwrap_or(DVec2::Y);
+    // It stands on the side opposite where it looks.
+    if look.x.abs() > look.y.abs() {
+        if look.x > 0.0 {
+            C::West
+        } else {
+            C::East
+        }
+    } else if look.y > 0.0 {
+        C::South
+    } else {
+        C::North
+    }
+}
+
+/// A linear dimension between `a` and `b` placed at `p` measures across
+/// the way the cursor moved off them: horizontally when it went up or
+/// down, vertically when it went sideways.
+pub fn linear_direction(a: DVec2, b: DVec2, p: DVec2) -> DVec2 {
+    let (lo, hi) = (a.min(b), a.max(b));
+    let out = DVec2::new((p.x - hi.x).max(lo.x - p.x).max(0.0), (p.y - hi.y).max(lo.y - p.y).max(0.0));
+    if out.y > out.x || (out == DVec2::ZERO && (b - a).x.abs() >= (b - a).y.abs()) {
+        DVec2::X
+    } else {
+        DVec2::Y
     }
 }

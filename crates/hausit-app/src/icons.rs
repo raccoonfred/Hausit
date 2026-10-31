@@ -56,6 +56,7 @@ pub enum Icon {
     Text,
     Tag,
     Demolish,
+    Plan,
     Align,
     Offset,
     Array,
@@ -416,6 +417,12 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 egui::FontId::proportional(6.5 * s),
                 k(INK),
             );
+        }
+        Icon::Plan => {
+            p.rect(rect(4.0, 6.0, 28.0, 26.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            seg((4.0, 16.0), (18.0, 16.0), line(2.0, INK));
+            seg((18.0, 6.0), (18.0, 20.0), line(2.0, INK));
+            seg((8.0, 2.0), (24.0, 2.0), line(1.2, BLUE));
         }
         Icon::Align => {
             seg((6.0, 3.0), (6.0, 29.0), line(1.4, BLUE));

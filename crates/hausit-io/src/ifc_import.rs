@@ -2177,7 +2177,7 @@ impl<'a> Importer<'a> {
             CardinalDirection::South,
             CardinalDirection::West,
         ] {
-            self.doc.add_view(d.label(), ViewKind::Elevation { direction: d });
+            self.doc.add_view(d.label(), ViewKind::Elevation { direction: d, at: None });
         }
     }
 }

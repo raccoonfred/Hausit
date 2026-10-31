@@ -208,6 +208,7 @@ impl Document {
     pub fn view_hidden(&self, view: &View) -> std::collections::HashSet<ElementId> {
         let mut hidden = self.phase_hidden(view);
         hidden.extend(view.hidden_elements.iter().copied());
+        hidden.extend(self.outside_view_range(view));
         if let Some(t) = &view.temp_hide {
             for e in self.elements() {
                 let listed = t.elements.contains(&e.id) || t.categories.contains(&e.category());
@@ -237,6 +238,23 @@ impl Document {
             }
         }
         self.with_dependents_hidden(hidden)
+    }
+
+    /// Model elements a plan's View Range leaves out: entirely above its
+    /// top, or entirely below its view depth.
+    pub fn outside_view_range(&self, view: &View) -> Vec<ElementId> {
+        let (Some(r), crate::view::ViewKind::FloorPlan { level }) = (view.view_range, &view.kind) else {
+            return vec![];
+        };
+        let z = self.level_elevation(*level);
+        let (top, depth) = (z + r.top.max(view.cut_height), z + r.depth.min(r.bottom));
+        self.elements()
+            .filter(|e| e.category().is_model() && !e.category().is_hosted())
+            .filter_map(|e| {
+                let b = crate::geometry::element_geometry(self, e.id)?.bounds();
+                (!b.is_empty() && (b.min.z > top + 1.0 || b.max.z < depth - 1.0)).then_some(e.id)
+            })
+            .collect()
     }
 
     fn with_dependents_hidden(&self, mut hidden: std::collections::HashSet<ElementId>) -> std::collections::HashSet<ElementId> {

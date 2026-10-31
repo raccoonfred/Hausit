@@ -100,6 +100,67 @@ pub struct Dialogs {
     pub templates: Option<crate::view_graphics::TemplatesDialog>,
     pub phases: Option<crate::phases::PhasesDialog>,
     pub paste_levels: Option<crate::hide_isolate::PasteLevels>,
+    pub plan_views: Option<PlanViews>,
+}
+
+/// View ▸ Plan Views: levels to make plans for.
+pub struct PlanViews {
+    pub ceiling: bool,
+    pub skip_existing: bool,
+    pub ticked: Vec<(ElementId, bool)>,
+}
+
+impl PlanViews {
+    pub fn new(doc: &Document) -> Self {
+        PlanViews {
+            ceiling: false,
+            skip_existing: true,
+            ticked: doc.levels().into_iter().map(|(id, _)| (id, false)).collect(),
+        }
+    }
+}
+
+fn plan_views(app: &mut HausitApp, ctx: &Context) {
+    let Some(mut d) = app.dialogs.plan_views.take() else { return };
+    let mut open = true;
+    let mut go = false;
+    egui::Window::new("New Plan")
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.radio_value(&mut d.ceiling, false, "Floor Plan");
+                ui.radio_value(&mut d.ceiling, true, "Ceiling Plan");
+            });
+            ui.separator();
+            for (id, on) in &mut d.ticked {
+                let has = app.doc.views().any(|v| match v.kind {
+                    ViewKind::FloorPlan { level } => !d.ceiling && level == *id,
+                    ViewKind::CeilingPlan { level } => d.ceiling && level == *id,
+                    _ => false,
+                });
+                let hidden = has && d.skip_existing;
+                ui.add_enabled_ui(!hidden, |ui| ui.checkbox(on, app.doc.level_name(*id)));
+            }
+            ui.separator();
+            ui.checkbox(&mut d.skip_existing, "Do not duplicate existing views");
+            go = ui.button("  OK  ").clicked();
+        });
+    if go {
+        let levels: Vec<ElementId> = d.ticked.iter().filter(|t| t.1).map(|t| t.0).collect();
+        let (ceiling, skip) = (d.ceiling, d.skip_existing);
+        if let Some(new) = app.transact("Create Plan Views", |doc| Ok(doc.create_plan_views(&levels, ceiling, skip))) {
+            if let Some(v) = new.last() {
+                app.open_view(*v);
+            }
+            app.status = format!("Created {} plan view(s).", new.len());
+        }
+        return;
+    }
+    if open {
+        app.dialogs.plan_views = Some(d);
+    }
 }
 
 impl Dialogs {
@@ -146,6 +207,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     crate::view_graphics::show_vg(app, ctx);
     crate::phases::show(app, ctx);
     crate::hide_isolate::show(app, ctx);
+    plan_views(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;

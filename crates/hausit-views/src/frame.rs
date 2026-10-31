@@ -30,12 +30,23 @@ impl ViewFrame {
                     u_clip: None,
                 })
             }
-            ViewKind::Elevation { direction } => {
-                let b = model_bounds(doc);
-                let center = b.map(|b| b.center()).unwrap_or(DVec3::ZERO);
+            ViewKind::Elevation { direction, at } => {
                 let out = direction.outward();
                 let forward = DVec3::new(-out.x, -out.y, 0.0);
                 let right = forward.cross(DVec3::Z);
+                if let Some(p) = at {
+                    // A placed elevation looks from its mark, at what is in front.
+                    return Some(ViewFrame {
+                        origin: DVec3::new(p.x, p.y, 0.0),
+                        right,
+                        up: DVec3::Z,
+                        forward,
+                        depth_clip: Some((0.0, 1.0e7)),
+                        u_clip: None,
+                    });
+                }
+                let b = model_bounds(doc);
+                let center = b.map(|b| b.center()).unwrap_or(DVec3::ZERO);
                 Some(ViewFrame {
                     origin: DVec3::new(center.x, center.y, 0.0),
                     right,
