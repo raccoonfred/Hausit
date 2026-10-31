@@ -92,7 +92,38 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
 
     // Rooms: an invisible region that can be picked, plus a room tag
     // (name, number and area, as Revit's "Room Tag With Area").
-    for e in doc.elements_of(Category::Rooms).filter(|_| !reflected) {
+    // Area plans show areas instead of rooms.
+    let area_plan = view.area_scheme.is_some();
+    for e in doc.elements_of(Category::Areas).filter(|_| area_plan) {
+        let ElementData::Area(a) = &e.data else { continue };
+        if a.view != view.id {
+            continue;
+        }
+        let boundary = doc.area_boundary(a);
+        if let Some(b) = &boundary {
+            dl.push(Prim::Polygon(b.clone()), None, Some([0, 0, 0, 0]), Some(e.id));
+        }
+        let h = TAG_TEXT * scale;
+        let area = match &boundary {
+            Some(b) => format_area(hausit_core::geom::polygon_area(b).abs(), doc.length_unit),
+            None => "Not Enclosed".into(),
+        };
+        for (i, text) in [a.name.clone(), area].into_iter().enumerate() {
+            dl.push(
+                Prim::Text {
+                    pos: a.point + DVec2::new(0.0, h * (0.7 - 1.4 * i as f64)),
+                    text,
+                    height: h,
+                    anchor: Anchor::Center,
+                    angle: 0.0,
+                },
+                None,
+                None,
+                Some(e.id),
+            );
+        }
+    }
+    for e in doc.elements_of(Category::Rooms).filter(|_| !reflected && !area_plan) {
         let ElementData::Room(r) = &e.data else { continue };
         if r.level != level {
             continue;
@@ -154,6 +185,20 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             None,
             Some(e.id),
         );
+    }
+
+    // Colour scheme: rooms (areas in an area plan) filled by value, under
+    // the walls.
+    let (fills, _) = doc.color_fill(view.id);
+    for (id, [r, g, b]) in fills {
+        let boundary = match doc.element(id).map(|e| &e.data) {
+            Some(ElementData::Room(room)) => room_info(doc, room).boundary,
+            Some(ElementData::Area(a)) => doc.area_boundary(a),
+            _ => None,
+        };
+        if let Some(poly) = boundary {
+            dl.push(Prim::Polygon(poly), None, Some([r, g, b, 255]), None);
+        }
     }
 
     // Walls (and door/window frames): projection below the cut, then cut.
@@ -654,6 +699,14 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements_of(Category::Grids) {
         let ElementData::Grid(g) = &e.data else { continue };
         grid_bubble(&mut dl, g.start, g.end, &g.name, scale, e.id);
+    }
+
+    // Area boundary lines go over the walls they follow.
+    for e in doc.elements_of(Category::AreaBoundary).filter(|_| view.area_scheme.is_some()) {
+        let ElementData::AreaBoundary(b) = &e.data else { continue };
+        if b.view == view.id {
+            dl.line(b.start, b.end, Stroke::new(2.4, [150, 60, 170, 255]), Some(e.id));
+        }
     }
 
     view_marks(doc, view, &mut dl);

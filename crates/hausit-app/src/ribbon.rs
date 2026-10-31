@@ -380,6 +380,29 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
             "Room Separator: divide a space into rooms without walls",
             Tool::RoomSeparation { start: None },
         );
+        if big(
+            ui,
+            Icon::AreaPlan,
+            "Area Plan",
+            "Area Plan: a plan for measuring Gross Building or Rentable areas",
+            app.dialogs.new_area_plan.is_some(),
+            true,
+        ) {
+            app.dialogs.new_area_plan = Some(crate::dialogs::NewAreaPlan {
+                scheme: hausit_model::AreaScheme::Gross,
+                level: app.active_level().or_else(|| app.doc.levels().first().map(|l| l.0)),
+                boundaries: true,
+            });
+        }
+        tool_button(
+            app,
+            ui,
+            Icon::AreaBoundary,
+            "Area Boundary",
+            "Area Boundary: lines that enclose areas in an area plan",
+            Tool::AreaBoundary { start: None },
+        );
+        tool_button(app, ui, Icon::Area, "Area", "Area: place an area in an area plan", Tool::Area);
     });
     panel(ui, "Datum", |ui| {
         tool_button(
@@ -528,6 +551,16 @@ fn annotate(app: &mut HausitApp, ui: &mut Ui) {
             "Region",
             "Filled Region: a patterned or solid area in this view; Masking hides what is under it",
             Tool::FilledRegion { pts: vec![] },
+        );
+    });
+    panel(ui, "Color Fill", |ui| {
+        tool_button(
+            app,
+            ui,
+            Icon::ColorLegend,
+            "Legend",
+            "Color Fill Legend: fills rooms (areas in an area plan) by a colour scheme and shows the key",
+            Tool::ColorLegend,
         );
     });
     panel(ui, "Spot", |ui| {

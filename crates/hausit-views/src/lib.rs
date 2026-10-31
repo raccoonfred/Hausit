@@ -291,6 +291,7 @@ pub fn build(doc: &Document, view: &View) -> DisplayList {
         ViewKind::FloorPlan { level } | ViewKind::CeilingPlan { level } => {
             let mut dl = plan::floor_plan(doc, view, *level);
             annotate::detailing(doc, view, &mut dl);
+            annotate::color_legend(doc, view, &mut dl);
             annotate::notes_and_tags(doc, view, None, &mut dl);
             dl
         }

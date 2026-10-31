@@ -40,6 +40,8 @@ pub fn layer_of(cat: Option<Category>) -> &'static str {
         Some(Category::DetailItems) => "A-DETL-PATT",
         Some(Category::SpotElevations) => "A-ANNO-SPOT",
         Some(Category::ModelGroups) => "A-GENM",
+        Some(Category::Areas) => "A-AREA-IDEN",
+        Some(Category::AreaBoundary) => "A-AREA-BNDY",
         Some(Category::Grids) => "S-GRID",
         Some(Category::Levels) => "A-ANNO-LEVL",
         None => "A-ANNO-SYMB",

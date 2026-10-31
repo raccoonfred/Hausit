@@ -300,6 +300,17 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(info.volume)).ro());
             p.push(Parameter::new("Number", G::IdentityData, V::Text(r.number.clone())));
             p.push(Parameter::new("Name", G::IdentityData, V::Text(r.name.clone())));
+            p.push(Parameter::new("Department", G::IdentityData, V::Text(r.department.clone())));
+        }
+        ElementData::Area(a) => {
+            let (area, perimeter) = doc.area_size(a);
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(area)).ro());
+            p.push(Parameter::new("Perimeter", G::Dimensions, V::Length(perimeter)).ro());
+            p.push(Parameter::new("Number", G::IdentityData, V::Text(a.number.clone())));
+            p.push(Parameter::new("Name", G::IdentityData, V::Text(a.name.clone())));
+        }
+        ElementData::AreaBoundary(b) => {
+            p.push(Parameter::new("Length", G::Dimensions, V::Length(b.start.distance(b.end))).ro());
         }
         ElementData::RoomSeparation(l) => {
             p.push(
@@ -539,6 +550,12 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Limit Offset", V::Length(v)) => r.limit_offset = v,
                 ("Number", V::Text(s)) => r.number = s,
                 ("Name", V::Text(s)) => r.name = s,
+                ("Department", V::Text(s)) => r.department = s,
+                _ => return Err(bad()),
+            },
+            ElementData::Area(a) => match (name, value) {
+                ("Number", V::Text(s)) => a.number = s,
+                ("Name", V::Text(s)) => a.name = s,
                 _ => return Err(bad()),
             },
             ElementData::TextNote(t) => match (name, value) {
@@ -561,9 +578,11 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 ("Line Style", V::Choice(i)) if i < LineStyle::ALL.len() => r.border = LineStyle::ALL[i],
                 _ => return Err(bad()),
             },
-            ElementData::RoomSeparation(_) | ElementData::Dimension(_) | ElementData::SpotElevation(_) | ElementData::Group(_) => {
-                return Err(bad())
-            }
+            ElementData::RoomSeparation(_)
+            | ElementData::Dimension(_)
+            | ElementData::SpotElevation(_)
+            | ElementData::Group(_)
+            | ElementData::AreaBoundary(_) => return Err(bad()),
         },
     }
     doc.touch();

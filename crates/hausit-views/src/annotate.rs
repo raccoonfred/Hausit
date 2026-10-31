@@ -386,6 +386,53 @@ pub fn detailing(doc: &Document, view: &View, dl: &mut DisplayList) {
     }
 }
 
+/// The colour fill legend of a view's colour scheme, with its top left
+/// corner at the view's legend point.
+pub fn color_legend(doc: &Document, view: &View, dl: &mut DisplayList) {
+    let (Some(at), Some(by)) = (view.color_legend, view.color_scheme) else {
+        return;
+    };
+    let (_, legend) = doc.color_fill(view.id);
+    let scale = view.scale as f64;
+    let h = 2.5 * scale;
+    let what = if view.area_scheme.is_some() { "Area" } else { "Room" };
+    dl.push(
+        Prim::Text {
+            pos: at,
+            text: format!("{what} Legend: {}", by.label()),
+            height: h * 1.2,
+            anchor: Anchor::Left,
+            angle: 0.0,
+        },
+        None,
+        None,
+        None,
+    );
+    for (i, entry) in legend.iter().enumerate() {
+        let y = at.y - h * 2.2 * (i as f64 + 1.0);
+        let [r, g, b] = entry.color;
+        let sw = vec![
+            DVec2::new(at.x, y - h * 0.6),
+            DVec2::new(at.x + h * 2.0, y - h * 0.6),
+            DVec2::new(at.x + h * 2.0, y + h * 0.6),
+            DVec2::new(at.x, y + h * 0.6),
+        ];
+        dl.push(Prim::Polygon(sw), Some(THIN), Some([r, g, b, 255]), None);
+        dl.push(
+            Prim::Text {
+                pos: DVec2::new(at.x + h * 2.6, y),
+                text: entry.value.clone(),
+                height: h,
+                anchor: Anchor::Left,
+                angle: 0.0,
+            },
+            None,
+            None,
+            None,
+        );
+    }
+}
+
 /// A spot elevation: a small target at the point, a leader with a
 /// shoulder, and the height over the shoulder.
 fn spot(dl: &mut DisplayList, at: DVec2, label: DVec2, text: &str, scale: f64, id: ElementId) {

@@ -48,6 +48,10 @@ pub enum Icon {
     DetailLine,
     Region,
     SpotElevation,
+    AreaPlan,
+    AreaBoundary,
+    Area,
+    ColorLegend,
     Attach,
     Beam,
     Brace,
@@ -149,6 +153,40 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             poly(&[(10.0, 22.0), (6.0, 22.0), (10.0, 18.0)], Color32::BLACK, ink);
             seg((12.0, 20.0), (20.0, 12.0), ink);
             seg((20.0, 12.0), (30.0, 12.0), ink);
+        }
+        Icon::AreaPlan => {
+            p.rect(rect(4.0, 4.0, 28.0, 28.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            poly(
+                &[(8.0, 8.0), (24.0, 8.0), (24.0, 18.0), (16.0, 18.0), (16.0, 24.0), (8.0, 24.0)],
+                Color32::from_rgb(215, 190, 235),
+                Stroke::new(1.5, Color32::from_rgb(150, 60, 170)),
+            );
+        }
+        Icon::AreaBoundary => {
+            let purple = Stroke::new(2.0, Color32::from_rgb(150, 60, 170));
+            seg((5.0, 26.0), (5.0, 6.0), purple);
+            seg((5.0, 6.0), (27.0, 6.0), purple);
+            seg((27.0, 6.0), (27.0, 18.0), purple);
+        }
+        Icon::Area => {
+            poly(
+                &[(4.0, 6.0), (28.0, 6.0), (28.0, 26.0), (4.0, 26.0)],
+                Color32::from_rgb(215, 190, 235),
+                Stroke::new(1.5, Color32::from_rgb(150, 60, 170)),
+            );
+            seg((10.0, 13.0), (22.0, 13.0), ink);
+            seg((12.0, 19.0), (20.0, 19.0), ink);
+        }
+        Icon::ColorLegend => {
+            for (i, c) in [(244, 177, 131), (169, 209, 142), (155, 194, 230)].into_iter().enumerate() {
+                let y = 5.0 + 8.0 * i as f32;
+                poly(
+                    &[(4.0, y), (11.0, y), (11.0, y + 6.0), (4.0, y + 6.0)],
+                    Color32::from_rgb(c.0, c.1, c.2),
+                    ink,
+                );
+                seg((14.0, y + 3.0), (28.0, y + 3.0), ink);
+            }
         }
         Icon::Group => {
             p.rect(

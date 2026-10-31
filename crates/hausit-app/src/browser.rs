@@ -22,6 +22,8 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 for group in [
                     "Floor Plans",
                     "Ceiling Plans",
+                    "Area Plans (Gross Building)",
+                    "Area Plans (Rentable)",
                     "3D Views",
                     "Elevations (Building Elevation)",
                     "Sections (Building Section)",
@@ -33,6 +35,11 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         .filter(|v| {
                             let g = if v.callout_of.is_some() {
                                 "Detail Views (Callouts)"
+                            } else if let Some(s) = v.area_scheme {
+                                match s {
+                                    hausit_model::AreaScheme::Gross => "Area Plans (Gross Building)",
+                                    hausit_model::AreaScheme::Rentable => "Area Plans (Rentable)",
+                                }
                             } else {
                                 v.kind.browser_group()
                             };

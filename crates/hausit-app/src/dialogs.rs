@@ -33,6 +33,13 @@ pub struct NewSchedule {
     pub name: String,
 }
 
+/// New Area Plan: scheme, level and whether to add boundary lines.
+pub struct NewAreaPlan {
+    pub scheme: hausit_model::AreaScheme,
+    pub level: Option<ElementId>,
+    pub boundaries: bool,
+}
+
 /// The Text tool's editor, for a new note (`id` None) or an existing one.
 pub struct TextNoteDialog {
     pub id: Option<ElementId>,
@@ -73,6 +80,7 @@ pub struct Dialogs {
     pub revit_file: Option<RevitFileDialog>,
     pub type_props: Option<TypeProps>,
     pub new_schedule: Option<NewSchedule>,
+    pub new_area_plan: Option<NewAreaPlan>,
     pub rename: Option<Rename>,
     pub project_info: bool,
     pub units: bool,
@@ -189,6 +197,7 @@ fn window(title: &str) -> egui::Window<'_> {
 pub fn show(app: &mut HausitApp, ctx: &Context) {
     type_properties(app, ctx);
     new_schedule(app, ctx);
+    new_area_plan(app, ctx);
     rename(app, ctx);
     project_info(app, ctx);
     units(app, ctx);
@@ -446,6 +455,44 @@ fn new_schedule(app: &mut HausitApp, ctx: &Context) {
             }
         }
         Some(false) => app.dialogs.new_schedule = None,
+        None => {}
+    }
+}
+
+fn new_area_plan(app: &mut HausitApp, ctx: &Context) {
+    let levels: Vec<(ElementId, String)> = app.doc.levels().into_iter().map(|(id, l)| (id, l.name.clone())).collect();
+    let Some(d) = app.dialogs.new_area_plan.as_mut() else { return };
+    let mut result = None;
+    window("New Area Plan").show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Type:");
+            for s in hausit_model::AreaScheme::ALL {
+                ui.radio_value(&mut d.scheme, s, s.label());
+            }
+        });
+        ui.label("Level:");
+        for (id, name) in &levels {
+            ui.radio_value(&mut d.level, Some(*id), name);
+        }
+        ui.checkbox(&mut d.boundaries, "Automatically create area boundary lines along exterior walls");
+        ui.horizontal(|ui| {
+            if ui.add_enabled(d.level.is_some(), egui::Button::new("   OK   ")).clicked() {
+                result = Some(true);
+            }
+            if ui.button("Cancel").clicked() {
+                result = Some(false);
+            }
+        });
+    });
+    match result {
+        Some(true) => {
+            let d = app.dialogs.new_area_plan.take().unwrap();
+            let Some(level) = d.level else { return };
+            if let Some(id) = app.transact("Create Area Plan", |doc| doc.create_area_plan(level, d.scheme, d.boundaries)) {
+                app.open_view(id);
+            }
+        }
+        Some(false) => app.dialogs.new_area_plan = None,
         None => {}
     }
 }

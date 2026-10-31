@@ -553,6 +553,7 @@ pub fn sample_project() -> Document {
             number,
             upper_limit: l2,
             limit_offset: 0.0,
+            department: String::new(),
         }));
     }
 

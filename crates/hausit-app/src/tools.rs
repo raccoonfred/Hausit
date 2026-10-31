@@ -142,6 +142,14 @@ pub enum Tool {
     SpotElevation {
         point: Option<DVec2>,
     },
+    /// Area Boundary lines in an area plan.
+    AreaBoundary {
+        start: Option<DVec2>,
+    },
+    /// Area: click inside area boundary lines.
+    Area,
+    /// Colour Fill Legend: click where it goes.
+    ColorLegend,
 }
 
 impl Tool {
@@ -198,6 +206,9 @@ impl Tool {
             Tool::PlaceGroup { .. } => "Modify | Place Group",
             Tool::FilledRegion { .. } => "Modify | Create Filled Region Boundary",
             Tool::SpotElevation { .. } => "Modify | Spot Elevation",
+            Tool::AreaBoundary { .. } => "Modify | Place Area Boundary",
+            Tool::Area => "Modify | Place Area",
+            Tool::ColorLegend => "Modify | Color Fill Legend",
             Tool::Offset => "Modify | Offset",
             Tool::Array { .. } => "Modify | Array",
         }
@@ -266,6 +277,10 @@ impl Tool {
                 "Click the point to mark: a floor, roof or stair in plan, any point in an elevation or section."
             }
             Tool::SpotElevation { .. } => "Click where the label goes.",
+            Tool::AreaBoundary { start: None } => "Click to enter area boundary start point, or Pick Walls in the options bar.",
+            Tool::AreaBoundary { .. } => "Click to enter line end point. Esc ends the chain.",
+            Tool::Area => "Click inside an area enclosed by area boundary lines to place an area.",
+            Tool::ColorLegend => "Click where the colour fill legend goes.",
             Tool::LinearDimension { .. } => {
                 "Move up or down for a horizontal dimension, left or right for a vertical one, and click to place it."
             }
@@ -335,6 +350,7 @@ impl Tool {
             | Tool::Section { start }
             | Tool::Callout { start }
             | Tool::RoomSeparation { start }
+            | Tool::AreaBoundary { start }
             | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start,
             Tool::Move { base } | Tool::Copy { base } => *base,
@@ -374,6 +390,7 @@ impl Tool {
             | Tool::Section { start }
             | Tool::Callout { start }
             | Tool::RoomSeparation { start }
+            | Tool::AreaBoundary { start }
             | Tool::Beam { start, .. }
             | Tool::Mirror { start, .. } => *start = None,
             Tool::Stair { pts } | Tool::Railing { pts } => pts.clear(),
@@ -516,6 +533,8 @@ pub struct ToolOptions {
     pub wall_height: f64,
     pub location_line: LocationLine,
     pub chain: bool,
+    /// Area Boundary: pick walls instead of drawing lines.
+    pub area_pick_walls: bool,
     pub shape: DrawShape,
     pub roof_slope: f64,
     pub roof_overhang: f64,
@@ -568,6 +587,7 @@ impl Default for ToolOptions {
             wall_height: 3000.0,
             location_line: LocationLine::WallCenterline,
             chain: true,
+            area_pick_walls: false,
             shape: DrawShape::Line,
             roof_slope: 30.0,
             roof_overhang: 600.0,
@@ -618,6 +638,9 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Ceiling
             | Tool::Room
             | Tool::RoomSeparation { .. }
+            | Tool::AreaBoundary { .. }
+            | Tool::Area
+            | Tool::ColorLegend
             | Tool::Dimension { .. }
             | Tool::Rotate { .. }
             | Tool::Mirror { .. }
@@ -1466,6 +1489,76 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 return;
             }
         }
+        Tool::AreaBoundary { start } => {
+            let Some(view) = app
+                .active_view
+                .filter(|v| app.doc.view(*v).is_some_and(|v| v.area_scheme.is_some()))
+            else {
+                app.status = "Area boundaries go in an area plan. Create one with Area Plan.".into();
+                app.tool = tool;
+                return;
+            };
+            if app.options.area_pick_walls {
+                pick_area_boundary_wall(app, view, p);
+                app.tool = tool;
+                return;
+            }
+            match *start {
+                None => *start = Some(p),
+                Some(a) if a.distance(p) > 10.0 => {
+                    let b = hausit_model::AreaBoundary { view, start: a, end: p };
+                    app.transact("Create Area Boundary", |doc| Ok(doc.add_element(ElementData::AreaBoundary(b))));
+                    *start = if app.options.chain { Some(p) } else { None };
+                }
+                _ => {}
+            }
+        }
+        Tool::Area => {
+            let Some(view) = app
+                .active_view
+                .filter(|v| app.doc.view(*v).is_some_and(|v| v.area_scheme.is_some()))
+            else {
+                app.status = "Areas go in an area plan. Create one with Area Plan.".into();
+                app.tool = tool;
+                return;
+            };
+            let a = hausit_model::Area {
+                view,
+                point: p,
+                name: "Area".into(),
+                number: app.doc.next_area_number(view),
+            };
+            if app.doc.area_boundary(&a).is_none() {
+                app.status = "Area is not in a properly enclosed region. Add area boundary lines around it.".into();
+            } else if app.doc.elements_of(Category::Areas).any(|e| match &e.data {
+                ElementData::Area(o) => {
+                    o.view == view && app.doc.area_boundary(o).is_some_and(|b| hausit_core::geom::point_in_polygon(p, &b))
+                }
+                _ => false,
+            }) {
+                app.status = "Area is redundant: there is already an area in this enclosed region.".into();
+            } else if let Some(id) = app.transact("Create Area", |doc| Ok(doc.add_element(ElementData::Area(a)))) {
+                app.status = format!("Placed {}.", app.doc.describe(id));
+            }
+            app.tool = tool;
+            return;
+        }
+        Tool::ColorLegend => {
+            if let Some(view) = app.active_view {
+                app.transact("Place Color Fill Legend", |doc| {
+                    let v = doc
+                        .view_mut(view)
+                        .ok_or_else(|| hausit_model::ModelError::Rejected("No view".into()))?;
+                    v.color_legend = Some(p);
+                    if v.color_scheme.is_none() {
+                        v.color_scheme = Some(hausit_model::ColorBy::Name);
+                    }
+                    Ok(())
+                });
+            }
+            app.tool = Tool::Modify;
+            return;
+        }
         Tool::RoomSeparation { start } => match *start {
             None => *start = Some(p),
             Some(a) if a.distance(p) > 10.0 => {
@@ -1992,6 +2085,36 @@ pub fn ceiling_region(app: &HausitApp, p: DVec2) -> Option<Vec<DVec2>> {
         .min_by(|a, b| hausit_core::geom::polygon_area(a).total_cmp(&hausit_core::geom::polygon_area(b)))
 }
 
+/// Area Boundary in Pick Walls mode: a line along the wall's outer face
+/// (Gross Building) or centreline (Rentable).
+fn pick_area_boundary_wall(app: &mut HausitApp, view: ElementId, p: DVec2) {
+    let Some(wall) = app.hover.filter(|h| app.doc.element(*h).and_then(|e| e.as_wall()).is_some()) else {
+        app.status = "Pick a wall.".into();
+        return;
+    };
+    let scheme = app.doc.view(view).and_then(|v| v.area_scheme);
+    let Some(w) = app.doc.element(wall).and_then(|e| e.as_wall()).cloned() else {
+        return;
+    };
+    let Some(o) = hausit_model::geometry::wall_outline(&app.doc, wall) else {
+        return;
+    };
+    let (a, b) = match scheme {
+        Some(hausit_model::AreaScheme::Gross) => {
+            // The face nearest the pick: click near the outside face.
+            let d = |a: DVec2, b: DVec2| distance_to_segment(p, a, b);
+            if d(o[3], o[2]) < d(o[0], o[1]) {
+                (o[3], o[2])
+            } else {
+                (o[0], o[1])
+            }
+        }
+        _ => (w.start, w.end),
+    };
+    let b = hausit_model::AreaBoundary { view, start: a, end: b };
+    app.transact("Create Area Boundary", |doc| Ok(doc.add_element(ElementData::AreaBoundary(b))));
+}
+
 fn place_room(app: &mut HausitApp, p: DVec2) -> Option<ElementId> {
     let level = app.active_level()?;
     if !hausit_model::rooms::rooms_at(&app.doc, level, p).is_empty() {
@@ -2009,6 +2132,7 @@ fn place_room(app: &mut HausitApp, p: DVec2) -> Option<ElementId> {
         number: app.doc.next_room_number(),
         upper_limit,
         limit_offset,
+        department: String::new(),
     };
     let enclosed = hausit_model::rooms::room_boundary(&app.doc, &room).is_some();
     let id = app.transact("Create Room", |doc| Ok(doc.add_element(ElementData::Room(room))))?;
@@ -2105,6 +2229,8 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::FilledRegion(r) => pts.extend(&r.boundary),
             ElementData::SpotElevation(s) => pts.push(s.point),
             ElementData::Group(g) => pts.push(g.origin),
+            ElementData::AreaBoundary(b) => pts.extend([b.start, b.end]),
+            ElementData::Area(a) => pts.push(a.point),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }

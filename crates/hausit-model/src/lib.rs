@@ -11,6 +11,7 @@
 //! * [`geometry`] turns elements into solids that views project and cut.
 
 pub mod annotation;
+pub mod areas;
 pub mod category;
 pub mod component;
 pub mod curtain;
@@ -36,6 +37,7 @@ pub mod styles;
 pub mod template;
 pub mod view;
 
+pub use areas::{Area, AreaBoundary, AreaScheme, ColorBy};
 pub use category::Category;
 pub use component::FamilyDef;
 pub use curtain::{CurtainGrids, CurtainLayout, CURTAIN_WALL};

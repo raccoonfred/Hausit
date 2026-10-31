@@ -2168,6 +2168,7 @@ impl<'a> Importer<'a> {
             number,
             upper_limit: upper,
             limit_offset: 0.0,
+            department: String::new(),
         }));
         self.report.rooms += 1;
     }

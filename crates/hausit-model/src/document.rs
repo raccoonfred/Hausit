@@ -232,6 +232,7 @@ impl Document {
                     ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_) => {
                         self.is_detail_of(&e.data, id)
                     }
+                    ElementData::AreaBoundary(_) | ElementData::Area(_) => self.is_area_of(&e.data, id),
                     ElementData::Tag(t) => t.view == id || t.host == id,
                     // Dimensions go with their view or any element they measure.
                     ElementData::Dimension(d) => {
@@ -371,6 +372,11 @@ impl Document {
                 }
                 ElementData::Tag(t) => t.position += delta,
                 ElementData::Group(g) => g.origin += delta,
+                ElementData::AreaBoundary(b) => {
+                    b.start += delta;
+                    b.end += delta;
+                }
+                ElementData::Area(a) => a.point += delta,
                 d @ (ElementData::DetailLine(_) | ElementData::FilledRegion(_) | ElementData::SpotElevation(_)) => {
                     crate::detail::map_points(d, &|p| p + delta)
                 }
@@ -591,6 +597,11 @@ impl Document {
                     crate::detail::map_points(d, f)
                 }
                 ElementData::Tag(t) => t.position = f(t.position),
+                ElementData::AreaBoundary(b) => {
+                    b.start = f(b.start);
+                    b.end = f(b.end);
+                }
+                ElementData::Area(a) => a.point = f(a.point),
                 ElementData::Group(g) => {
                     g.origin = f(g.origin);
                     g.rotation = if mirror { 2.0 * angle - g.rotation } else { g.rotation + angle };

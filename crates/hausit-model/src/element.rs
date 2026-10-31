@@ -55,6 +55,8 @@ impl Element {
             | ElementData::DetailLine(_)
             | ElementData::FilledRegion(_)
             | ElementData::SpotElevation(_)
+            | ElementData::AreaBoundary(_)
+            | ElementData::Area(_)
             | ElementData::Tag(_) => None,
         }
     }
@@ -84,6 +86,8 @@ impl Element {
             | ElementData::DetailLine(_)
             | ElementData::FilledRegion(_)
             | ElementData::SpotElevation(_)
+            | ElementData::AreaBoundary(_)
+            | ElementData::Area(_)
             | ElementData::Tag(_) => {}
         }
     }
@@ -137,6 +141,8 @@ pub enum ElementData {
     FilledRegion(crate::detail::FilledRegion),
     SpotElevation(crate::detail::SpotElevation),
     Group(crate::groups::ModelGroup),
+    AreaBoundary(crate::areas::AreaBoundary),
+    Area(crate::areas::Area),
 }
 
 impl ElementData {
@@ -193,6 +199,8 @@ impl ElementData {
             ElementData::FilledRegion(_) => Category::DetailItems,
             ElementData::SpotElevation(_) => Category::SpotElevations,
             ElementData::Group(_) => Category::ModelGroups,
+            ElementData::AreaBoundary(_) => Category::AreaBoundary,
+            ElementData::Area(_) => Category::Areas,
         }
     }
 }
@@ -801,6 +809,8 @@ pub struct Room {
     /// Limit Offset above the upper limit, mm.
     #[serde(default)]
     pub limit_offset: f64,
+    #[serde(default)]
+    pub department: String,
 }
 
 /// A line drawn on a level, such as a room separation line.

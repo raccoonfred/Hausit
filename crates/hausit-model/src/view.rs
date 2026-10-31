@@ -252,6 +252,15 @@ pub struct View {
     /// Crop Region Visible: draws the crop boundary, which can be dragged.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub crop_visible: bool,
+    /// Area plans: the area scheme (an area plan is a floor plan with one).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area_scheme: Option<crate::areas::AreaScheme>,
+    /// Colour scheme filling rooms (areas in an area plan), and where its
+    /// colour fill legend is placed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_scheme: Option<crate::areas::ColorBy>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_legend: Option<DVec2>,
 }
 
 /// View Range of a plan (besides the cut plane), as offsets from its level:
@@ -426,6 +435,9 @@ impl View {
             temp_hide: None,
             view_range: kind_is_plan.then(ViewRange::default),
             crop_visible: false,
+            area_scheme: None,
+            color_scheme: None,
+            color_legend: None,
         }
     }
 

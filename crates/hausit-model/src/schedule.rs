@@ -115,6 +115,8 @@ impl ScheduleField {
             | Category::DetailItems
             | Category::SpotElevations
             | Category::ModelGroups
+            | Category::AreaBoundary
+            | Category::Areas
             | Category::Tags => return vec![],
         }
         v
@@ -148,7 +150,9 @@ impl ScheduleField {
             | Category::Lines
             | Category::DetailItems
             | Category::SpotElevations
-            | Category::ModelGroups => {
+            | Category::ModelGroups
+            | Category::Areas
+            | Category::AreaBoundary => {
                 vec![]
             }
         }

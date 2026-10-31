@@ -164,6 +164,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 | Tool::Door
                 | Tool::Window
                 | Tool::Room
+                | Tool::Area
                 | Tool::Dimension { .. }
                 | Tool::Trim { .. }
                 | Tool::Split
@@ -1209,6 +1210,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
         Tool::Grid { start: Some(a) }
         | Tool::Section { start: Some(a) }
         | Tool::RoomSeparation { start: Some(a) }
+        | Tool::AreaBoundary { start: Some(a) }
         | Tool::Beam { start: Some(a), .. } => seg(*a, p),
         Tool::Mirror {
             draw: true,

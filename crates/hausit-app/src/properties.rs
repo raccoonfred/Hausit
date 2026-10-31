@@ -511,6 +511,36 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                 });
             });
     }
+    if matches!(v.kind, ViewKind::FloorPlan { .. }) && v.callout_of.is_none() {
+        egui::CollapsingHeader::new(RichText::new("Color Scheme").strong())
+            .default_open(true)
+            .show(ui, |ui| {
+                egui::Grid::new("view_color_scheme").num_columns(2).show(ui, |ui| {
+                    if let Some(s) = v.area_scheme {
+                        ui.label("Area Scheme");
+                        ui.label(s.label());
+                        ui.end_row();
+                    }
+                    ui.label("Color Scheme");
+                    egui::ComboBox::from_id_salt("vp_color_scheme")
+                        .selected_text(v.color_scheme.map(|c| c.label()).unwrap_or("<none>"))
+                        .width(140.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut v.color_scheme, None, "<none>");
+                            for c in hausit_model::ColorBy::ALL {
+                                ui.selectable_value(&mut v.color_scheme, Some(c), c.label());
+                            }
+                        });
+                    ui.end_row();
+                    ui.label("Legend");
+                    let mut shown = v.color_legend.is_some();
+                    if ui.add_enabled(shown, egui::Checkbox::without_text(&mut shown)).changed() && !shown {
+                        v.color_legend = None;
+                    }
+                    ui.end_row();
+                });
+            });
+    }
     if let ViewKind::Schedule(_) = v.kind {
         crate::schedule_view::properties(app, ui, view_id);
         return;

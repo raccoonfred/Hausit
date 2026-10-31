@@ -167,6 +167,12 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::RoomSeparation { .. } => {
                         ui.checkbox(&mut app.options.chain, "Chain");
                     }
+                    Tool::AreaBoundary { .. } => {
+                        ui.selectable_value(&mut app.options.area_pick_walls, false, "Draw Lines");
+                        ui.selectable_value(&mut app.options.area_pick_walls, true, "Pick Walls");
+                        ui.separator();
+                        ui.add_enabled(!app.options.area_pick_walls, egui::Checkbox::new(&mut app.options.chain, "Chain"));
+                    }
                     Tool::Beam { brace: false, .. } => {
                         ui.checkbox(&mut app.options.chain, "Chain");
                         ui.separator();
