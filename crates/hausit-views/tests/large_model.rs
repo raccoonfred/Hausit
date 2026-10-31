@@ -27,6 +27,7 @@ fn grid_building(n: usize) -> Document {
             room_bounding: true,
             attached_top: vec![],
             disallow_join: [false; 2],
+            arc_mid: None,
         }))
     };
     let mut walls = Vec::new();

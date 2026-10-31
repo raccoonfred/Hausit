@@ -306,6 +306,9 @@ impl Document {
                 ElementData::Wall(w) => {
                     w.start += delta;
                     w.end += delta;
+                    if let Some(m) = &mut w.arc_mid {
+                        *m += delta;
+                    }
                 }
                 ElementData::Grid(g) => {
                     g.start += delta;
@@ -363,12 +366,12 @@ impl Document {
                 Some(o) if !ids.contains(&o.host) => o.host,
                 _ => continue,
             };
-            let dir = match self.elements.get(&host).and_then(|e| e.as_wall()) {
-                Some(w) => w.direction(),
-                None => continue,
+            let Some(w) = self.elements.get(&host).and_then(|e| e.as_wall()).cloned() else {
+                continue;
             };
             if let Some(ElementData::Door(o) | ElementData::Window(o)) = self.elements.get_mut(id).map(|e| &mut e.data) {
-                o.offset += delta.dot(dir);
+                // Along the wall: to the point on it nearest the moved centre.
+                o.offset = w.param_of(w.point_at(o.offset) + delta);
             }
         }
         self.touch();
@@ -477,6 +480,7 @@ impl Document {
             match &mut e.data {
                 ElementData::Wall(w) => {
                     let (a, b) = (f(w.start), f(w.end));
+                    w.arc_mid = w.arc_mid.map(f);
                     if mirror {
                         reversed.push((*id, w.length()));
                         w.start = b;

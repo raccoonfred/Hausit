@@ -5,7 +5,7 @@
 use crate::category::Category;
 use crate::document::Document;
 use crate::element::{ElementData, Room};
-use crate::geometry::{column_extent, column_outline, wall_outline};
+use crate::geometry::{column_extent, column_outline, wall_footprint};
 use hausit_core::geom::{line_intersection, point_in_polygon, polygon_area, polygon_perimeter};
 use hausit_core::{DVec2, ElementId};
 
@@ -26,7 +26,7 @@ pub fn bounding_segments(doc: &Document, level: ElementId) -> Vec<(DVec2, DVec2)
     for e in doc.elements() {
         match &e.data {
             ElementData::Wall(w) if w.room_bounding && doc.wall_base_z(w) <= z && doc.wall_top_z(w) > z => {
-                if let Some(o) = wall_outline(doc, e.id) {
+                if let Some(o) = wall_footprint(doc, e.id) {
                     poly(&o, &mut segs);
                 }
             }

@@ -93,7 +93,7 @@ pub fn anchor(doc: &Document, host: ElementId) -> Option<DVec3> {
         ElementData::Wall(w) => {
             let b = element_geometry(doc, host).map(|g| g.bounds());
             let z = b.map(|b| (b.min.z + b.max.z) / 2.0).unwrap_or(level(w.base_level));
-            at((w.start + w.end) / 2.0, z)
+            at(w.point_at(w.length() / 2.0), z)
         }
         ElementData::Room(r) => at(r.point, level(r.level)),
         ElementData::Column(c) => at(c.point, level(c.base_level) + c.base_offset),

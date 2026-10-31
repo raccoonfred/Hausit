@@ -376,6 +376,8 @@ pub enum DrawShape {
     PickWalls,
     /// Roof sketches: a slope arrow from tail to head.
     SlopeArrow,
+    /// Walls: start, end, then a point on the arc (Start-End-Radius Arc).
+    Arc,
 }
 
 /// One boundary line of a floor or roof sketch.
@@ -507,6 +509,8 @@ pub struct ToolOptions {
     /// last item ("Move To: Last") or the second.
     pub array_count: usize,
     pub array_to_last: bool,
+    /// Arc walls: the end point, once picked (the next click sets the arc).
+    pub arc_end: Option<DVec2>,
 }
 
 impl Default for ToolOptions {
@@ -535,6 +539,7 @@ impl Default for ToolOptions {
             offset_copy: true,
             array_count: 3,
             array_to_last: false,
+            arc_end: None,
         }
     }
 }
@@ -883,15 +888,16 @@ pub fn pick_host(app: &HausitApp, p: DVec2, width: f64, tol: f64) -> Option<Host
             continue;
         }
         let half_t = app.doc.type_of(e.id).map(|t| t.thickness() / 2.0).unwrap_or(100.0);
-        let (q, t) = closest_on_segment(p, w.start, w.end);
+        let at = w.param_of(p);
+        let q = w.point_at(at);
         let d = q.distance(p);
         if d > half_t + tol {
             continue;
         }
         if best.as_ref().map(|b| d < b.1).unwrap_or(true) {
-            let offset = (t * w.length()).clamp(width / 2.0, w.length() - width / 2.0);
+            let offset = at.clamp(width / 2.0, w.length() - width / 2.0);
             // Cursor on the exterior (left) side flips the swing outwards.
-            let flip_facing = (p - q).dot(perp(w.direction())) > 0.0;
+            let flip_facing = (p - q).dot(perp(w.tangent_at(at))) > 0.0;
             best = Some((
                 HostPick {
                     wall: e.id,
@@ -905,16 +911,46 @@ pub fn pick_host(app: &HausitApp, p: DVec2, width: f64, tol: f64) -> Option<Host
     best.map(|b| b.0)
 }
 
-/// Wall centreline for a drawn line, honouring the Location Line option.
-fn centreline(app: &HausitApp, a: DVec2, b: DVec2, type_id: ElementId) -> (DVec2, DVec2) {
+/// How far the wall centreline lies to the left of the drawn line, for
+/// the Location Line option.
+pub fn location_shift(app: &HausitApp, type_id: ElementId) -> f64 {
     let t = app.doc.family_type(type_id).map(|t| t.thickness()).unwrap_or(200.0);
-    let n = perp((b - a).normalize_or_zero());
-    let shift = match app.options.location_line {
+    match app.options.location_line {
         LocationLine::WallCenterline => 0.0,
         LocationLine::FinishFaceExterior => -t / 2.0,
         LocationLine::FinishFaceInterior => t / 2.0,
-    };
+    }
+}
+
+/// Wall centreline for a drawn line, honouring the Location Line option.
+fn centreline(app: &HausitApp, a: DVec2, b: DVec2, type_id: ElementId) -> (DVec2, DVec2) {
+    let n = perp((b - a).normalize_or_zero());
+    let shift = location_shift(app, type_id);
     (a + n * shift, b + n * shift)
+}
+
+/// An arc wall from `a` to `b` through `m` (Start-End-Radius Arc). The
+/// location line shifts radially; Space flips the exterior side.
+fn build_arc_wall(app: &mut HausitApp, a: DVec2, m: DVec2, b: DVec2, structural: bool) -> Option<Wall> {
+    let Some(arc) = hausit_model::ArcCurve::through(a, m, b) else {
+        app.status = "The three points are in line. Pick a point off the line to curve the wall.".into();
+        return None;
+    };
+    let mut wall = build_wall(app, a, b, structural)?;
+    let shift = location_shift(app, wall.type_id);
+    let left = |p: DVec2| perp(arc.tangent_at(arc.param_of(p)));
+    let (a2, m2, b2) = (a + left(a) * shift, m + left(m) * shift, b + left(b) * shift);
+    // The arc's midpoint: the point m was picked anywhere on the arc.
+    let mid = |s: DVec2, e: DVec2, through: DVec2| {
+        let arc = hausit_model::ArcCurve::through(s, through, e)?;
+        Some(arc.point_at(arc.length() / 2.0))
+    };
+    let (s, e) = if app.options.flip { (b2, a2) } else { (a2, b2) };
+    wall.start = s;
+    wall.end = e;
+    wall.arc_mid = mid(s, e, m2);
+    wall.arc_mid?;
+    Some(wall)
 }
 
 fn make_wall(app: &mut HausitApp, a: DVec2, b: DVec2, structural: bool) -> Option<ElementId> {
@@ -956,6 +992,7 @@ fn build_wall(app: &mut HausitApp, a: DVec2, b: DVec2, structural: bool) -> Opti
         room_bounding: true,
         attached_top: vec![],
         disallow_join: [false; 2],
+        arc_mid: None,
     })
 }
 
@@ -978,7 +1015,24 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
     match &mut tool {
         Tool::Modify => {}
         Tool::Wall { start, structural } => match *start {
-            None => *start = Some(p),
+            None => {
+                *start = Some(p);
+                app.options.arc_end = None;
+            }
+            Some(a) if app.options.shape == DrawShape::Arc => match app.options.arc_end {
+                None if a.distance(p) > 10.0 => {
+                    app.options.arc_end = Some(p);
+                    app.status = "Click a point on the arc to set its radius.".into();
+                }
+                None => {}
+                Some(b) => {
+                    if let Some(w) = build_arc_wall(app, a, p, b, *structural) {
+                        app.transact("Create Wall", |doc| Ok(doc.add_element(ElementData::Wall(w))));
+                        *start = if app.options.chain { Some(b) } else { None };
+                        app.options.arc_end = None;
+                    }
+                }
+            },
             Some(a) => {
                 if app.options.shape == DrawShape::Rectangle {
                     let r = rectangle(a, p);
@@ -1084,6 +1138,7 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                         return;
                     }
                 },
+                DrawShape::Arc => {}
                 DrawShape::SlopeArrow => match sketch.start.take() {
                     None => sketch.start = Some(p),
                     Some(a) if a.distance(p) > 10.0 => {
@@ -2006,8 +2061,8 @@ fn split_wall(app: &mut HausitApp, id: ElementId, p: DVec2) {
     let Some(w) = app.doc.element(id).and_then(|e| e.as_wall()).cloned() else {
         return;
     };
-    let (q, t) = closest_on_segment(p, w.start, w.end);
-    let at = t * w.length();
+    let at = w.param_of(p);
+    let q = w.point_at(at);
     if at < 10.0 || w.length() - at < 10.0 {
         app.status = "Click away from the wall's ends to split it.".into();
         return;
@@ -2021,9 +2076,14 @@ fn split_wall(app: &mut HausitApp, id: ElementId, p: DVec2) {
     app.transact("Split Wall", |doc| {
         let mut second = w.clone();
         second.start = q;
+        // Arc walls split into two arcs on the same circle.
+        second.arc_mid = w.arc_mid.map(|_| w.point_at((at + w.length()) / 2.0));
+        second.disallow_join[0] = false;
         let new = doc.add_element(ElementData::Wall(second));
         if let Some(ElementData::Wall(first)) = doc.element_mut(id).map(|e| &mut e.data) {
             first.end = q;
+            first.arc_mid = w.arc_mid.map(|_| w.point_at(at / 2.0));
+            first.disallow_join[1] = false;
         }
         for (o, off) in moved {
             if let Some(ElementData::Door(h) | ElementData::Window(h)) = doc.element_mut(o).map(|e| &mut e.data) {

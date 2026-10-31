@@ -171,7 +171,9 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 .as_ref()
                 .map(|s| matches!(s.kind, SnapKind::Nearest | SnapKind::Alignment))
                 .unwrap_or(true);
-            let free_angle = mode == DrawShape::Rectangle && matches!(app.tool, Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. });
+            let free_angle = (mode == DrawShape::Rectangle
+                && matches!(app.tool, Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. }))
+                || (mode == DrawShape::Arc && app.options.arc_end.is_some());
             if let (Some(anchor), true, false) = (app.tool.anchor(), weak, free_angle) {
                 if let Some(c) = tools::constrain(anchor, p, xf.px(1.0), shift) {
                     snap = Some(c);
@@ -1130,6 +1132,21 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
         vec![min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)]
     };
     match &app.tool {
+        Tool::Wall { start: Some(a), .. } if app.options.shape == DrawShape::Arc => {
+            let pts = match app.options.arc_end.and_then(|b| hausit_model::ArcCurve::through(*a, p, b)) {
+                Some(arc) => arc.points(hausit_model::ARC_STEP / 2.0),
+                None => vec![*a, app.options.arc_end.unwrap_or(p)],
+            };
+            let sp: Vec<Pos2> = pts.iter().map(|q| xf.to_screen(*q)).collect();
+            painter.add(Shape::line(sp, s));
+            if let Some(arc) = app.options.arc_end.and_then(|b| hausit_model::ArcCurve::through(*a, p, b)) {
+                label_at(
+                    painter,
+                    xf.to_screen(p) + vec2(40.0, 14.0),
+                    &format!("R {}", hausit_core::format_length(arc.radius, unit)),
+                );
+            }
+        }
         Tool::Wall { start: Some(a), .. } => {
             if app.options.shape == DrawShape::Rectangle {
                 let r = rect_pts(*a, p);

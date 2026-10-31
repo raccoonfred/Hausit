@@ -173,11 +173,14 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             if z0 <= cut_z && cut_z < z1 {
                 dl.push(Prim::Polygon(footprint.clone()), None, Some(CUT_FILL_LIGHT), Some(e.id));
                 if let Some((w, t)) = layered {
-                    let dir = w.direction();
+                    // Arc walls: each straight piece uses the tangent at its middle.
+                    let c = footprint.iter().copied().sum::<DVec2>() / footprint.len() as f64;
+                    let s = w.param_of(c);
+                    let (origin, dir) = (w.point_at(s), w.tangent_at(s));
                     let half = t.layers.iter().map(|l| l.thickness).sum::<f64>() * 0.5;
                     let (bands, lines) = layer_bands(
                         &footprint,
-                        w.start,
+                        origin,
                         dir,
                         perp(dir),
                         half,

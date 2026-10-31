@@ -41,11 +41,14 @@ struct FaceData {
 /// The material showing on a face: for layered walls, floors and roofs,
 /// the outer layer on each side and the structure on the edges; otherwise
 /// the type's material.
-fn face_material(doc: &Document, id: ElementId, n: DVec3) -> Option<&MaterialDef> {
+fn face_material(doc: &Document, id: ElementId, n: DVec3, at: Option<DVec2>) -> Option<&MaterialDef> {
     let t = doc.type_of(id)?;
     if !t.layers.is_empty() {
         let side = match &doc.element(id)?.data {
-            ElementData::Wall(w) => DVec2::new(n.x, n.y).dot(perp(w.direction())),
+            ElementData::Wall(w) => {
+                let s = at.map(|p| w.param_of(p)).unwrap_or(0.0);
+                DVec2::new(n.x, n.y).dot(perp(w.tangent_at(s)))
+            }
             ElementData::Floor(_) | ElementData::Roof(_) | ElementData::Ceiling(_) => n.z,
             _ => 0.0,
         };
@@ -189,7 +192,12 @@ pub fn project(doc: &Document, view: &View, frame: &ViewFrame) -> DisplayList {
                 }
                 let material = match part.material_name {
                     Some(name) => doc.material(name),
-                    None => (part.material == Material::Default).then(|| face_material(doc, g.id, n)).flatten(),
+                    None => (part.material == Material::Default)
+                        .then(|| {
+                            let c = face.pts.iter().map(|p| p.truncate()).sum::<DVec2>() / face.pts.len() as f64;
+                            face_material(doc, g.id, n, Some(c))
+                        })
+                        .flatten(),
                 };
                 let base = match material {
                     Some(m) => [m.color[0], m.color[1], m.color[2], 255],
@@ -330,7 +338,7 @@ fn box_caps(
                     VisualStyle::Wireframe => None,
                     VisualStyle::HiddenLine => Some(CUT_FILL),
                     _ => {
-                        let c = face_material(doc, g.id, DVec3::ZERO)
+                        let c = face_material(doc, g.id, DVec3::ZERO, None)
                             .map(|m| [m.color[0], m.color[1], m.color[2], 255])
                             .unwrap_or(category_color(g.category, Material::Default));
                         Some([
@@ -485,7 +493,10 @@ fn hide_coplanar_seams(polys: &mut [Poly<FaceData>]) {
                 // Imported meshes approximate curved surfaces with
                 // triangles: hide the seams between gently bending ones too.
                 let mesh = polys[pa].pts.len() == 3 || polys[pb].pts.len() == 3;
-                let limit = if mesh { 0.985 } else { 0.9999 };
+                // Arc walls: vertical pieces of one element bending a few
+                // degrees read as one curved face.
+                let curved = polys[pa].data.id == polys[pb].data.id && normals[pa].z.abs() < 1e-6 && normals[pb].z.abs() < 1e-6;
+                let limit = if mesh || curved { 0.985 } else { 0.9999 };
                 if pa != pb && normals[pa].dot(normals[pb]) > limit {
                     polys[pa].edges[ea] = false;
                     polys[pb].edges[eb] = false;
@@ -721,12 +732,15 @@ fn layer_polys<'a>(
         Some(ElementData::Wall(w)) => {
             // Distance s from the wall line towards the exterior is linear
             // along the cut: s(u) = s0 + k·u, so layers are vertical bands.
-            let nrm = perp(w.direction());
+            // Arc walls: the tangent where this piece is cut.
+            let uc = poly.iter().map(|p| p.x).sum::<f64>() / poly.len().max(1) as f64;
+            let at = w.param_of(o + r2 * uc);
+            let nrm = perp(w.tangent_at(at));
             let k = r2.dot(nrm);
             if k.abs() < 1e-6 {
                 return none;
             }
-            let s0 = (o - w.start).dot(nrm);
+            let s0 = (o - w.point_at(at)).dot(nrm);
             // In u, the exterior face is at (total/2 - s0)/k, running
             // towards decreasing s.
             let out = DVec2::new(k.signum(), 0.0);

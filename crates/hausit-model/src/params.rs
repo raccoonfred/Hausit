@@ -138,6 +138,9 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             let area = doc.wall_net_area(id);
             let t = doc.type_of(id).map(|t| t.thickness()).unwrap_or(0.0);
             p.push(Parameter::new("Length", G::Dimensions, V::Length(len)).ro());
+            if let Some(arc) = w.arc() {
+                p.push(Parameter::new("Radius", G::Dimensions, V::Length(arc.radius)).ro());
+            }
             p.push(Parameter::new("Area", G::Dimensions, V::Area(area)).ro());
             p.push(Parameter::new("Volume", G::Dimensions, V::Volume(area * t)).ro());
             let _ = h;

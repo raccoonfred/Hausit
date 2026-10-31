@@ -33,7 +33,9 @@ impl DocIndex {
                 ElementData::Wall(w) => {
                     // Margin covers wall thickness and join tolerance.
                     let m = DVec2::splat(1000.0);
-                    let (lo, hi) = (cell(w.start.min(w.end) - m), cell(w.start.max(w.end) + m));
+                    let pts = w.centreline();
+                    let (min, max) = pts.iter().fold((pts[0], pts[0]), |(a, b), p| (a.min(*p), b.max(*p)));
+                    let (lo, hi) = (cell(min - m), cell(max + m));
                     if (hi.0 - lo.0 + 1) * (hi.1 - lo.1 + 1) > 10_000 {
                         // Very long walls go in a catch-all bucket.
                         ix.wall_cells.entry((w.base_level, i64::MIN, i64::MIN)).or_default().push(e.id);

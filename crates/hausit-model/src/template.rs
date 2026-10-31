@@ -516,6 +516,7 @@ pub fn sample_project() -> Document {
             room_bounding: true,
             attached_top: vec![],
             disallow_join: [false; 2],
+            arc_mid: None,
         })));
     }
     let partition = doc.add_element(ElementData::Wall(Wall {
@@ -529,6 +530,7 @@ pub fn sample_project() -> Document {
         room_bounding: true,
         attached_top: vec![],
         disallow_join: [false; 2],
+        arc_mid: None,
     }));
 
     for (name, x) in [("Living", 3000.0), ("Bedroom", 9000.0)] {
@@ -865,6 +867,7 @@ pub fn industrial_sample() -> Document {
             room_bounding: true,
             attached_top: vec![],
             disallow_join: [false; 2],
+            arc_mid: None,
         })));
     }
     let slab = t(&doc, Category::Floors, "Concrete Slab - Industrial 250mm");

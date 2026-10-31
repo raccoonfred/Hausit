@@ -33,7 +33,7 @@ impl Document {
         let Some(e) = self.element(id) else { return vec![] };
         let line = |a, b| RefLine { element: id, a, b };
         match &e.data {
-            ElementData::Wall(w) => {
+            ElementData::Wall(w) if w.arc_mid.is_none() => {
                 let t = self.type_of(id).map(|t| t.thickness()).unwrap_or(200.0) / 2.0;
                 let n = perp(w.direction());
                 vec![

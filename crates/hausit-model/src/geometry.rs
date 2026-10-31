@@ -270,23 +270,65 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
 pub fn wall_outline(doc: &Document, id: ElementId) -> Option<[DVec2; 4]> {
     let w = doc.element(id)?.as_wall()?;
     let h = doc.type_of(id).map(|t| t.thickness()).unwrap_or(200.0) * 0.5;
-    let dir = w.direction();
-    if dir == DVec2::ZERO {
+    if w.direction() == DVec2::ZERO {
         return None;
     }
-    let n = perp(dir);
-    let mut out = [w.start + n * h, w.end + n * h, w.end - n * h, w.start - n * h];
-    // start: away = dir, so +n_away is our left.
-    if let Some((pl, pr)) = join_end(doc, id, 0, dir, h) {
+    let (d0, d1) = (w.tangent_at(0.0), w.tangent_at(w.length()));
+    let (n0, n1) = (perp(d0), perp(d1));
+    let mut out = [w.start + n0 * h, w.end + n1 * h, w.end - n1 * h, w.start - n0 * h];
+    // start: away = d0, so +n_away is our left.
+    if let Some((pl, pr)) = join_end(doc, id, 0, d0, h) {
         out[0] = pl;
         out[3] = pr;
     }
-    // end: away = -dir, so +n_away is our right.
-    if let Some((pr, pl)) = join_end(doc, id, 1, -dir, h) {
+    // end: away = -d1, so +n_away is our right.
+    if let Some((pr, pl)) = join_end(doc, id, 1, -d1, h) {
         out[1] = pl;
         out[2] = pr;
     }
     Some(out)
+}
+
+/// The plan footprint of a wall after joins: the four corners of a
+/// straight wall, or the band along an arc wall.
+pub fn wall_footprint(doc: &Document, id: ElementId) -> Option<Vec<DVec2>> {
+    let o = wall_outline(doc, id)?;
+    let w = doc.element(id)?.as_wall()?;
+    let Some(arc) = w.arc() else { return Some(o.to_vec()) };
+    let h = doc.type_of(id).map(|t| t.thickness()).unwrap_or(200.0) * 0.5;
+    let (left, right) = arc_sides(w, &arc_params(&arc, &[]), h, &o);
+    Some(left.into_iter().chain(right.into_iter().rev()).collect())
+}
+
+/// Arc-length stations along an arc: its tessellation plus `extra`.
+fn arc_params(arc: &crate::element::ArcCurve, extra: &[f64]) -> Vec<f64> {
+    let len = arc.length();
+    let n = ((arc.sweep.abs() / crate::element::ARC_STEP).ceil() as usize).max(1);
+    let mut s: Vec<f64> = (0..=n).map(|i| len * i as f64 / n as f64).collect();
+    s.extend(extra.iter().copied().filter(|x| *x > EPS && *x < len - EPS));
+    s.sort_by(f64::total_cmp);
+    s.dedup_by(|a, b| (*a - *b).abs() < EPS);
+    s
+}
+
+/// The left (exterior) and right faces of an arc wall at the stations
+/// `params`, with the joined corners from `outline` at the ends.
+fn arc_sides(w: &Wall, params: &[f64], h: f64, outline: &[DVec2; 4]) -> (Vec<DVec2>, Vec<DVec2>) {
+    let last = params.len() - 1;
+    let side = |i: usize, sign: f64| {
+        let s = params[i];
+        match (i, sign > 0.0) {
+            (0, true) => outline[0],
+            (0, false) => outline[3],
+            (i, true) if i == last => outline[1],
+            (i, false) if i == last => outline[2],
+            _ => w.point_at(s) + perp(w.tangent_at(s)) * h * sign,
+        }
+    };
+    (
+        (0..=last).map(|i| side(i, 1.0)).collect(),
+        (0..=last).map(|i| side(i, -1.0)).collect(),
+    )
 }
 
 /// Computes the cleaned-up corner points for one wall end. Returns the
@@ -298,6 +340,7 @@ fn join_end(doc: &Document, me: ElementId, end: usize, away: DVec2, h: f64) -> O
     }
     let my_base = mine.base_level;
     let p = if end == 0 { mine.start } else { mine.end };
+    let curved = mine.arc_mid.is_some();
     let n = perp(away);
     let mut corner = None;
     let mut corner_count = 0;
@@ -312,27 +355,28 @@ fn join_end(doc: &Document, me: ElementId, end: usize, away: DVec2, h: f64) -> O
             continue;
         }
         let oh = doc.type_of(e.id).map(|t| t.thickness()).unwrap_or(200.0) * 0.5;
-        let od = w.direction();
-        if od == DVec2::ZERO {
+        if w.direction() == DVec2::ZERO {
             continue;
         }
         if w.start.distance(p) < JOIN_TOLERANCE {
             if w.disallow_join[0] {
                 continue;
             }
-            corner = Some((od, oh));
+            corner = Some((w.into_from(0), oh));
             corner_count += 1;
         } else if w.end.distance(p) < JOIN_TOLERANCE {
             if w.disallow_join[1] {
                 continue;
             }
-            corner = Some((-od, oh));
+            corner = Some((w.into_from(1), oh));
             corner_count += 1;
-        } else {
-            // T-junction: our end touches the other wall's interior.
-            let (q, t) = hausit_core::geom::closest_on_segment(p, w.start, w.end);
-            if t > 0.0 && t < 1.0 && q.distance(p) <= oh + JOIN_TOLERANCE && cross2(away, od).abs() > 0.1 {
-                tee = Some((w.start, od, oh));
+        } else if !curved {
+            // T-junction: our end touches the other wall's interior (at
+            // the tangent there, for an arc wall).
+            let s = w.param_of(p);
+            let (q, od) = (w.point_at(s), w.tangent_at(s));
+            if s > EPS && s < w.length() - EPS && q.distance(p) <= oh + JOIN_TOLERANCE && cross2(away, od).abs() > 0.1 {
+                tee = Some((q, od, oh));
             }
         }
     }
@@ -382,6 +426,9 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
         return vec![];
     };
     let Some(outline) = wall_outline(doc, id) else { return vec![] };
+    if let Some(arc) = w.arc() {
+        return arc_wall_parts(doc, id, w, &arc, &outline);
+    }
     let (zb, mut zt) = (doc.wall_base_z(w), doc.wall_top_z(w));
     // Attached tops: the straight part stops at the lowest point of the
     // surface above; sloped pieces fill up to it.
@@ -459,6 +506,39 @@ fn wall_parts(doc: &Document, id: ElementId) -> Vec<Part> {
             }
             _ if zt > z + EPS => parts.push(Part::prism(Material::Default, Prism::new(poly, z, zt))),
             _ => {}
+        }
+    }
+    parts
+}
+
+/// An arc wall: straight pieces between stations along the arc (and at
+/// every opening edge), each cut around the openings over it. Shared
+/// edges between pieces are hidden in views.
+fn arc_wall_parts(doc: &Document, id: ElementId, w: &Wall, arc: &crate::element::ArcCurve, outline: &[DVec2; 4]) -> Vec<Part> {
+    let (zb, zt) = (doc.wall_base_z(w), doc.wall_top_z(w));
+    if zt - zb < EPS {
+        return vec![];
+    }
+    let h = doc.type_of(id).map(|t| t.thickness()).unwrap_or(200.0) * 0.5;
+    let holes = wall_holes(doc, id, w);
+    let cuts: Vec<f64> = holes.iter().flat_map(|h| [h.0, h.1]).collect();
+    let params = arc_params(arc, &cuts);
+    let (left, right) = arc_sides(w, &params, h, outline);
+    let mut parts = Vec::new();
+    for i in 0..params.len() - 1 {
+        let poly = vec![left[i], left[i + 1], right[i + 1], right[i]];
+        let mid = (params[i] + params[i + 1]) * 0.5;
+        let mut gaps: Vec<(f64, f64)> = holes.iter().filter(|h| h.0 < mid && mid < h.1).map(|h| (h.2, h.3)).collect();
+        gaps.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut z = zb;
+        for (g0, g1) in gaps {
+            if g0 > z + EPS {
+                parts.push(Part::prism(Material::Default, Prism::new(poly.clone(), z, g0.min(zt))));
+            }
+            z = z.max(g1);
+        }
+        if zt > z + EPS {
+            parts.push(Part::prism(Material::Default, Prism::new(poly, z, zt)));
         }
     }
     parts
@@ -994,6 +1074,16 @@ pub fn foundation_extent(doc: &Document, id: ElementId) -> Option<(Vec<DVec2>, f
             if dir == DVec2::ZERO {
                 return None;
             }
+            if w.arc_mid.is_some() {
+                // Arc walls: a curved strip under the wall.
+                let pts = w.centreline();
+                let n = pts.len();
+                let normal = |i: usize| perp((pts[(i + 1).min(n - 1)] - pts[i.saturating_sub(1)]).normalize_or_zero());
+                let left = (0..n).map(|i| pts[i] + normal(i) * hw);
+                let right: Vec<DVec2> = (0..n).map(|i| pts[i] - normal(i) * hw).collect();
+                let top = doc.level_elevation(w.base_level) + w.base_offset;
+                return Some((left.chain(right.into_iter().rev()).collect(), top - thickness, top));
+            }
             // Strips run past the wall ends by half their width, so
             // footings meeting at a corner overlap into a full square.
             let n = perp(dir);
@@ -1025,7 +1115,7 @@ pub fn opening_frame(doc: &Document, id: ElementId) -> Option<OpeningFrame> {
     let t = doc.type_of(id)?;
     Some(OpeningFrame {
         center: w.point_at(o.offset),
-        dir: w.direction(),
+        dir: w.tangent_at(o.offset),
         wall_thickness: doc.type_of(o.host).map(|t| t.thickness()).unwrap_or(200.0),
         z0: doc.level_elevation(w.base_level) + o.sill_height,
         width: t.width(),
@@ -1398,6 +1488,45 @@ mod tests {
         // Unticking removes the arrow: flat roof again.
         crate::params::set_element_parameter(&mut doc, roof, "Slope Arrow", crate::ParamValue::Bool(false)).unwrap();
         assert!(matches!(doc.element(roof).map(|e| &e.data), Some(ElementData::Roof(r)) if r.slope_arrow.is_none()));
+    }
+
+    /// An arc wall: a curved band in plan, with a door cut through it and
+    /// a square join to the straight wall at its end.
+    #[test]
+    fn arc_wall() {
+        let mut doc = sample_project();
+        let walls: Vec<ElementId> = doc.elements_of(Category::Walls).map(|e| e.id).collect();
+        // Bow the north wall (12000,8000)→(0,8000) outwards by 2000.
+        let north = walls[1];
+        let w = doc.element(north).unwrap().as_wall().unwrap().clone();
+        let mid = (w.start + w.end) / 2.0;
+        let bulge = mid + perp(w.direction()) * 2000.0;
+        if let Some(ElementData::Wall(w)) = doc.element_mut(north).map(|e| &mut e.data) {
+            w.arc_mid = Some(bulge);
+        }
+        let w = doc.element(north).unwrap().as_wall().unwrap().clone();
+        let arc = w.arc().unwrap();
+        // Chord 12000, sagitta 2000: radius 10000.
+        assert!((arc.radius - 10000.0).abs() < 1e-6, "{arc:?}");
+        assert!(w.point_at(w.length() / 2.0).distance(bulge) < 1e-6);
+        let t = doc.type_of(north).unwrap().thickness();
+        let fp = wall_footprint(&doc, north).unwrap();
+        let area = polygon_area(&fp).abs();
+        assert!((area - w.length() * t).abs() / area < 0.03, "area {area} vs {}", w.length() * t);
+        // The geometry is split into pieces along the arc, all within the band.
+        let g = element_geometry(&doc, north).unwrap();
+        assert!(g.parts.len() > 20);
+        // Openings follow the arc.
+        for (e, o) in doc.openings_in(north) {
+            let f = opening_frame(&doc, e.id).unwrap();
+            assert!(f.center.distance(w.point_at(o.offset)) < 1e-6);
+            assert!((f.dir.dot(w.tangent_at(o.offset)) - 1.0).abs() < 1e-9);
+        }
+        // Moving and mirroring keep the arc.
+        doc.translate(&[north], DVec2::new(100.0, 0.0));
+        let w2 = doc.element(north).unwrap().as_wall().unwrap().clone();
+        assert!((w2.length() - w.length()).abs() < 1e-6);
+        assert!((w2.arc().unwrap().center - arc.center - DVec2::new(100.0, 0.0)).length() < 1e-6);
     }
 
     #[test]

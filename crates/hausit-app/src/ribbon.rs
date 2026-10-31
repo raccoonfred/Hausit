@@ -942,6 +942,9 @@ fn draw_panel(app: &mut HausitApp, ui: &mut Ui) {
             }
             item(ui, DrawShape::Line, "╱ Line");
             item(ui, DrawShape::Rectangle, "▭ Rectangle");
+            if !sketch {
+                item(ui, DrawShape::Arc, "◠ Start-End-Radius Arc");
+            }
             if roof {
                 item(ui, DrawShape::SlopeArrow, "↗ Slope Arrow");
             }

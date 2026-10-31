@@ -721,7 +721,7 @@ impl<'a> Exporter<'a> {
         let mut reps = Vec::new();
         if let ElementData::Wall(w) = &e.data {
             let a = self.point2(DVec2::ZERO);
-            let b = self.point2(DVec2::new(w.length(), 0.0));
+            let b = self.point2(DVec2::new(w.start.distance(w.end), 0.0));
             let line = self.add("IFCPOLYLINE", format!("({a},{b})"));
             reps.push(self.add("IFCSHAPEREPRESENTATION", format!("{},'Axis','Curve2D',({line})", self.axis)));
         }

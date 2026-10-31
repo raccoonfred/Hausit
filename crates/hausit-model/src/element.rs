@@ -254,22 +254,168 @@ pub struct Wall {
     /// does not clean up with walls that meet it there.
     #[serde(default)]
     pub disallow_join: [bool; 2],
+    /// Arc walls: the point halfway along the arc from start to end.
+    /// `None` for a straight wall.
+    #[serde(default)]
+    pub arc_mid: Option<DVec2>,
+}
+
+/// A circular arc: centre, radius, start angle and signed sweep (radians,
+/// positive counter-clockwise).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ArcCurve {
+    pub center: DVec2,
+    pub radius: f64,
+    pub start_angle: f64,
+    pub sweep: f64,
+}
+
+impl ArcCurve {
+    /// The arc from `a` through `m` to `b`, or `None` when the points are
+    /// (nearly) in line.
+    pub fn through(a: DVec2, m: DVec2, b: DVec2) -> Option<ArcCurve> {
+        let d = 2.0 * (a.x * (m.y - b.y) + m.x * (b.y - a.y) + b.x * (a.y - m.y));
+        let chord = a.distance(b).max(1.0);
+        if d.abs() < 1e-6 * chord * chord {
+            return None;
+        }
+        let sq = |p: DVec2| p.length_squared();
+        let center = DVec2::new(
+            (sq(a) * (m.y - b.y) + sq(m) * (b.y - a.y) + sq(b) * (a.y - m.y)) / d,
+            (sq(a) * (b.x - m.x) + sq(m) * (a.x - b.x) + sq(b) * (m.x - a.x)) / d,
+        );
+        let radius = center.distance(a);
+        if radius > 1e7 {
+            return None;
+        }
+        let ang = |p: DVec2| (p.y - center.y).atan2(p.x - center.x);
+        let tau = std::f64::consts::TAU;
+        let (a0, am, ab) = (ang(a), ang(m), ang(b));
+        let ccw = |x: f64| (x - a0).rem_euclid(tau);
+        // Counter-clockwise when the middle comes before the end going CCW.
+        let sweep = if ccw(am) <= ccw(ab) { ccw(ab) } else { ccw(ab) - tau };
+        Some(ArcCurve {
+            center,
+            radius,
+            start_angle: a0,
+            sweep,
+        })
+    }
+
+    pub fn length(&self) -> f64 {
+        self.radius * self.sweep.abs()
+    }
+
+    pub fn point_at_angle(&self, t: f64) -> DVec2 {
+        self.center + DVec2::new(t.cos(), t.sin()) * self.radius
+    }
+
+    /// Point at arc length `s` from the start.
+    pub fn point_at(&self, s: f64) -> DVec2 {
+        self.point_at_angle(self.start_angle + self.sweep.signum() * s / self.radius)
+    }
+
+    /// Unit tangent (in the direction of travel) at arc length `s`.
+    pub fn tangent_at(&self, s: f64) -> DVec2 {
+        let t = self.start_angle + self.sweep.signum() * s / self.radius;
+        DVec2::new(-t.sin(), t.cos()) * self.sweep.signum()
+    }
+
+    /// Arc length from the start of the point on the arc nearest `p`,
+    /// clamped to the arc.
+    pub fn param_of(&self, p: DVec2) -> f64 {
+        let tau = std::f64::consts::TAU;
+        let t = (p.y - self.center.y).atan2(p.x - self.center.x);
+        let mut d = (t - self.start_angle) * self.sweep.signum();
+        d = d.rem_euclid(tau);
+        let span = self.sweep.abs();
+        if d > span {
+            // Past the end: snap to whichever end is nearer in angle.
+            d = if d - span < tau - d { span } else { 0.0 };
+        }
+        d * self.radius
+    }
+
+    /// Points along the arc, no more than `max_angle` radians apart.
+    pub fn points(&self, max_angle: f64) -> Vec<DVec2> {
+        let n = ((self.sweep.abs() / max_angle).ceil() as usize).max(1);
+        (0..=n)
+            .map(|i| self.point_at_angle(self.start_angle + self.sweep * i as f64 / n as f64))
+            .collect()
+    }
 }
 
 impl Wall {
-    pub fn length(&self) -> f64 {
-        self.start.distance(self.end)
+    /// The wall's arc, for arc walls.
+    pub fn arc(&self) -> Option<ArcCurve> {
+        ArcCurve::through(self.start, self.arc_mid?, self.end)
     }
 
+    /// Length along the location line.
+    pub fn length(&self) -> f64 {
+        match self.arc() {
+            Some(a) => a.length(),
+            None => self.start.distance(self.end),
+        }
+    }
+
+    /// Direction from start to end (the chord, for arc walls).
     pub fn direction(&self) -> DVec2 {
         (self.end - self.start).normalize_or_zero()
     }
 
     /// Point at `offset` mm along the wall from its start.
     pub fn point_at(&self, offset: f64) -> DVec2 {
-        self.start + self.direction() * offset
+        match self.arc() {
+            Some(a) => a.point_at(offset),
+            None => self.start + self.direction() * offset,
+        }
+    }
+
+    /// Unit direction of the location line at `offset` mm from the start.
+    pub fn tangent_at(&self, offset: f64) -> DVec2 {
+        match self.arc() {
+            Some(a) => a.tangent_at(offset),
+            None => self.direction(),
+        }
+    }
+
+    /// Unit direction pointing into the wall from an end (0 start, 1 end).
+    pub fn into_from(&self, end: usize) -> DVec2 {
+        if end == 0 {
+            self.tangent_at(0.0)
+        } else {
+            -self.tangent_at(self.length())
+        }
+    }
+
+    /// Distance along the location line of the point on it nearest `p`.
+    pub fn param_of(&self, p: DVec2) -> f64 {
+        match self.arc() {
+            Some(a) => a.param_of(p),
+            None => {
+                let (_, t) = hausit_core::geom::closest_on_segment(p, self.start, self.end);
+                t * self.length()
+            }
+        }
+    }
+
+    /// Distance from `p` to the location line.
+    pub fn distance_to(&self, p: DVec2) -> f64 {
+        p.distance(self.point_at(self.param_of(p)))
+    }
+
+    /// The location line as points (two for a straight wall).
+    pub fn centreline(&self) -> Vec<DVec2> {
+        match self.arc() {
+            Some(a) => a.points(ARC_STEP),
+            None => vec![self.start, self.end],
+        }
     }
 }
+
+/// Largest angle between the straight pieces arc walls are built from.
+pub const ARC_STEP: f64 = std::f64::consts::PI / 36.0;
 
 /// A floor slab, its top at the level (plus offset) and thickness downward.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
