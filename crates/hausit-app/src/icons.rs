@@ -55,6 +55,7 @@ pub enum Icon {
     RevisionCloud,
     Toposolid,
     Worksets,
+    Link,
     DesignOptions,
     TopoPoint,
     PropertyLine,
@@ -195,6 +196,25 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 );
                 seg((14.0, y + 3.0), (28.0, y + 3.0), ink);
             }
+        }
+        Icon::Link => {
+            p.rect(
+                rect(3.0, 8.0, 19.0, 24.0),
+                2.0,
+                k(Color32::from_rgb(230, 240, 255)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            p.rect(
+                rect(13.0, 4.0, 29.0, 20.0),
+                2.0,
+                k(Color32::from_rgb(255, 245, 225)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            let blue = Stroke::new(2.0, Color32::from_rgb(40, 110, 230));
+            p.circle_stroke(at(13.0, 21.0), 3.5 * s, blue);
+            p.circle_stroke(at(19.0, 26.0), 3.5 * s, blue);
         }
         Icon::Worksets => {
             for (i, c) in [(155, 194, 230), (169, 209, 142), (244, 177, 131)].into_iter().enumerate() {

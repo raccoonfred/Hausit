@@ -166,6 +166,13 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             );
             p.push(Parameter::new("Points", G::Other, V::Integer(t.points.len() as i64)).ro());
         }
+        ElementData::LinkInstance(i) => {
+            let t = doc.link_type(i.link);
+            p.push(Parameter::new("Name", G::IdentityData, V::Text(t.map(|t| t.name.clone()).unwrap_or_default())).ro());
+            p.push(Parameter::new("Path", G::Other, V::Text(t.map(|t| t.path.clone()).unwrap_or_default())).ro());
+            p.push(Parameter::new("Elevation Offset", G::Constraints, V::Length(i.z)));
+            p.push(Parameter::new("Rotation", G::Constraints, V::Angle(i.rotation)));
+        }
         ElementData::PropertyLine(l) => {
             p.push(Parameter::new("Area", G::Dimensions, V::Area(doc.property_area(l))).ro());
             let n = l.points.len();
@@ -547,6 +554,11 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 _ => return Err(bad()),
             },
             ElementData::PropertyLine(_) => return Err(bad()),
+            ElementData::LinkInstance(i) => match (name, value) {
+                ("Elevation Offset", V::Length(v)) => i.z = v,
+                ("Rotation", V::Angle(v)) => i.rotation = v,
+                _ => return Err(bad()),
+            },
             ElementData::Floor(f) => match (name, value) {
                 ("Level", V::Element(l)) if l.is_valid() => f.level = l,
                 ("Height Offset From Level", V::Length(v)) => f.height_offset = v,

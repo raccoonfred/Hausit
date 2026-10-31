@@ -465,6 +465,26 @@ fn insert(app: &mut HausitApp, ui: &mut Ui) {
     panel(ui, "Link", |ui| {
         if big(
             ui,
+            Icon::Link,
+            "Link Model",
+            "Link another Hausit project or an IFC file, origin to origin. It shows in every view and moves as one piece; edit it in its own project, then Reload.",
+            false,
+            true,
+        ) {
+            crate::links::link_dialog(app);
+        }
+        if big(
+            ui,
+            Icon::Link,
+            "Manage Links",
+            "Manage Links: reload, unload, place again or remove linked models",
+            app.dialogs.manage_links.is_some(),
+            true,
+        ) {
+            app.dialogs.manage_links = Some(Default::default());
+        }
+        if big(
+            ui,
             Icon::Import,
             "Revit File",
             "Open an Autodesk Revit file (.rvt/.rfa) to see its version and preview.\nImporting Revit elements is a planned milestone.",

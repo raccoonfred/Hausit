@@ -170,6 +170,9 @@ impl HausitApp {
             self.open_view(v);
         }
         self.status = "Ready".into();
+        if !self.doc.links.is_empty() {
+            crate::links::load_all(self);
+        }
     }
 
     pub fn is_dirty(&self) -> bool {

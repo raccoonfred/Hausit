@@ -161,7 +161,10 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
             );
         }
     }
-    for e in doc.elements_of(Category::Rooms).filter(|_| !reflected && !area_plan) {
+    // A linked model's plan (drawn for a link) leaves out its rooms and
+    // view marks, which are annotation of its own views.
+    let linked = !view.id.is_valid();
+    for e in doc.elements_of(Category::Rooms).filter(|_| !reflected && !area_plan && !linked) {
         let ElementData::Room(r) = &e.data else { continue };
         if r.level != level {
             continue;
@@ -739,6 +742,73 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         grid_bubble(&mut dl, g.start, g.end, &g.name, scale, e.id);
     }
 
+    // Linked models, as their own plan of the matching level (Revit's
+    // "By Host View"), placed by the link instance. Picking any of it
+    // picks the link.
+    if !reflected {
+        for e in doc.elements_of(Category::RvtLinks) {
+            let ElementData::LinkInstance(inst) = &e.data else { continue };
+            let Some(m) = doc.link_model(inst.link) else { continue };
+            let Some(linked_level) = doc.link_level_for(inst, elev) else {
+                continue;
+            };
+            let mut v = hausit_model::View::new(
+                ElementId::INVALID,
+                "link",
+                hausit_model::ViewKind::FloorPlan { level: linked_level },
+            );
+            v.scale = view.scale;
+            v.detail_level = view.detail_level;
+            v.cut_height = view.cut_height;
+            v.view_range = view.view_range;
+            let list = floor_plan(&m.doc, &v, linked_level);
+            let rot = inst.rotation;
+            for item in list.items {
+                let prim = match item.prim {
+                    Prim::Line(a, b) => Prim::Line(inst.map(a), inst.map(b)),
+                    Prim::Polyline { pts, closed } => Prim::Polyline {
+                        pts: pts.into_iter().map(|p| inst.map(p)).collect(),
+                        closed,
+                    },
+                    Prim::Polygon(pts) => Prim::Polygon(pts.into_iter().map(|p| inst.map(p)).collect()),
+                    Prim::Arc {
+                        center,
+                        radius,
+                        start,
+                        end,
+                    } => Prim::Arc {
+                        center: inst.map(center),
+                        radius,
+                        start: start + rot.to_radians(),
+                        end: end + rot.to_radians(),
+                    },
+                    Prim::Circle { center, radius } => Prim::Circle {
+                        center: inst.map(center),
+                        radius,
+                    },
+                    Prim::Text {
+                        pos,
+                        text,
+                        height,
+                        anchor,
+                        angle,
+                    } => Prim::Text {
+                        pos: inst.map(pos),
+                        text,
+                        height,
+                        anchor,
+                        angle: angle + rot.to_radians(),
+                    },
+                };
+                dl.items.push(crate::Item {
+                    prim,
+                    element: Some(e.id),
+                    ..item
+                });
+            }
+        }
+    }
+
     // Area boundary lines go over the walls they follow.
     for e in doc.elements_of(Category::AreaBoundary).filter(|_| view.area_scheme.is_some()) {
         let ElementData::AreaBoundary(b) = &e.data else { continue };
@@ -747,7 +817,9 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
         }
     }
 
-    view_marks(doc, view, &mut dl);
+    if !linked {
+        view_marks(doc, view, &mut dl);
+    }
     dl
 }
 

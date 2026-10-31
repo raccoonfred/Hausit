@@ -64,6 +64,7 @@ impl Element {
             | ElementData::SpotElevation(_)
             | ElementData::RevisionCloud(_)
             | ElementData::PropertyLine(_)
+            | ElementData::LinkInstance(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
             | ElementData::Tag(_) => None,
@@ -98,6 +99,7 @@ impl Element {
             | ElementData::SpotElevation(_)
             | ElementData::RevisionCloud(_)
             | ElementData::PropertyLine(_)
+            | ElementData::LinkInstance(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
             | ElementData::Tag(_) => {}
@@ -158,6 +160,7 @@ pub enum ElementData {
     RevisionCloud(crate::revisions::RevisionCloud),
     Toposolid(crate::site::Toposolid),
     PropertyLine(crate::site::PropertyLine),
+    LinkInstance(crate::links::LinkInstance),
 }
 
 impl ElementData {
@@ -218,6 +221,7 @@ impl ElementData {
             ElementData::RevisionCloud(_) => Category::RevisionClouds,
             ElementData::Toposolid(_) => Category::Toposolid,
             ElementData::PropertyLine(_) => Category::PropertyLines,
+            ElementData::LinkInstance(_) => Category::RvtLinks,
             ElementData::Group(_) => Category::ModelGroups,
             ElementData::AreaBoundary(_) => Category::AreaBoundary,
             ElementData::Area(_) => Category::Areas,

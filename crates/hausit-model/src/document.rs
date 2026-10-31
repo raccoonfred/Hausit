@@ -70,6 +70,12 @@ pub struct Document {
     /// The design option being edited: new elements go into it.
     #[serde(default)]
     pub editing_option: Option<ElementId>,
+    /// Linked models (Insert ▸ Link).
+    #[serde(default)]
+    pub links: Vec<crate::links::LinkType>,
+    /// Loaded linked models; not saved.
+    #[serde(skip)]
+    pub link_models: crate::links::LinkModels,
     /// The phase new elements are created in: the active view's phase.
     #[serde(skip)]
     pub creation_phase: Option<ElementId>,
@@ -112,6 +118,8 @@ impl Document {
             active_workset: None,
             option_sets: Vec::new(),
             editing_option: None,
+            links: Vec::new(),
+            link_models: Default::default(),
             creation_phase: None,
             elements: IndexMap::new(),
             types: IndexMap::new(),
@@ -393,6 +401,7 @@ impl Document {
                     t.points.iter_mut().for_each(|p| *p += delta.extend(0.0));
                 }
                 ElementData::PropertyLine(l) => l.points.iter_mut().for_each(|p| *p += delta),
+                ElementData::LinkInstance(i) => i.origin += delta,
                 ElementData::Roof(r) => r.footprint.iter_mut().for_each(|p| *p += delta),
                 ElementData::Column(c) => c.point += delta,
                 ElementData::Framing(f) => {
@@ -610,6 +619,10 @@ impl Document {
                     t.points.iter_mut().for_each(|p| *p = f(p.truncate()).extend(p.z));
                 }
                 ElementData::PropertyLine(l) => l.points.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::LinkInstance(i) => {
+                    i.origin = f(i.origin);
+                    i.rotation = if mirror { 2.0 * angle - i.rotation } else { i.rotation + angle };
+                }
                 ElementData::Roof(r) => {
                     r.footprint.iter_mut().for_each(|p| *p = f(*p));
                     if let Some(a) = &mut r.slope_arrow {

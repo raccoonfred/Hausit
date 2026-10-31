@@ -82,6 +82,7 @@ pub struct Dialogs {
     pub new_schedule: Option<NewSchedule>,
     pub new_area_plan: Option<NewAreaPlan>,
     pub site_settings: bool,
+    pub manage_links: Option<crate::links::ManageLinks>,
     pub worksets: Option<crate::worksharing::WorksetsDialog>,
     pub design_options: Option<crate::worksharing::OptionsDialog>,
     pub rename: Option<Rename>,
@@ -204,6 +205,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     new_area_plan(app, ctx);
     site_settings(app, ctx);
     crate::worksharing::show(app, ctx);
+    crate::links::show(app, ctx);
     rename(app, ctx);
     project_info(app, ctx);
     units(app, ctx);

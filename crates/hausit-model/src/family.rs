@@ -172,6 +172,7 @@ pub fn default_type_params(category: Category) -> TypeParams {
         | Category::SpotElevations
         | Category::RevisionClouds
         | Category::PropertyLines
+        | Category::RvtLinks
         | Category::ModelGroups
         | Category::Areas
         | Category::AreaBoundary

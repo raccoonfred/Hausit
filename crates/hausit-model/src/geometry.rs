@@ -195,6 +195,13 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         }
         ElementData::Roof(r) => roof_parts(doc, id, r),
         ElementData::Toposolid(t) => toposolid_parts(doc, id, t),
+        ElementData::LinkInstance(i) => {
+            let parts = doc.link_parts(i);
+            if parts.is_empty() {
+                return None;
+            }
+            parts
+        }
         ElementData::Door(o) => opening_parts(doc, id, o, true),
         ElementData::Window(o) => opening_parts(doc, id, o, false),
         ElementData::Column(c) => {

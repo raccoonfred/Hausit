@@ -46,6 +46,7 @@ pub fn layer_of(cat: Option<Category>) -> &'static str {
         Some(Category::Toposolid) => "C-TOPO",
         Some(Category::PropertyLines) => "C-PROP",
         Some(Category::Planting) => "L-PLNT",
+        Some(Category::RvtLinks) => "X-LINK",
         Some(Category::Grids) => "S-GRID",
         Some(Category::Levels) => "A-ANNO-LEVL",
         None => "A-ANNO-SYMB",

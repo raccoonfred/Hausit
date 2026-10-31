@@ -2377,6 +2377,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::RevisionCloud(c) => pts.extend(&c.boundary),
             ElementData::Toposolid(t) => pts.extend(&t.boundary),
             ElementData::PropertyLine(l) => pts.extend(&l.points),
+            ElementData::LinkInstance(i) => pts.push(i.origin),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
     }
