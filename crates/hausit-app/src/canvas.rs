@@ -103,6 +103,8 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
             | Tool::Attach { .. }
             | Tool::Tag
             | Tool::Demolish
+            | Tool::Align { .. }
+            | Tool::Offset
     );
     if let (Some(p), true) = (pointer, picking) {
         // Tab cycles through overlapping elements, as in Revit.
@@ -858,6 +860,7 @@ fn direct_drag(app: &mut HausitApp, ui: &Ui, response: &egui::Response, painter:
             DirectDrag::Move { from } if target.distance(from) > xf.px(2.0) => {
                 let ids = app.selection.clone();
                 app.transact("Drag", |doc| {
+                    doc.check_unpinned(&ids)?;
                     doc.translate(&ids, target - from);
                     Ok(())
                 });
@@ -1337,7 +1340,30 @@ fn context_menu(app: &mut HausitApp, response: &egui::Response) {
                 }
                 ui.close();
             }
+            ui.menu_button("Hide in View", |ui| {
+                if ui.button("Elements (EH)").clicked() {
+                    crate::hide_isolate::hide_in_view(app);
+                    ui.close();
+                }
+                if ui.button("Category (VH)").clicked() {
+                    hide_category_in_view(app);
+                    ui.close();
+                }
+            });
+            if ui.button("Copy to Clipboard (Ctrl+C)").clicked() {
+                crate::hide_isolate::copy_to_clipboard(app);
+                ui.close();
+            }
+            let pinned = app.selection.iter().any(|s| app.doc.element(*s).is_some_and(|e| e.pinned));
+            if ui.button(if pinned { "Unpin (UP)" } else { "Pin (PN)" }).clicked() {
+                crate::hide_isolate::pin(app, !pinned);
+                ui.close();
+            }
             ui.separator();
+        }
+        if !app.clipboard.is_empty() && ui.button("Paste (Ctrl+V)").clicked() {
+            crate::hide_isolate::paste(app);
+            ui.close();
         }
         if ui.button("Zoom To Fit").clicked() {
             if let Some(c) = app.active_view.and_then(|v| app.cameras.get_mut(&v)) {
@@ -1425,6 +1451,7 @@ fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: Eleme
                             c.fitted = false;
                         }
                     }
+                    crate::hide_isolate::control_bar_menu(app, ui, view.temp_hide.is_some());
                     if v != view {
                         if let Some(target) = app.doc.view_mut(view_id) {
                             *target = v;
@@ -1463,4 +1490,28 @@ fn view_control_bar(app: &mut HausitApp, ui: &mut Ui, rect: Rect, view_id: Eleme
                 });
             });
     });
+}
+
+/// Hide in View ▸ Category (VH): turns the selection's categories off in
+/// the view's Visibility/Graphics.
+pub fn hide_category_in_view(app: &mut HausitApp) {
+    let Some(view_id) = app.active_view else { return };
+    let cats: Vec<Category> = app
+        .selection
+        .iter()
+        .filter_map(|s| app.doc.element(*s))
+        .map(|e| e.category())
+        .collect();
+    if cats.is_empty() {
+        return;
+    }
+    app.transact("Hide Category in View", |doc| {
+        if let Some(v) = doc.view_mut(view_id) {
+            for c in &cats {
+                v.graphics.entry(*c).or_default().visible = false;
+            }
+        }
+        Ok(())
+    });
+    app.selection.clear();
 }

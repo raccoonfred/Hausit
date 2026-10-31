@@ -99,6 +99,7 @@ pub struct Dialogs {
     pub vg: Option<crate::view_graphics::VgDialog>,
     pub templates: Option<crate::view_graphics::TemplatesDialog>,
     pub phases: Option<crate::phases::PhasesDialog>,
+    pub paste_levels: Option<crate::hide_isolate::PasteLevels>,
 }
 
 impl Dialogs {
@@ -144,6 +145,7 @@ pub fn show(app: &mut HausitApp, ctx: &Context) {
     crate::view_graphics::show_templates(app, ctx);
     crate::view_graphics::show_vg(app, ctx);
     crate::phases::show(app, ctx);
+    crate::hide_isolate::show(app, ctx);
 
     if app.dialogs.about {
         let mut open = true;

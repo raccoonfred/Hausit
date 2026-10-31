@@ -108,13 +108,13 @@ fn apply_graphics(doc: &Document, view: &View, dl: &mut DisplayList) {
     }
 }
 
-/// The model without the elements a view's phase and phase filter hide,
-/// or `None` when it hides nothing.
+/// The model without the elements a view hides (by phase, Hide in View,
+/// Temporary Hide/Isolate), or `None` when it hides nothing.
 fn phase_model(doc: &Document, view: &View) -> Option<Document> {
     if matches!(view.kind, ViewKind::Schedule(_) | ViewKind::Sheet(_)) {
         return None;
     }
-    let hidden = doc.phase_hidden(view);
+    let hidden = doc.view_hidden(view);
     if hidden.is_empty() {
         return None;
     }

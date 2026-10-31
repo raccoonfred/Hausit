@@ -234,6 +234,22 @@ pub struct View {
     pub phase: Option<ElementId>,
     #[serde(default)]
     pub phase_filter: crate::phasing::PhaseFilter,
+    /// Hide in View ▸ Elements (EH).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub hidden_elements: std::collections::BTreeSet<ElementId>,
+    /// Temporary Hide/Isolate: not saved, as in Revit.
+    #[serde(skip)]
+    pub temp_hide: Option<TempHide>,
+}
+
+/// Temporary Hide/Isolate (HH, HI, HC, IC): what is hidden, or isolated,
+/// until Reset (HR).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TempHide {
+    /// Isolate: everything else is hidden.
+    pub isolate: bool,
+    pub elements: Vec<ElementId>,
+    pub categories: Vec<Category>,
 }
 
 /// Visibility/Graphics overrides of a view, by category.
@@ -373,6 +389,8 @@ impl View {
             template: None,
             phase: None,
             phase_filter: Default::default(),
+            hidden_elements: Default::default(),
+            temp_hide: None,
         }
     }
 

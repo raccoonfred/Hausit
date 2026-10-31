@@ -79,6 +79,18 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         }
                         finish_cancel(app, ui);
                     }
+                    Tool::Offset => {
+                        ui.label("Offset:");
+                        length_edit(ui, "offset_d", &mut app.options.offset_distance, unit);
+                        ui.checkbox(&mut app.options.offset_copy, "Copy");
+                    }
+                    Tool::Array { .. } => {
+                        ui.label("Number:");
+                        ui.add(egui::DragValue::new(&mut app.options.array_count).range(2..=200));
+                        ui.label("Move To:");
+                        ui.radio_value(&mut app.options.array_to_last, false, "2nd");
+                        ui.radio_value(&mut app.options.array_to_last, true, "Last");
+                    }
                     Tool::Text | Tool::Tag => {
                         ui.checkbox(&mut app.options.leader, "Leader");
                     }

@@ -18,6 +18,9 @@ pub struct Element {
     pub phase_created: Option<ElementId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub phase_demolished: Option<ElementId>,
+    /// Pinned elements cannot be moved, rotated, mirrored or deleted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
     pub data: ElementData,
 }
 
@@ -125,6 +128,32 @@ pub enum ElementData {
 }
 
 impl ElementData {
+    /// Every level the element refers to, for copying it to other levels.
+    pub fn level_refs_mut(&mut self) -> Vec<&mut ElementId> {
+        match self {
+            ElementData::Wall(w) => {
+                let mut v = vec![&mut w.base_level];
+                if let TopConstraint::UpToLevel { level, .. } = &mut w.top {
+                    v.push(level);
+                }
+                v
+            }
+            ElementData::Floor(f) => vec![&mut f.level],
+            ElementData::Roof(r) => vec![&mut r.level],
+            ElementData::Column(c) => vec![&mut c.base_level, &mut c.top_level],
+            ElementData::Framing(f) => vec![&mut f.level],
+            ElementData::Footing(f) => vec![&mut f.level],
+            ElementData::Stair(s) => vec![&mut s.base_level, &mut s.top_level],
+            ElementData::Railing(r) => vec![&mut r.level],
+            ElementData::Ceiling(c) => vec![&mut c.level],
+            ElementData::Component(c) => vec![&mut c.level],
+            ElementData::DirectShape(d) => vec![&mut d.level],
+            ElementData::Room(r) => vec![&mut r.level, &mut r.upper_limit],
+            ElementData::RoomSeparation(l) => vec![&mut l.level],
+            _ => vec![],
+        }
+    }
+
     pub fn category(&self) -> Category {
         match self {
             ElementData::Level(_) => Category::Levels,

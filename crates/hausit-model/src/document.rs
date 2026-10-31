@@ -181,6 +181,7 @@ impl Document {
                 comments: String::new(),
                 phase_created,
                 phase_demolished: None,
+                pinned: false,
                 data,
             },
         );

@@ -95,6 +95,8 @@ pub struct HausitApp {
     pub options: crate::tools::ToolOptions,
     pub dialogs: Dialogs,
     pub shortcut: (String, f64),
+    /// Copy to Clipboard: the elements copied (Ctrl+C), pasted with Ctrl+V.
+    pub clipboard: Vec<ElementId>,
     pub title: String,
 }
 
@@ -121,6 +123,7 @@ impl Default for HausitApp {
             options: Default::default(),
             dialogs: Dialogs::default(),
             shortcut: (String::new(), 0.0),
+            clipboard: Vec::new(),
             title: String::new(),
         };
         app.saved_revision = app.doc.revision();
@@ -328,6 +331,7 @@ impl HausitApp {
                 doc.delete_view(*v);
             }
             if !elements.is_empty() {
+                doc.check_unpinned(&elements)?;
                 doc.delete(&elements)?;
             }
             Ok(())

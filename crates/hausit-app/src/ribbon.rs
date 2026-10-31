@@ -694,6 +694,31 @@ fn manage(app: &mut HausitApp, ui: &mut Ui) {
 fn modify(app: &mut HausitApp, ui: &mut Ui) {
     select_panel(app, ui);
     let has_sel = app.selection.iter().any(|id| app.doc.element(*id).is_some());
+    panel(ui, "Clipboard", |ui| {
+        if big(
+            ui,
+            Icon::Paste,
+            "Paste",
+            "Paste (Ctrl+V): on the active plan's level, or in place",
+            false,
+            !app.clipboard.is_empty(),
+        ) {
+            crate::hide_isolate::paste(app);
+        }
+        if big(
+            ui,
+            Icon::Paste,
+            "To Levels",
+            "Paste Aligned to Selected Levels",
+            false,
+            !app.clipboard.is_empty(),
+        ) {
+            crate::hide_isolate::open_paste_levels(app);
+        }
+        if big(ui, Icon::Copy, "Copy", "Copy to Clipboard (Ctrl+C)", false, has_sel) {
+            crate::hide_isolate::copy_to_clipboard(app);
+        }
+    });
     panel(ui, "Properties", |ui| {
         let type_id = app
             .selection
@@ -790,6 +815,29 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
             "Demolish: click elements to demolish them in this view's phase",
             Tool::Demolish,
         );
+        tool_button(app, ui, Icon::Align, "Align", "Align (AL)", Tool::Align { reference: None });
+        tool_button(app, ui, Icon::Offset, "Offset", "Offset (OF)", Tool::Offset);
+        if big(
+            ui,
+            Icon::Array,
+            "Array",
+            "Array (AR): copies of the selection in a row",
+            matches!(app.tool, Tool::Array { .. }),
+            has_sel,
+        ) {
+            tools::start(app, Tool::Array { start: None });
+        }
+        let pinned = app.selection.iter().any(|s| app.doc.element(*s).is_some_and(|e| e.pinned));
+        if big(
+            ui,
+            Icon::Pin,
+            if pinned { "Unpin" } else { "Pin" },
+            "Pin (PN) keeps elements from moving; Unpin (UP) releases them",
+            false,
+            has_sel,
+        ) {
+            crate::hide_isolate::pin(app, !pinned);
+        }
         if big(ui, Icon::Delete, "Delete", "Delete (DE)", false, !app.selection.is_empty()) {
             app.delete_selection();
         }

@@ -195,11 +195,51 @@ impl Document {
     /// hidden walls and the tags of hidden elements.
     pub fn phase_hidden(&self, view: &View) -> std::collections::HashSet<ElementId> {
         let shows = self.phase_displays(view);
-        let mut hidden: std::collections::HashSet<ElementId> = shows
+        let hidden: std::collections::HashSet<ElementId> = shows
             .iter()
             .filter(|(_, (_, d))| *d == PhaseDisplay::NotDisplayed)
             .map(|(id, _)| *id)
             .collect();
+        self.with_dependents_hidden(hidden)
+    }
+
+    /// Everything a view leaves out: by phase, Hide in View and Temporary
+    /// Hide/Isolate.
+    pub fn view_hidden(&self, view: &View) -> std::collections::HashSet<ElementId> {
+        let mut hidden = self.phase_hidden(view);
+        hidden.extend(view.hidden_elements.iter().copied());
+        if let Some(t) = &view.temp_hide {
+            for e in self.elements() {
+                let listed = t.elements.contains(&e.id) || t.categories.contains(&e.category());
+                let hide = if t.isolate {
+                    !listed && !crate::editing::always_visible(e.category())
+                } else {
+                    listed
+                };
+                if hide {
+                    hidden.insert(e.id);
+                }
+            }
+            if t.isolate {
+                // Isolated hosts keep their doors and windows, and their tags.
+                let kept: Vec<ElementId> = self
+                    .elements()
+                    .filter(|e| match &e.data {
+                        ElementData::Door(o) | ElementData::Window(o) => !hidden.contains(&o.host),
+                        ElementData::Tag(t) => !hidden.contains(&t.host),
+                        _ => false,
+                    })
+                    .map(|e| e.id)
+                    .collect();
+                for id in kept {
+                    hidden.remove(&id);
+                }
+            }
+        }
+        self.with_dependents_hidden(hidden)
+    }
+
+    fn with_dependents_hidden(&self, mut hidden: std::collections::HashSet<ElementId>) -> std::collections::HashSet<ElementId> {
         for e in self.elements() {
             let host = match &e.data {
                 ElementData::Door(o) | ElementData::Window(o) => Some(o.host),

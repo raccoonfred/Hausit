@@ -103,6 +103,18 @@ pub enum Tool {
     Tag,
     /// Demolish: click elements to demolish them in the view's phase.
     Demolish,
+    /// Align: the reference line picked first, then the element to move.
+    Align {
+        reference: Option<hausit_model::RefLine>,
+    },
+    /// Offset: click a wall, grid or line to offset it (Options Bar
+    /// distance, Copy).
+    Offset,
+    /// Linear Array of the selection: start, then end of the first step
+    /// (or of the whole run with "Move To: Last").
+    Array {
+        start: Option<DVec2>,
+    },
 }
 
 impl Tool {
@@ -151,6 +163,9 @@ impl Tool {
             Tool::Text => "Modify | Place Text",
             Tool::Tag => "Modify | Tag",
             Tool::Demolish => "Modify | Demolish",
+            Tool::Align { .. } => "Modify | Align",
+            Tool::Offset => "Modify | Offset",
+            Tool::Array { .. } => "Modify | Array",
         }
     }
 
@@ -204,6 +219,11 @@ impl Tool {
             Tool::Text => "Click where the text starts, then type it. Leader on the Options Bar adds an arrow.",
             Tool::Tag => "Click an element to tag it: doors show their Mark, windows their Type Mark, other elements their type.",
             Tool::Demolish => "Click an element to demolish it in this view's phase. Doors and windows go with their wall.",
+            Tool::Align { reference: None } => "Pick a reference line or point to align to: a wall face or centreline, a grid, a line.",
+            Tool::Align { .. } => "Pick the entity to align: a parallel wall face or centreline, grid or line, or a column or component.",
+            Tool::Offset => "Click a wall, grid or line. It is offset by the Options Bar distance to the side of the cursor.",
+            Tool::Array { start: None } => "Click the start point of the array.",
+            Tool::Array { .. } => "Click the end point: the second item (Move To: 2nd) or the last (Move To: Last).",
         }
     }
 
@@ -235,6 +255,23 @@ impl Tool {
             Tool::Attach { .. } => matches!(cat, Category::Roofs | Category::Floors),
             Tool::Tag => hausit_model::annotation::TAGGABLE.contains(&cat),
             Tool::Demolish => hausit_model::phasing::is_phased(cat),
+            Tool::Align { reference: None } | Tool::Offset => {
+                matches!(
+                    cat,
+                    Category::Walls | Category::Grids | Category::RoomSeparation | Category::StructuralFraming
+                )
+            }
+            Tool::Align { .. } => {
+                matches!(
+                    cat,
+                    Category::Walls
+                        | Category::Grids
+                        | Category::RoomSeparation
+                        | Category::StructuralFraming
+                        | Category::StructuralColumns
+                        | Category::StructuralFoundations
+                ) || Category::COMPONENTS.contains(&cat)
+            }
             _ => false,
         }
     }
@@ -251,6 +288,7 @@ impl Tool {
             | Tool::Mirror { start, .. } => *start,
             Tool::Move { base } | Tool::Copy { base } => *base,
             Tool::Rotate { center, .. } => Some(*center),
+            Tool::Array { start } => *start,
             Tool::Floor { sketch, .. } | Tool::Roof { sketch } => sketch.start,
             Tool::Stair { pts } | Tool::Railing { pts } => pts.last().copied(),
             _ => None,
@@ -444,6 +482,13 @@ pub struct ToolOptions {
     /// Doors and windows: tag them as they are placed (Revit's "Tag on
     /// Placement").
     pub tag_on_placement: bool,
+    /// Offset: distance, and whether it copies (Revit's default) or moves.
+    pub offset_distance: f64,
+    pub offset_copy: bool,
+    /// Array: number of items, and whether the second click places the
+    /// last item ("Move To: Last") or the second.
+    pub array_count: usize,
+    pub array_to_last: bool,
 }
 
 impl Default for ToolOptions {
@@ -468,6 +513,10 @@ impl Default for ToolOptions {
             last_component: None,
             leader: false,
             tag_on_placement: true,
+            offset_distance: 1000.0,
+            offset_copy: true,
+            array_count: 3,
+            array_to_last: false,
         }
     }
 }
@@ -1320,6 +1369,67 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 });
             }
         }
+        Tool::Align { reference } => {
+            let reference = *reference;
+            let probe = Tool::Align { reference };
+            let picked = app.hover.filter(|h| app.doc.element(*h).is_some_and(|e| probe.picks(e.category())));
+            let Some(target) = picked else {
+                app.status = "Click a wall, grid or line.".into();
+                app.tool = probe;
+                return;
+            };
+            match reference {
+                None => {
+                    app.tool = Tool::Align {
+                        reference: app.doc.nearest_reference(target, p),
+                    };
+                    app.status = app.tool.prompt().into();
+                }
+                Some(r) => {
+                    app.transact("Align", |doc| doc.align(r, target, p));
+                    app.tool = Tool::Align { reference: None };
+                    app.status = app.tool.prompt().into();
+                }
+            }
+            return;
+        }
+        Tool::Offset => {
+            app.tool = Tool::Offset;
+            let picked = app.hover.filter(|h| app.doc.element(*h).is_some_and(|e| tool.picks(e.category())));
+            let Some(target) = picked else {
+                app.status = "Click a wall, grid or line.".into();
+                return;
+            };
+            // The side of the element the cursor is on.
+            let side = p;
+            let (d, copy) = (app.options.offset_distance, app.options.offset_copy);
+            if copy {
+                if let Some(new) = app.transact("Offset", |doc| doc.offset_copy(target, d, side)) {
+                    app.selection = vec![new];
+                }
+            } else {
+                app.transact("Offset", |doc| doc.offset_move(target, d, side));
+            }
+            return;
+        }
+        Tool::Array { start } => match *start {
+            None => *start = Some(p),
+            Some(a) => {
+                let ids = transformable(app);
+                let n = app.options.array_count.max(2);
+                let step = if app.options.array_to_last {
+                    (p - a) / (n - 1) as f64
+                } else {
+                    p - a
+                };
+                if let Some(new) = app.transact("Array", |doc| Ok(doc.array_linear(&ids, step, n))) {
+                    app.status = format!("Arrayed {} element(s) into {n} items.", ids.len());
+                    app.selection.extend(new);
+                }
+                app.tool = Tool::Modify;
+                return;
+            }
+        },
         Tool::Demolish => {
             // Stays active for the next pick, as in Revit.
             app.tool = Tool::Demolish;
@@ -1414,6 +1524,7 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 let ids: Vec<ElementId> = app.selection.iter().copied().filter(|i| app.doc.element(*i).is_some()).collect();
                 if matches!(tool, Tool::Move { .. }) {
                     app.transact("Move", |doc| {
+                        doc.check_unpinned(&ids)?;
                         doc.translate(&ids, p - a);
                         Ok(())
                     });
@@ -1768,6 +1879,9 @@ fn rotate_selection(app: &mut HausitApp, center: DVec2, angle: f64) {
     let ids = transformable(app);
     let copy = app.options.copy;
     let new = app.transact("Rotate", |doc| {
+        if !copy {
+            doc.check_unpinned(&ids)?;
+        }
         let ids = if copy { doc.copy(&ids, DVec2::ZERO) } else { ids };
         doc.rotate(&ids, center, angle);
         Ok(ids)
@@ -1783,6 +1897,9 @@ fn mirror_selection(app: &mut HausitApp, a: DVec2, b: DVec2) {
     let ids = transformable(app);
     let copy = app.options.copy;
     let new = app.transact("Mirror", |doc| {
+        if !copy {
+            doc.check_unpinned(&ids)?;
+        }
         let ids = if copy { doc.copy(&ids, DVec2::ZERO) } else { ids };
         doc.mirror(&ids, a, b);
         Ok(ids)
@@ -2013,7 +2130,7 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
     if ctx.egui_wants_keyboard_input() || app.show_home {
         return;
     }
-    let (esc, del, enter, z, y, s, o, n, shift_s, text, now, space) = ctx.input(|i| {
+    let (esc, del, enter, z, y, s, o, n, shift_s, (copy, paste), text, now, space) = ctx.input(|i| {
         let cmd = i.modifiers.command;
         let text: String = i
             .events
@@ -2033,6 +2150,10 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
             cmd && i.key_pressed(egui::Key::O),
             cmd && i.key_pressed(egui::Key::N),
             cmd && i.key_pressed(egui::Key::S) && i.modifiers.shift,
+            (
+                cmd && (i.key_pressed(egui::Key::C) || i.events.iter().any(|e| matches!(e, egui::Event::Copy))),
+                cmd && (i.key_pressed(egui::Key::V) || i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))),
+            ),
             text,
             i.time,
             i.key_pressed(egui::Key::Space),
@@ -2076,6 +2197,12 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
     }
     if y {
         app.redo();
+    }
+    if copy && app.tool == Tool::Modify {
+        crate::hide_isolate::copy_to_clipboard(app);
+    }
+    if paste && app.tool == Tool::Modify {
+        crate::hide_isolate::paste(app);
     }
     if s {
         app.save();
@@ -2264,6 +2391,46 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
         "SL" => {
             start(app, Tool::Split);
+            true
+        }
+        "AL" => {
+            start(app, Tool::Align { reference: None });
+            true
+        }
+        "OF" => {
+            start(app, Tool::Offset);
+            true
+        }
+        "AR" => {
+            start(app, Tool::Array { start: None });
+            true
+        }
+        "PN" => {
+            crate::hide_isolate::pin(app, true);
+            true
+        }
+        "UP" => {
+            crate::hide_isolate::pin(app, false);
+            true
+        }
+        "HH" | "HI" | "HC" | "IC" | "HR" => {
+            use crate::hide_isolate::HideCmd;
+            let cmd = match cmd {
+                "HH" => HideCmd::HideElement,
+                "HI" => HideCmd::IsolateElement,
+                "HC" => HideCmd::HideCategory,
+                "IC" => HideCmd::IsolateCategory,
+                _ => HideCmd::Reset,
+            };
+            crate::hide_isolate::temporary(app, cmd);
+            true
+        }
+        "EH" => {
+            crate::hide_isolate::hide_in_view(app);
+            true
+        }
+        "VH" => {
+            crate::canvas::hide_category_in_view(app);
             true
         }
         _ => false,

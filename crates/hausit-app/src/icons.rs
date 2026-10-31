@@ -56,6 +56,11 @@ pub enum Icon {
     Text,
     Tag,
     Demolish,
+    Align,
+    Offset,
+    Array,
+    Pin,
+    Paste,
     Phases,
 }
 
@@ -410,6 +415,62 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
                 "D1",
                 egui::FontId::proportional(6.5 * s),
                 k(INK),
+            );
+        }
+        Icon::Align => {
+            seg((6.0, 3.0), (6.0, 29.0), line(1.4, BLUE));
+            p.rect(
+                rect(10.0, 8.0, 26.0, 24.0),
+                0.0,
+                k(Color32::from_gray(225)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            seg((20.0, 16.0), (8.0, 16.0), line(1.6, RED));
+            poly(&[(8.0, 16.0), (12.0, 13.0), (12.0, 19.0)], RED, Stroke::NONE);
+        }
+        Icon::Offset => {
+            seg((5.0, 26.0), (27.0, 26.0), line(3.0, INK));
+            p.add(Shape::dashed_line(
+                &[at(5.0, 12.0), at(27.0, 12.0)],
+                line(2.0, BLUE),
+                3.0 * s,
+                2.0 * s,
+            ));
+            seg((16.0, 24.0), (16.0, 14.0), line(1.2, RED));
+            poly(&[(16.0, 13.0), (13.0, 17.0), (19.0, 17.0)], RED, Stroke::NONE);
+        }
+        Icon::Array => {
+            for x in [4.0, 13.0, 22.0] {
+                p.rect(
+                    rect(x, 11.0, x + 6.0, 21.0),
+                    0.0,
+                    k(if x == 4.0 { BRICK } else { Color32::from_gray(220) }),
+                    ink,
+                    egui::StrokeKind::Middle,
+                );
+            }
+            seg((7.0, 26.0), (25.0, 26.0), line(1.2, BLUE));
+        }
+        Icon::Pin => {
+            p.circle(at(16.0, 10.0), 6.0 * s, Color32::from_rgb(200, 60, 60), ink);
+            seg((16.0, 16.0), (16.0, 29.0), line(2.0, INK));
+        }
+        Icon::Paste => {
+            p.rect(
+                rect(7.0, 5.0, 25.0, 29.0),
+                2.0 * s,
+                k(Color32::from_rgb(196, 160, 110)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            p.rect(rect(11.0, 10.0, 27.0, 28.0), 0.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            p.rect(
+                rect(12.0, 3.0, 20.0, 7.0),
+                1.0 * s,
+                k(Color32::from_gray(120)),
+                ink,
+                egui::StrokeKind::Middle,
             );
         }
         Icon::Demolish => {

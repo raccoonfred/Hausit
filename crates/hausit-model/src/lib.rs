@@ -15,6 +15,7 @@ pub mod category;
 pub mod component;
 pub mod dimensions;
 pub mod document;
+pub mod editing;
 pub mod element;
 pub mod family;
 pub mod geometry;
@@ -35,6 +36,7 @@ pub mod view;
 pub use category::Category;
 pub use component::FamilyDef;
 pub use document::{Document, ModelError, ProjectInfo};
+pub use editing::RefLine;
 pub use element::*;
 pub use family::{FamilyType, TypeParams};
 pub use history::History;
@@ -42,6 +44,8 @@ pub use params::{ParamGroup, ParamKind, ParamValue, Parameter};
 pub use phasing::{Phase, PhaseDisplay, PhaseFilter, PhaseStatus};
 pub use schedule::{ScheduleDef, ScheduleField};
 pub use sheet::{SheetDef, SheetSize, Viewport};
-pub use view::{CardinalDirection, CategoryGraphics, DetailLevel, Graphics, SectionBox, View, ViewKind, ViewTemplate, VisualStyle};
+pub use view::{
+    CardinalDirection, CategoryGraphics, DetailLevel, Graphics, SectionBox, TempHide, View, ViewKind, ViewTemplate, VisualStyle,
+};
 
 pub use hausit_core::{DVec2, DVec3, ElementId};
