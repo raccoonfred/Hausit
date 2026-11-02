@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 serde_json.workspace = true
+serde.workspace = true
 hausit-core.workspace = true
 hausit-model.workspace = true
 hausit-views.workspace = true

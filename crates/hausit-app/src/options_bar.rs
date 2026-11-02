@@ -7,12 +7,17 @@ use hausit_core::{format_length, parse_length, ElementId};
 use hausit_model::LocationLine;
 
 pub fn length_edit(ui: &mut Ui, id: &str, value: &mut f64, unit: hausit_core::LengthUnit) -> bool {
+    length_edit_w(ui, id, value, unit, 70.0)
+}
+
+/// A length box `width` wide that commits when it loses focus.
+pub fn length_edit_w(ui: &mut Ui, id: &str, value: &mut f64, unit: hausit_core::LengthUnit, width: f32) -> bool {
     let key = egui::Id::unique(("len_edit", id));
     let mut text = ui
         .ctx()
         .data(|d| d.get_temp::<String>(key))
         .unwrap_or_else(|| format_length(*value, unit));
-    let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(70.0));
+    let r = ui.add(egui::TextEdit::singleline(&mut text).desired_width(width));
     let mut changed = false;
     if r.has_focus() {
         ui.ctx().data_mut(|d| d.insert_temp(key, text.clone()));
@@ -30,7 +35,11 @@ pub fn length_edit(ui: &mut Ui, id: &str, value: &mut f64, unit: hausit_core::Le
 pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     egui::Panel::top("options_bar")
         .exact_size(28.0)
-        .frame(egui::Frame::new().fill(Color32::from_rgb(236, 238, 241)).inner_margin(egui::Margin::symmetric(8, 3)))
+        .frame(
+            egui::Frame::new()
+                .fill(Color32::from_rgb(236, 238, 241))
+                .inner_margin(egui::Margin::symmetric(8, 3)),
+        )
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(app.tool.context_title()).strong());
@@ -40,23 +49,33 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::Wall { .. } => {
                         ui.label("Height:");
                         let levels = app.doc.levels();
-                        let current = if app.options.wall_top.is_valid() { app.doc.level_name(app.options.wall_top) } else { "Unconnected".into() };
-                        egui::ComboBox::from_id_salt("wall_top").selected_text(current).width(110.0).show_ui(ui, |ui| {
-                            ui.selectable_value(&mut app.options.wall_top, ElementId::INVALID, "Unconnected");
-                            for (id, l) in &levels {
-                                ui.selectable_value(&mut app.options.wall_top, *id, format!("Up to: {}", l.name));
-                            }
-                        });
+                        let current = if app.options.wall_top.is_valid() {
+                            app.doc.level_name(app.options.wall_top)
+                        } else {
+                            "Unconnected".into()
+                        };
+                        egui::ComboBox::from_id_salt("wall_top")
+                            .selected_text(current)
+                            .width(110.0)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut app.options.wall_top, ElementId::INVALID, "Unconnected");
+                                for (id, l) in &levels {
+                                    ui.selectable_value(&mut app.options.wall_top, *id, format!("Up to: {}", l.name));
+                                }
+                            });
                         if !app.options.wall_top.is_valid() {
                             length_edit(ui, "wall_h", &mut app.options.wall_height, unit);
                         }
                         ui.separator();
                         ui.label("Location Line:");
-                        egui::ComboBox::from_id_salt("locline").selected_text(app.options.location_line.label()).width(150.0).show_ui(ui, |ui| {
-                            for l in LocationLine::ALL {
-                                ui.selectable_value(&mut app.options.location_line, l, l.label());
-                            }
-                        });
+                        egui::ComboBox::from_id_salt("locline")
+                            .selected_text(app.options.location_line.label())
+                            .width(150.0)
+                            .show_ui(ui, |ui| {
+                                for l in LocationLine::ALL {
+                                    ui.selectable_value(&mut app.options.location_line, l, l.label());
+                                }
+                            });
                         ui.checkbox(&mut app.options.chain, "Chain");
                         ui.separator();
                         ui.label(RichText::new("Space flips the exterior side").color(Color32::DARK_GRAY));
@@ -82,7 +101,12 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::Roof { .. } => {
                         ui.checkbox(&mut app.options.defines_slope, "Defines slope");
                         ui.label("Slope:");
-                        ui.add(egui::DragValue::new(&mut app.options.roof_slope).range(0.0..=75.0).suffix("°").speed(0.5));
+                        ui.add(
+                            egui::DragValue::new(&mut app.options.roof_slope)
+                                .range(0.0..=75.0)
+                                .suffix("°")
+                                .speed(0.5),
+                        );
                         if app.options.sketch_mode == DrawShape::PickWalls {
                             ui.label("Overhang:");
                             length_edit(ui, "roof_ov", &mut app.options.roof_overhang, unit);
@@ -157,7 +181,10 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     Tool::Door | Tool::Window => {
                         ui.checkbox(&mut app.options.tag_on_placement, "Tag on Placement");
                         ui.separator();
-                        ui.label(RichText::new("Hover over a wall in plan. The side you click sets the swing side; Space flips the hand.").color(Color32::DARK_GRAY));
+                        ui.label(
+                            RichText::new("Hover over a wall in plan. The side you click sets the swing side; Space flips the hand.")
+                                .color(Color32::DARK_GRAY),
+                        );
                     }
                     Tool::Rotate { .. } | Tool::Mirror { .. } => {
                         ui.checkbox(&mut app.options.copy, "Copy");
@@ -187,7 +214,11 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         ui.label(RichText::new("Space rotates 90°.").color(Color32::DARK_GRAY));
                     }
                     Tool::Column => {
-                        if ui.button("At Grids").on_hover_text("Place a column at every grid intersection").clicked() {
+                        if ui
+                            .button("At Grids")
+                            .on_hover_text("Place a column at every grid intersection")
+                            .clicked()
+                        {
                             crate::tools::columns_at_grids(app);
                         }
                         ui.separator();
@@ -228,7 +259,11 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         length_edit(ui, "ceiling_h", &mut app.options.ceiling_height, unit);
                     }
                     Tool::Footing => {
-                        if ui.button("At Columns").on_hover_text("Place a foundation under every column on this level").clicked() {
+                        if ui
+                            .button("At Columns")
+                            .on_hover_text("Place a foundation under every column on this level")
+                            .clicked()
+                        {
                             crate::tools::footings_at_columns(app);
                         }
                         ui.separator();
@@ -239,17 +274,41 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                     }
                     Tool::Modify => {
                         if app.selection.is_empty() {
-                            ui.label(RichText::new("Shortcuts: WA wall · DR door · WN window · FL floor · RF roof · GR grid · LL level · RM room · DI dimension · TX text · TG tag · CL column · BM beam · BR brace · FT wall foundation · MV move · CO copy · RO rotate · MM mirror · BX selection box · TR trim · SL split · ZF zoom to fit").color(Color32::DARK_GRAY));
+                            ui.label(
+                                RichText::new(
+                                    "Click to select, drag for a window · Enter repeats the last command · Ctrl+K finds any command",
+                                )
+                                .color(Color32::DARK_GRAY),
+                            );
+                            if !app.shortcut.0.is_empty() && ui.input(|i| i.time) - app.shortcut.1 < 1.5 {
+                                ui.separator();
+                                crate::palette::key_cap(ui, &app.shortcut.0);
+                            }
                         } else {
                             ui.label(format!("{} selected", app.selection.len()));
+                            if ui
+                                .small_button("Filter…")
+                                .on_hover_text("Keep only some categories of the selection (FI)")
+                                .clicked()
+                            {
+                                app.dialogs.filter = Some(crate::palette::FilterDialog::new(app));
+                            }
                         }
                     }
                     _ => {}
                 }
                 if !app.options.typed.is_empty() {
                     ui.separator();
-                    let what = if matches!(app.tool, Tool::Rotate { .. }) { "Angle" } else { "Length" };
-                    ui.label(RichText::new(format!("{what}: {}", app.options.typed)).strong().color(Color32::from_rgb(20, 60, 140)));
+                    let what = if matches!(app.tool, Tool::Rotate { .. }) {
+                        "Angle"
+                    } else {
+                        "Length"
+                    };
+                    ui.label(
+                        RichText::new(format!("{what}: {}", app.options.typed))
+                            .strong()
+                            .color(Color32::from_rgb(20, 60, 140)),
+                    );
                 }
             });
         });

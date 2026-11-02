@@ -12,11 +12,11 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         .exact_size(30.0)
         .frame(egui::Frame::new().fill(TAB_BAR_BG).inner_margin(egui::Margin::symmetric(4, 2)))
         .show(ui, |ui| tab_row(app, ui));
-    if app.show_home {
+    if app.show_home || app.ui.ribbon_minimized {
         return;
     }
     egui::Panel::top("ribbon")
-        .exact_size(92.0)
+        .exact_size(94.0)
         .frame(
             egui::Frame::new()
                 .fill(RIBBON_BG)
@@ -24,18 +24,27 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 .stroke(Stroke::new(1.0, Color32::from_gray(205))),
         )
         .show(ui, |ui| {
-            ui.horizontal(|ui| match app.ribbon_tab {
-                RibbonTab::Architecture => architecture(app, ui),
-                RibbonTab::Structure => structure(app, ui),
-                RibbonTab::Insert => insert(app, ui),
-                RibbonTab::Annotate => annotate(app, ui),
-                RibbonTab::MassingSite => massing_site(app, ui),
-                RibbonTab::Collaborate => collaborate(app, ui),
-                RibbonTab::View => view_tab(app, ui),
-                RibbonTab::Manage => manage(app, ui),
-                RibbonTab::Modify => modify(app, ui),
-            });
+            // Panels that do not fit scroll sideways (mouse wheel) instead
+            // of being cut off.
+            egui::ScrollArea::horizontal()
+                .id_salt("ribbon_scroll")
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, |ui| ribbon_tab(app, ui));
         });
+}
+
+fn ribbon_tab(app: &mut HausitApp, ui: &mut Ui) {
+    ui.horizontal(|ui| match app.ribbon_tab {
+        RibbonTab::Architecture => architecture(app, ui),
+        RibbonTab::Structure => structure(app, ui),
+        RibbonTab::Insert => insert(app, ui),
+        RibbonTab::Annotate => annotate(app, ui),
+        RibbonTab::MassingSite => massing_site(app, ui),
+        RibbonTab::Collaborate => collaborate(app, ui),
+        RibbonTab::View => view_tab(app, ui),
+        RibbonTab::Manage => manage(app, ui),
+        RibbonTab::Modify => modify(app, ui),
+    });
 }
 
 fn tab_row(app: &mut HausitApp, ui: &mut Ui) {
@@ -110,17 +119,44 @@ fn tab_row(app: &mut HausitApp, ui: &mut Ui) {
             } else {
                 Color32::TRANSPARENT
             };
-            if ui
+            let r = ui
                 .add(egui::Button::new(label).fill(fill).stroke(if selected {
                     Stroke::new(1.0, Color32::from_gray(200))
                 } else {
                     Stroke::NONE
                 }))
-                .clicked()
-            {
+                .on_hover_text("Double-click a tab to minimize or restore the ribbon");
+            if r.double_clicked() {
+                app.ui.ribbon_minimized = !app.ui.ribbon_minimized;
+            } else if r.clicked() {
+                app.ui.ribbon_minimized = false;
                 app.ribbon_tab = tab;
+                if tab != RibbonTab::Modify {
+                    app.home_tab = tab;
+                }
             }
         }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let (icon, tip) = if app.ui.ribbon_minimized {
+                ("▼", "Show the ribbon")
+            } else {
+                ("▲", "Minimize the ribbon to tabs (more room for the view)")
+            };
+            if ui.add(egui::Button::new(icon).frame(false)).on_hover_text(tip).clicked() {
+                app.ui.ribbon_minimized = !app.ui.ribbon_minimized;
+            }
+            let search = ui
+                .add(
+                    egui::Button::new(RichText::new("🔍  Search commands…   Ctrl+K").color(Color32::from_gray(110)))
+                        .fill(Color32::WHITE)
+                        .stroke(Stroke::new(1.0, Color32::from_gray(200)))
+                        .min_size(vec2(230.0, 22.0)),
+                )
+                .on_hover_text("Find any tool or command by name and run it (Ctrl+K or F3)");
+            if search.clicked() {
+                app.palette.open = true;
+            }
+        });
     });
 }
 
@@ -200,6 +236,9 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
         }
     });
     ui.separator();
+    if ui.button("Keyboard Shortcuts…").clicked() {
+        app.dialogs.shortcuts = true;
+    }
     if ui.button("About Hausit").clicked() {
         app.dialogs.about = true;
     }
@@ -210,9 +249,10 @@ fn file_menu(app: &mut HausitApp, ui: &mut Ui) {
 
 // ----- ribbon building blocks -------------------------------------------------
 
-/// A titled ribbon panel, like Revit's "Build" or "Datum".
+/// A titled ribbon panel, like Revit's "Build" or "Datum": tools on
+/// top, the panel's name on a shaded strip along the bottom.
 pub fn panel(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
-    ui.vertical(|ui| {
+    let r = ui.vertical(|ui| {
         let row = ui
             .horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -220,10 +260,101 @@ pub fn panel(ui: &mut Ui, title: &str, add: impl FnOnce(&mut Ui)) {
             })
             .response;
         ui.add_space((ui.available_height() - 16.0).max(0.0));
-        ui.set_max_width(row.rect.width().max(40.0));
-        ui.vertical_centered(|ui| ui.add(egui::Label::new(RichText::new(title).size(11.0).color(Color32::from_gray(90))).extend()));
+        let w = row.rect.width().max(40.0);
+        let (strip, _) = ui.allocate_exact_size(vec2(w, 15.0), Sense::hover());
+        ui.painter().rect_filled(strip, 2.0, Color32::from_rgb(228, 232, 238));
+        ui.painter().text(
+            strip.center(),
+            egui::Align2::CENTER_CENTER,
+            title,
+            egui::FontId::proportional(10.5),
+            Color32::from_gray(80),
+        );
     });
-    ui.separator();
+    let x = r.response.rect.right() + 3.0;
+    let y = r.response.rect.y_range();
+    ui.add_space(6.0);
+    ui.painter().vline(x, y, Stroke::new(1.0, Color32::from_gray(214)));
+}
+
+/// Shows a tooltip with the command name in bold over its description.
+fn rich_tip(resp: egui::Response, label: &str, tip: &str, enabled: bool) -> egui::Response {
+    resp.on_hover_ui(|ui| {
+        ui.set_max_width(320.0);
+        // "Wall: Architectural (WA)" → title "Wall: Architectural", key "WA".
+        let (head, rest) = match tip.split_once(": ") {
+            Some((h, r)) if h.len() < 40 && !h.contains('\n') => (h.to_string(), r.to_string()),
+            _ => (label.to_string(), tip.to_string()),
+        };
+        let key = |t: &str| {
+            t.rfind(" (")
+                .filter(|_| t.ends_with(')'))
+                .map(|i| (t[..i].to_string(), t[i + 2..t.len() - 1].to_string()))
+                .filter(|(_, k)| k.len() <= 16)
+        };
+        let (head, k1) = key(&head).map(|(h, k)| (h, Some(k))).unwrap_or((head, None));
+        let (rest, k2) = key(&rest).map(|(r, k)| (r, Some(k))).unwrap_or((rest, None));
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(&head).strong());
+            if let Some(k) = k1.or(k2) {
+                crate::palette::key_cap(ui, &k);
+            }
+        });
+        if rest != head {
+            ui.label(rest);
+        }
+        if !enabled {
+            ui.label(RichText::new("Not available here.").italics().color(Color32::GRAY));
+        }
+    })
+}
+
+/// A small ribbon button (icon left of label) for stacking three high,
+/// like Revit's Modify panel.
+pub fn small(ui: &mut Ui, icon: Icon, label: &str, tip: &str, active: bool, enabled: bool) -> bool {
+    let font = egui::FontId::proportional(11.5);
+    let text_w = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), font.clone(), Color32::BLACK).size().x);
+    let size = vec2(text_w + 28.0, 20.0);
+    let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    let p = ui.painter();
+    if active {
+        p.rect(
+            rect,
+            3.0,
+            Color32::from_rgb(196, 220, 252),
+            Stroke::new(1.0, Color32::from_rgb(80, 130, 210)),
+            egui::StrokeKind::Inside,
+        );
+    } else if resp.hovered() && enabled {
+        p.rect(
+            rect,
+            3.0,
+            Color32::from_rgb(225, 236, 250),
+            Stroke::new(1.0, Color32::from_rgb(160, 190, 230)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let icon_rect = egui::Rect::from_center_size(rect.left_center() + vec2(11.0, 0.0), vec2(17.0, 17.0));
+    icons::paint(p, icon_rect, icon, enabled);
+    let color = if enabled { Color32::from_gray(30) } else { Color32::from_gray(160) };
+    p.text(rect.left_center() + vec2(23.0, 0.0), egui::Align2::LEFT_CENTER, label, font, color);
+    let resp = rich_tip(resp, label, tip, enabled);
+    enabled && resp.clicked()
+}
+
+/// A column of up to three small buttons.
+pub fn stack(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        add(ui);
+    });
+}
+
+fn small_tool(app: &mut HausitApp, ui: &mut Ui, icon: Icon, label: &str, tip: &str, tool: Tool) {
+    let active = std::mem::discriminant(&app.tool) == std::mem::discriminant(&tool);
+    if small(ui, icon, label, tip, active, true) {
+        tools::start(app, tool);
+    }
 }
 
 /// A large ribbon button: icon over label.
@@ -261,11 +392,7 @@ pub fn big(ui: &mut Ui, icon: Icon, label: &str, tip: &str, active: bool, enable
         font,
         color,
     );
-    let resp = if enabled {
-        resp.on_hover_text(tip)
-    } else {
-        resp.on_hover_text(format!("{tip}\n\nNot available yet: planned for a later version."))
-    };
+    let resp = rich_tip(resp, label, tip, enabled);
     enabled && resp.clicked()
 }
 
@@ -282,7 +409,7 @@ fn tool_button(app: &mut HausitApp, ui: &mut Ui, icon: Icon, label: &str, tip: &
 }
 
 fn planned(ui: &mut Ui, icon: Icon, label: &str, tip: &str) {
-    big(ui, icon, label, tip, false, false);
+    big(ui, icon, label, &format!("{tip}: planned for a later version"), false, false);
 }
 
 // ----- tabs -------------------------------------------------------------------
@@ -774,6 +901,64 @@ fn view_tab(app: &mut HausitApp, ui: &mut Ui) {
         ) {
             app.open_views.retain(|v| Some(*v) == app.active_view);
         }
+        ui_menu(app, ui);
+    });
+}
+
+/// View ▸ Windows ▸ User Interface: palettes, interface size, shortcuts.
+fn ui_menu(app: &mut HausitApp, ui: &mut Ui) {
+    let r = ui.vertical(|ui| {
+        let (rect, resp) = ui.allocate_exact_size(vec2(96.0, 62.0), Sense::click());
+        let p = ui.painter();
+        if resp.hovered() {
+            p.rect(
+                rect,
+                3.0,
+                Color32::from_rgb(225, 236, 250),
+                Stroke::new(1.0, Color32::from_rgb(160, 190, 230)),
+                egui::StrokeKind::Inside,
+            );
+        }
+        icons::paint(
+            p,
+            egui::Rect::from_center_size(rect.center_top() + vec2(0.0, 20.0), vec2(30.0, 30.0)),
+            Icon::Interface,
+            true,
+        );
+        p.text(
+            rect.center_bottom() - vec2(0.0, 12.0),
+            egui::Align2::CENTER_CENTER,
+            "User Interface ▾",
+            egui::FontId::proportional(11.5),
+            Color32::from_gray(30),
+        );
+        resp
+    });
+    let resp = r
+        .inner
+        .on_hover_text("Show or hide palettes, change the interface size, see keyboard shortcuts");
+    egui::Popup::menu(&resp).show(|ui| {
+        ui.set_min_width(220.0);
+        ui.checkbox(&mut app.ui.show_properties, "Properties   (Ctrl+1, PP)");
+        ui.checkbox(&mut app.ui.show_browser, "Project Browser   (PB)");
+        ui.checkbox(&mut app.ui.contextual_tab_on_select, "Open the Modify tab on selection");
+        ui.separator();
+        ui.label("Interface size");
+        ui.horizontal(|ui| {
+            for s in crate::settings::SCALES {
+                if ui
+                    .selectable_label((app.ui.scale - s).abs() < 1e-3, format!("{:.0}%", s * 100.0))
+                    .clicked()
+                {
+                    app.ui.scale = s;
+                }
+            }
+        });
+        ui.separator();
+        if ui.button("Keyboard Shortcuts…   (KS)").clicked() {
+            app.dialogs.shortcuts = true;
+            ui.close();
+        }
     });
 }
 
@@ -962,19 +1147,21 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         ) {
             crate::hide_isolate::paste(app);
         }
-        if big(
-            ui,
-            Icon::Paste,
-            "To Levels",
-            "Paste Aligned to Selected Levels",
-            false,
-            !app.clipboard.is_empty(),
-        ) {
-            crate::hide_isolate::open_paste_levels(app);
-        }
-        if big(ui, Icon::Copy, "Copy", "Copy to Clipboard (Ctrl+C)", false, has_sel) {
-            crate::hide_isolate::copy_to_clipboard(app);
-        }
+        stack(ui, |ui| {
+            if small(ui, Icon::Copy, "Copy", "Copy to Clipboard (Ctrl+C)", false, has_sel) {
+                crate::hide_isolate::copy_to_clipboard(app);
+            }
+            if small(
+                ui,
+                Icon::Paste,
+                "To Levels",
+                "Paste Aligned to Selected Levels",
+                false,
+                !app.clipboard.is_empty(),
+            ) {
+                crate::hide_isolate::open_paste_levels(app);
+            }
+        });
     });
     panel(ui, "Properties", |ui| {
         let type_id = app
@@ -1013,90 +1200,110 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         }
     });
     panel(ui, "Modify", |ui| {
-        if big(ui, Icon::Move, "Move", "Move (MV)", matches!(app.tool, Tool::Move { .. }), has_sel) {
-            tools::start(app, Tool::Move { base: None });
-        }
-        if big(ui, Icon::Copy, "Copy", "Copy (CO)", matches!(app.tool, Tool::Copy { .. }), has_sel) {
-            tools::start(app, Tool::Copy { base: None });
-        }
-        if big(
-            ui,
-            Icon::Rotate,
-            "Rotate",
-            "Rotate (RO)",
-            matches!(app.tool, Tool::Rotate { .. }),
-            has_sel,
-        ) {
-            tools::start(
+        stack(ui, |ui| {
+            small_tool(app, ui, Icon::Align, "Align", "Align (AL)", Tool::Align { reference: None });
+            small_tool(app, ui, Icon::Offset, "Offset", "Offset (OF)", Tool::Offset);
+            if small(
+                ui,
+                Icon::Mirror,
+                "Mirror - Pick",
+                "Mirror - Pick Axis (MM)",
+                matches!(app.tool, Tool::Mirror { draw: false, .. }),
+                has_sel,
+            ) {
+                tools::start(app, Tool::Mirror { draw: false, start: None });
+            }
+        });
+        stack(ui, |ui| {
+            if small(ui, Icon::Move, "Move", "Move (MV)", matches!(app.tool, Tool::Move { .. }), has_sel) {
+                tools::start(app, Tool::Move { base: None });
+            }
+            if small(ui, Icon::Copy, "Copy", "Copy (CO)", matches!(app.tool, Tool::Copy { .. }), has_sel) {
+                tools::start(app, Tool::Copy { base: None });
+            }
+            if small(
+                ui,
+                Icon::Rotate,
+                "Rotate",
+                "Rotate (RO)",
+                matches!(app.tool, Tool::Rotate { .. }),
+                has_sel,
+            ) {
+                tools::start(
+                    app,
+                    Tool::Rotate {
+                        center: Default::default(),
+                        from: None,
+                    },
+                );
+            }
+        });
+        stack(ui, |ui| {
+            if small(
+                ui,
+                Icon::Mirror,
+                "Mirror - Draw",
+                "Mirror - Draw Axis (DM)",
+                matches!(app.tool, Tool::Mirror { draw: true, .. }),
+                has_sel,
+            ) {
+                tools::start(app, Tool::Mirror { draw: true, start: None });
+            }
+            small_tool(
                 app,
-                Tool::Rotate {
-                    center: Default::default(),
-                    from: None,
-                },
+                ui,
+                Icon::Trim,
+                "Trim/Extend",
+                "Trim/Extend to Corner (TR)",
+                Tool::Trim { first: None },
             );
-        }
-        if big(
-            ui,
-            Icon::Mirror,
-            "Mirror",
-            "Mirror - Pick Axis (MM)",
-            matches!(app.tool, Tool::Mirror { draw: false, .. }),
-            has_sel,
-        ) {
-            tools::start(app, Tool::Mirror { draw: false, start: None });
-        }
-        if big(
-            ui,
-            Icon::Mirror,
-            "Draw Axis",
-            "Mirror - Draw Axis (DM)",
-            matches!(app.tool, Tool::Mirror { draw: true, .. }),
-            has_sel,
-        ) {
-            tools::start(app, Tool::Mirror { draw: true, start: None });
-        }
-        tool_button(
-            app,
-            ui,
-            Icon::Trim,
-            "Trim",
-            "Trim/Extend to Corner (TR)",
-            Tool::Trim { first: None },
-        );
-        tool_button(app, ui, Icon::Split, "Split", "Split Element (SL)", Tool::Split);
-        tool_button(
-            app,
-            ui,
-            Icon::Demolish,
-            "Demolish",
-            "Demolish: click elements to demolish them in this view's phase",
-            Tool::Demolish,
-        );
-        tool_button(app, ui, Icon::Align, "Align", "Align (AL)", Tool::Align { reference: None });
-        tool_button(app, ui, Icon::Offset, "Offset", "Offset (OF)", Tool::Offset);
-        if big(
-            ui,
-            Icon::Array,
-            "Array",
-            "Array (AR): copies of the selection in a row",
-            matches!(app.tool, Tool::Array { .. }),
-            has_sel,
-        ) {
-            tools::start(app, Tool::Array { start: None });
-        }
-        let pinned = app.selection.iter().any(|s| app.doc.element(*s).is_some_and(|e| e.pinned));
-        if big(
-            ui,
-            Icon::Pin,
-            if pinned { "Unpin" } else { "Pin" },
-            "Pin (PN) keeps elements from moving; Unpin (UP) releases them",
-            false,
-            has_sel,
-        ) {
-            crate::hide_isolate::pin(app, !pinned);
-        }
+            small_tool(app, ui, Icon::Split, "Split", "Split Element (SL)", Tool::Split);
+        });
+        stack(ui, |ui| {
+            if small(
+                ui,
+                Icon::Array,
+                "Array",
+                "Array (AR): copies of the selection in a row",
+                matches!(app.tool, Tool::Array { .. }),
+                has_sel,
+            ) {
+                tools::start(app, Tool::Array { start: None });
+            }
+            small_tool(
+                app,
+                ui,
+                Icon::Demolish,
+                "Demolish",
+                "Demolish: click elements to demolish them in this view's phase",
+                Tool::Demolish,
+            );
+            let pinned = app.selection.iter().any(|s| app.doc.element(*s).is_some_and(|e| e.pinned));
+            if small(
+                ui,
+                Icon::Pin,
+                if pinned { "Unpin" } else { "Pin" },
+                "Pin (PN) keeps elements from moving; Unpin (UP) releases them",
+                false,
+                has_sel,
+            ) {
+                crate::hide_isolate::pin(app, !pinned);
+            }
+        });
         if big(ui, Icon::Delete, "Delete", "Delete (DE)", false, !app.selection.is_empty()) {
             app.delete_selection();
+        }
+    });
+    panel(ui, "Selection", |ui| {
+        if big(
+            ui,
+            Icon::Filter,
+            "Filter",
+            "Filter (FI): keep only some categories of the selection",
+            app.dialogs.filter.is_some(),
+            has_sel,
+        ) {
+            app.dialogs.filter = Some(crate::palette::FilterDialog::new(app));
         }
     });
     crate::groups::group_panel(app, ui);
@@ -1202,7 +1409,7 @@ fn mode_panel(app: &mut HausitApp, ui: &mut Ui) {
 }
 
 /// File ▸ Export ▸ IFC: the whole model as IFC4.
-fn export_dxf(app: &mut HausitApp) {
+pub(crate) fn export_dxf(app: &mut HausitApp) {
     let Some(view) = app.active_view.and_then(|v| app.doc.view(v)).cloned() else {
         return;
     };
@@ -1220,7 +1427,7 @@ fn export_dxf(app: &mut HausitApp) {
     }
 }
 
-fn export_ifc(app: &mut HausitApp) {
+pub(crate) fn export_ifc(app: &mut HausitApp) {
     let name = if app.doc.project_info.name.is_empty() {
         "Project.ifc".to_string()
     } else {

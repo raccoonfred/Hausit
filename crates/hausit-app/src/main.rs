@@ -12,6 +12,7 @@
 mod app;
 mod browser;
 mod canvas;
+mod commands;
 mod dialogs;
 mod families;
 mod family_editor;
@@ -20,11 +21,13 @@ mod hide_isolate;
 mod icons;
 mod links;
 mod options_bar;
+mod palette;
 mod phases;
 mod properties;
 mod revisions;
 mod ribbon;
 mod schedule_view;
+mod settings;
 mod sheets;
 mod theme;
 mod tools;
@@ -79,6 +82,7 @@ fn run(args: Args, renderer: eframe::Renderer) -> eframe::Result {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             theme::apply(&cc.egui_ctx);
             let mut app = app::HausitApp::default();
+            app.load_settings();
             match args.sample {
                 Some(false) => app.set_document(sheets::sample_house(), None),
                 Some(true) => app.set_document(sheets::sample_warehouse(), None),

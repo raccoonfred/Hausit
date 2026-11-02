@@ -108,6 +108,17 @@ pub struct HausitApp {
     pub group_edit: Option<ElementId>,
     pub group_edit_before: Option<Box<Document>>,
     pub title: String,
+    /// Interface settings, saved between sessions.
+    pub ui: crate::settings::UiSettings,
+    saved_ui: crate::settings::UiSettings,
+    pub palette: crate::palette::Palette,
+    /// Indexes into [`crate::commands::COMMANDS`], most recent first.
+    pub recent_commands: Vec<usize>,
+    /// The tab to go back to when the contextual Modify tab goes away.
+    pub home_tab: RibbonTab,
+    was_contextual: bool,
+    /// The last tool started, for Repeat (Enter).
+    pub last_tool: Option<Tool>,
 }
 
 impl Default for HausitApp {
@@ -137,6 +148,13 @@ impl Default for HausitApp {
             group_edit: None,
             group_edit_before: None,
             title: String::new(),
+            ui: Default::default(),
+            saved_ui: Default::default(),
+            palette: Default::default(),
+            recent_commands: Vec::new(),
+            home_tab: RibbonTab::Architecture,
+            was_contextual: false,
+            last_tool: None,
         };
         app.saved_revision = app.doc.revision();
         app
@@ -211,6 +229,9 @@ impl HausitApp {
                 let keep = path.extension().map(|e| e == hausit_io::EXTENSION).unwrap_or(false);
                 self.set_document(doc, keep.then(|| path.to_path_buf()));
                 self.status = format!("Opened {}", path.display());
+                if keep {
+                    self.ui.add_recent(path);
+                }
             }
             Err(hausit_io::IoError::Revit(hausit_rvt::RvtError::ElementDataNotSupported(info))) => {
                 self.dialogs.revit_file = Some(crate::dialogs::RevitFileDialog {
@@ -232,6 +253,7 @@ impl HausitApp {
                 self.path = Some(path.clone());
                 self.saved_revision = self.doc.revision();
                 self.status = format!("Saved {}", path.display());
+                self.ui.add_recent(&path);
                 true
             }
             Err(e) => {
@@ -453,9 +475,19 @@ impl eframe::App for HausitApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.handle_close_request(&ctx);
+        if (ctx.zoom_factor() - self.ui.scale).abs() > 1e-3 {
+            ctx.set_zoom_factor(self.ui.scale);
+        }
         // New elements are created in the active view's phase.
         self.doc.creation_phase = self.active_view.and_then(|v| self.doc.view(v)).and_then(|v| self.doc.view_phase(v));
-        crate::tools::handle_shortcuts(self, &ctx);
+        crate::palette::show(self, &ctx);
+        if !self.palette.open {
+            crate::tools::handle_shortcuts(self, &ctx);
+        }
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::Num1)) {
+            self.ui.show_properties = !self.ui.show_properties;
+        }
+        self.update_contextual_tab();
 
         crate::ribbon::show(self, ui);
         if !self.show_home {
@@ -470,7 +502,7 @@ impl eframe::App for HausitApp {
             )
             .show(ui, |ui| self.status_bar(ui));
 
-        if !self.show_home {
+        if !self.show_home && (self.ui.show_properties || self.ui.show_browser) {
             egui::Panel::left("left_panels")
                 .resizable(true)
                 .default_size(300.0)
@@ -478,15 +510,21 @@ impl eframe::App for HausitApp {
                 .frame(egui::Frame::new().fill(crate::theme::PANEL_BG).inner_margin(egui::Margin::same(0)))
                 .show(ui, |ui| {
                     let h = ui.available_height();
-                    egui::Panel::top("properties_panel")
-                        .resizable(true)
-                        .default_size(h * 0.5)
-                        .min_size(120.0)
-                        .frame(egui::Frame::new().inner_margin(egui::Margin::same(0)))
-                        .show(ui, |ui| crate::properties::show(self, ui));
-                    egui::CentralPanel::default()
-                        .frame(egui::Frame::new().inner_margin(egui::Margin::same(0)))
-                        .show(ui, |ui| crate::browser::show(self, ui));
+                    if self.ui.show_properties && self.ui.show_browser {
+                        egui::Panel::top("properties_panel")
+                            .resizable(true)
+                            .default_size(h * 0.55)
+                            .min_size(120.0)
+                            .frame(egui::Frame::new().inner_margin(egui::Margin::same(0)))
+                            .show(ui, |ui| crate::properties::show(self, ui));
+                        egui::CentralPanel::default()
+                            .frame(egui::Frame::new().inner_margin(egui::Margin::same(0)))
+                            .show(ui, |ui| crate::browser::show(self, ui));
+                    } else if self.ui.show_properties {
+                        crate::properties::show(self, ui);
+                    } else {
+                        crate::browser::show(self, ui);
+                    }
                 });
         }
 
@@ -501,7 +539,47 @@ impl eframe::App for HausitApp {
             });
 
         crate::dialogs::show(self, &ctx);
+        crate::palette::shortcuts_window(self, &ctx);
+        crate::palette::filter_window(self, &ctx);
         self.update_title(&ctx);
+        if self.ui != self.saved_ui {
+            self.ui.save();
+            self.saved_ui = self.ui.clone();
+        }
+    }
+}
+
+impl HausitApp {
+    /// Loads the saved interface settings (palettes, size, recent files).
+    pub fn load_settings(&mut self) {
+        self.ui = crate::settings::UiSettings::load();
+        self.saved_ui = self.ui.clone();
+    }
+
+    /// The contextual Modify tab comes forward when a tool starts or
+    /// elements are selected, and the previous tab returns when both
+    /// end, as in Revit.
+    fn update_contextual_tab(&mut self) {
+        let selected = self.selection.iter().any(|id| self.doc.element(*id).is_some());
+        let contextual = self.tool != Tool::Modify || selected;
+        if contextual && !self.was_contextual {
+            if self.ribbon_tab != RibbonTab::Modify {
+                self.home_tab = self.ribbon_tab;
+            }
+            if self.ui.contextual_tab_on_select || self.tool != Tool::Modify {
+                self.ribbon_tab = RibbonTab::Modify;
+            }
+        } else if !contextual && self.was_contextual && self.ribbon_tab == RibbonTab::Modify {
+            self.ribbon_tab = self.home_tab;
+        }
+        self.was_contextual = contextual;
+    }
+
+    /// Runs the last command again (Enter, or right-click ▸ Repeat).
+    pub fn repeat_last(&mut self) {
+        if let Some(t) = self.last_tool.clone() {
+            crate::tools::start(self, t);
+        }
     }
 }
 
@@ -521,7 +599,12 @@ impl HausitApp {
                     ui.separator();
                 }
                 if !self.selection.is_empty() {
-                    ui.label(format!("Selected: {}", self.selection.len()));
+                    let r = ui
+                        .add(egui::Button::new(format!("⏷ {}", self.selection.len())).frame(false))
+                        .on_hover_text("Selected elements: click to filter the selection by category");
+                    if r.clicked() {
+                        self.dialogs.filter = Some(crate::palette::FilterDialog::new(self));
+                    }
                     ui.separator();
                 }
                 if let Some(h) = self.hover {

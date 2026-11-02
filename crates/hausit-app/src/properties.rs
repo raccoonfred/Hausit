@@ -3,7 +3,7 @@
 //! active view's properties.
 
 use crate::app::HausitApp;
-use crate::options_bar::length_edit;
+use crate::options_bar::length_edit_w;
 use egui::{Color32, RichText, Ui};
 use hausit_core::ElementId;
 use hausit_model::params::{element_parameters, set_element_parameter, ParamGroup, ParamKind, ParamValue};
@@ -19,8 +19,45 @@ fn header(ui: &mut Ui, text: &str) {
         });
 }
 
+/// Width of the name and value columns, shared by every group so the
+/// values line up down the palette.
+fn cols(ui: &Ui) -> (f32, f32) {
+    ui.ctx()
+        .data(|d| d.get_temp::<(f32, f32)>(egui::Id::unique("prop_cols")))
+        .unwrap_or((120.0, 140.0))
+}
+
+pub fn value_w(ui: &Ui) -> f32 {
+    cols(ui).1
+}
+
+fn grid(id: impl std::hash::Hash + std::fmt::Debug) -> egui::Grid {
+    egui::Grid::new(id).num_columns(2).striped(true).spacing([8.0, 3.0])
+}
+
+/// A parameter name in the fixed-width first column; long names are cut
+/// short and shown whole on hover.
+fn plabel(ui: &mut Ui, text: impl Into<egui::WidgetText>) {
+    let text = text.into();
+    let full = text.text().to_string();
+    let w = cols(ui).0;
+    ui.allocate_ui_with_layout(egui::vec2(w, 20.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_width(w);
+        ui.add(egui::Label::new(text).truncate()).on_hover_text(full);
+    });
+}
+
+fn prop_length(ui: &mut Ui, id: &str, value: &mut f64, unit: hausit_core::LengthUnit) -> bool {
+    let w = value_w(ui);
+    length_edit_w(ui, id, value, unit, w)
+}
+
 pub fn show(app: &mut HausitApp, ui: &mut Ui) {
     header(ui, "Properties");
+    let avail = ui.available_width() - 28.0;
+    let label_w = (avail * 0.47).clamp(80.0, 190.0);
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(egui::Id::unique("prop_cols"), (label_w, (avail - label_w - 8.0).max(60.0))));
     egui::ScrollArea::vertical()
         .id_salt("props_scroll")
         .auto_shrink([false, false])
@@ -179,113 +216,109 @@ fn instance_parameters(app: &mut HausitApp, ui: &mut Ui, elements: &[ElementId])
             .id_salt(group.label())
             .default_open(true)
             .show(ui, |ui| {
-                egui::Grid::new(("params", group.label()))
-                    .num_columns(2)
-                    .striped(true)
-                    .min_col_width(ui.available_width() * 0.42)
-                    .show(ui, |ui| {
-                        for p in ps {
-                            ui.label(p.name);
-                            ui.add_enabled_ui(!p.read_only, |ui| {
-                                let id_key = format!("{}-{}", elements[0], p.name);
-                                match (&p.kind, &p.value) {
-                                    (ParamKind::Level | ParamKind::LevelOrNone, ParamValue::Element(cur)) => {
-                                        let mut v = *cur;
-                                        let name = if v.is_valid() {
-                                            app.doc.level_name(v)
-                                        } else {
-                                            "Unconnected".into()
-                                        };
-                                        egui::ComboBox::from_id_salt(&id_key)
-                                            .selected_text(name)
-                                            .width(130.0)
-                                            .show_ui(ui, |ui| {
-                                                if p.kind == ParamKind::LevelOrNone {
-                                                    ui.selectable_value(&mut v, ElementId::INVALID, "Unconnected");
-                                                }
-                                                for (id, n) in &levels {
-                                                    ui.selectable_value(
-                                                        &mut v,
-                                                        *id,
-                                                        if p.kind == ParamKind::LevelOrNone {
-                                                            format!("Up to level: {n}")
-                                                        } else {
-                                                            n.clone()
-                                                        },
-                                                    );
-                                                }
-                                            });
-                                        if v != *cur {
-                                            edit = Some((p.name, ParamValue::Element(v)));
-                                        }
-                                    }
-                                    (ParamKind::Choice(options), ParamValue::Choice(i)) => {
-                                        let mut v = *i;
-                                        egui::ComboBox::from_id_salt(&id_key)
-                                            .selected_text(options.get(v).cloned().unwrap_or_default())
-                                            .width(130.0)
-                                            .show_ui(ui, |ui| {
-                                                for (k, o) in options.iter().enumerate() {
-                                                    ui.selectable_value(&mut v, k, o);
-                                                }
-                                            });
-                                        if v != *i {
-                                            edit = Some((p.name, ParamValue::Choice(v)));
-                                        }
-                                    }
-                                    (_, ParamValue::Length(v)) => {
-                                        let mut x = *v;
-                                        if length_edit(ui, &id_key, &mut x, unit) {
-                                            edit = Some((p.name, ParamValue::Length(x)));
-                                        }
-                                    }
-                                    (_, ParamValue::Angle(v)) => {
-                                        let mut x = *v;
-                                        if ui
-                                            .add(egui::DragValue::new(&mut x).range(0.0..=75.0).suffix("°").speed(0.5))
-                                            .changed()
-                                        {
-                                            edit = Some((p.name, ParamValue::Angle(x)));
-                                        }
-                                    }
-                                    (_, ParamValue::Bool(b)) => {
-                                        let mut x = *b;
-                                        if ui.checkbox(&mut x, "").changed() {
-                                            edit = Some((p.name, ParamValue::Bool(x)));
-                                        }
-                                    }
-                                    (_, ParamValue::Text(s)) => {
-                                        if p.read_only {
-                                            ui.label(s);
-                                        } else {
-                                            let key = egui::Id::unique(("text", &id_key));
-                                            let mut t = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| s.clone());
-                                            let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(130.0));
-                                            if r.has_focus() {
-                                                ui.ctx().data_mut(|d| d.insert_temp(key, t.clone()));
+                grid(("params", group.label())).show(ui, |ui| {
+                    for p in ps {
+                        plabel(ui, p.name);
+                        ui.add_enabled_ui(!p.read_only, |ui| {
+                            let id_key = format!("{}-{}", elements[0], p.name);
+                            match (&p.kind, &p.value) {
+                                (ParamKind::Level | ParamKind::LevelOrNone, ParamValue::Element(cur)) => {
+                                    let mut v = *cur;
+                                    let name = if v.is_valid() {
+                                        app.doc.level_name(v)
+                                    } else {
+                                        "Unconnected".into()
+                                    };
+                                    egui::ComboBox::from_id_salt(&id_key)
+                                        .selected_text(name)
+                                        .width(value_w(ui))
+                                        .show_ui(ui, |ui| {
+                                            if p.kind == ParamKind::LevelOrNone {
+                                                ui.selectable_value(&mut v, ElementId::INVALID, "Unconnected");
                                             }
-                                            if r.lost_focus() {
-                                                ui.ctx().data_mut(|d| d.remove::<String>(key));
-                                                if t != *s {
-                                                    edit = Some((p.name, ParamValue::Text(t)));
-                                                }
+                                            for (id, n) in &levels {
+                                                ui.selectable_value(
+                                                    &mut v,
+                                                    *id,
+                                                    if p.kind == ParamKind::LevelOrNone {
+                                                        format!("Up to level: {n}")
+                                                    } else {
+                                                        n.clone()
+                                                    },
+                                                );
                                             }
-                                        }
-                                    }
-                                    (_, ParamValue::Area(a)) => {
-                                        ui.label(format!("{:.3} m²", a / 1e6));
-                                    }
-                                    (_, ParamValue::Volume(v)) => {
-                                        ui.label(format!("{:.3} m³", v / 1e9));
-                                    }
-                                    (_, other) => {
-                                        ui.label(format!("{other:?}"));
+                                        });
+                                    if v != *cur {
+                                        edit = Some((p.name, ParamValue::Element(v)));
                                     }
                                 }
-                            });
-                            ui.end_row();
-                        }
-                    });
+                                (ParamKind::Choice(options), ParamValue::Choice(i)) => {
+                                    let mut v = *i;
+                                    egui::ComboBox::from_id_salt(&id_key)
+                                        .selected_text(options.get(v).cloned().unwrap_or_default())
+                                        .width(value_w(ui))
+                                        .show_ui(ui, |ui| {
+                                            for (k, o) in options.iter().enumerate() {
+                                                ui.selectable_value(&mut v, k, o);
+                                            }
+                                        });
+                                    if v != *i {
+                                        edit = Some((p.name, ParamValue::Choice(v)));
+                                    }
+                                }
+                                (_, ParamValue::Length(v)) => {
+                                    let mut x = *v;
+                                    if prop_length(ui, &id_key, &mut x, unit) {
+                                        edit = Some((p.name, ParamValue::Length(x)));
+                                    }
+                                }
+                                (_, ParamValue::Angle(v)) => {
+                                    let mut x = *v;
+                                    if ui
+                                        .add(egui::DragValue::new(&mut x).range(0.0..=75.0).suffix("°").speed(0.5))
+                                        .changed()
+                                    {
+                                        edit = Some((p.name, ParamValue::Angle(x)));
+                                    }
+                                }
+                                (_, ParamValue::Bool(b)) => {
+                                    let mut x = *b;
+                                    if ui.checkbox(&mut x, "").changed() {
+                                        edit = Some((p.name, ParamValue::Bool(x)));
+                                    }
+                                }
+                                (_, ParamValue::Text(s)) => {
+                                    if p.read_only {
+                                        ui.label(s);
+                                    } else {
+                                        let key = egui::Id::unique(("text", &id_key));
+                                        let mut t = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| s.clone());
+                                        let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(value_w(ui)));
+                                        if r.has_focus() {
+                                            ui.ctx().data_mut(|d| d.insert_temp(key, t.clone()));
+                                        }
+                                        if r.lost_focus() {
+                                            ui.ctx().data_mut(|d| d.remove::<String>(key));
+                                            if t != *s {
+                                                edit = Some((p.name, ParamValue::Text(t)));
+                                            }
+                                        }
+                                    }
+                                }
+                                (_, ParamValue::Area(a)) => {
+                                    ui.label(format!("{:.3} m²", a / 1e6));
+                                }
+                                (_, ParamValue::Volume(v)) => {
+                                    ui.label(format!("{:.3} m³", v / 1e9));
+                                }
+                                (_, other) => {
+                                    ui.label(format!("{other:?}"));
+                                }
+                            }
+                        });
+                        ui.end_row();
+                    }
+                });
             });
     }
     if let Some((name, value)) = edit {
@@ -321,18 +354,18 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
             .id_salt("sheet_identity")
             .default_open(true)
             .show(ui, |ui| {
-                egui::Grid::new("sheet_props").num_columns(2).show(ui, |ui| {
+                grid("sheet_props").show(ui, |ui| {
                     for (label, value) in [
                         ("Sheet Number", &mut def.number),
                         ("Drawn By", &mut def.drawn_by),
                         ("Checked By", &mut def.checked_by),
                         ("Sheet Issue Date", &mut def.issue_date),
                     ] {
-                        ui.label(label);
+                        plabel(ui, label);
                         text_field(ui, ("sheet", label, view_id), value);
                         ui.end_row();
                     }
-                    ui.label("Title Block");
+                    plabel(ui, "Title Block");
                     egui::ComboBox::from_id_salt("sheet_size")
                         .selected_text(def.size.title_block())
                         .show_ui(ui, |ui| {
@@ -348,12 +381,12 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
         egui::CollapsingHeader::new(RichText::new(header).strong())
             .default_open(true)
             .show(ui, |ui| {
-                egui::Grid::new("view_props").num_columns(2).show(ui, |ui| {
+                grid("view_props").show(ui, |ui| {
                     if v.kind.is_graphical() && !is_sheet {
-                        ui.label("View Scale");
+                        plabel(ui, "View Scale");
                         ui.add(egui::DragValue::new(&mut v.scale).range(1..=5000).prefix("1 : "));
                         ui.end_row();
-                        ui.label("Detail Level");
+                        plabel(ui, "Detail Level");
                         egui::ComboBox::from_id_salt("vp_detail")
                             .selected_text(v.detail_level.label())
                             .show_ui(ui, |ui| {
@@ -364,8 +397,8 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                         ui.end_row();
                     }
                     if v.kind.plan_level().is_some() {
-                        ui.label("Cut Plane (View Range)");
-                        length_edit(ui, "vp_cut", &mut v.cut_height, unit);
+                        plabel(ui, "Cut Plane (View Range)");
+                        prop_length(ui, "vp_cut", &mut v.cut_height, unit);
                         ui.end_row();
                     }
                     if let Some(r) = &mut v.view_range {
@@ -374,26 +407,26 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                             ("Bottom Offset", &mut r.bottom),
                             ("View Depth Offset", &mut r.depth),
                         ] {
-                            ui.label(label);
-                            length_edit(ui, &format!("vp_{label}"), value, unit);
+                            plabel(ui, label);
+                            prop_length(ui, &format!("vp_{label}"), value, unit);
                             ui.end_row();
                         }
                     }
                     if v.kind.is_graphical() && !matches!(v.kind, ViewKind::ThreeD) {
-                        ui.label("Crop View");
+                        plabel(ui, "Crop View");
                         let mut on = v.crop.is_some();
                         if ui.checkbox(&mut on, "").changed() {
                             v.crop = if on { crate::canvas::crop_around_view(app, view_id) } else { None };
                             v.crop_visible = on;
                         }
                         ui.end_row();
-                        ui.label("Crop Region Visible");
+                        plabel(ui, "Crop Region Visible");
                         ui.add_enabled(v.crop.is_some(), egui::Checkbox::without_text(&mut v.crop_visible));
                         ui.end_row();
                     }
                     if let ViewKind::Section { far_clip, .. } = &mut v.kind {
-                        ui.label("Far Clip Offset");
-                        length_edit(ui, "vp_far", far_clip, unit);
+                        plabel(ui, "Far Clip Offset");
+                        prop_length(ui, "vp_far", far_clip, unit);
                         ui.end_row();
                     }
                 });
@@ -403,8 +436,8 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
         egui::CollapsingHeader::new(RichText::new("Extents").strong())
             .default_open(true)
             .show(ui, |ui| {
-                egui::Grid::new("view_extents").num_columns(2).show(ui, |ui| {
-                    ui.label("Section Box");
+                grid("view_extents").show(ui, |ui| {
+                    plabel(ui, "Section Box");
                     let mut on = v.section_box.is_some();
                     if ui.checkbox(&mut on, "").changed() {
                         v.section_box = if on { crate::app::default_section_box(&app.doc) } else { None };
@@ -419,8 +452,8 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                             ("Box Bottom", &mut b.min.z),
                             ("Box Top", &mut b.max.z),
                         ] {
-                            ui.label(label);
-                            length_edit(ui, &format!("vp_{label}"), value, unit);
+                            plabel(ui, label);
+                            prop_length(ui, &format!("vp_{label}"), value, unit);
                             ui.end_row();
                         }
                     }
@@ -430,9 +463,9 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
     egui::CollapsingHeader::new(RichText::new("Identity Data").strong())
         .default_open(true)
         .show(ui, |ui| {
-            egui::Grid::new("view_identity").num_columns(2).show(ui, |ui| {
+            grid("view_identity").show(ui, |ui| {
                 if v.kind.is_graphical() && !is_sheet {
-                    ui.label("View Template");
+                    plabel(ui, "View Template");
                     let name = |id: Option<ElementId>| {
                         id.and_then(|t| app.doc.view_template(t))
                             .map(|t| t.name.clone())
@@ -440,7 +473,7 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                     };
                     egui::ComboBox::from_id_salt("vp_template")
                         .selected_text(name(v.template))
-                        .width(140.0)
+                        .width(value_w(ui))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut v.template, None, "<None>");
                             for t in &app.doc.view_templates {
@@ -448,17 +481,17 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                             }
                         });
                     ui.end_row();
-                    ui.label("Visibility/Graphics");
+                    plabel(ui, "Visibility/Graphics");
                     if ui.button("Edit…").clicked() {
                         app.active_view = Some(view_id);
                         crate::view_graphics::open_for_active_view(app);
                     }
                     ui.end_row();
                 }
-                ui.label("View Name");
+                plabel(ui, "View Name");
                 let key = egui::Id::unique(("view_name", view_id));
                 let mut t = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| v.name.clone());
-                let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(140.0));
+                let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(value_w(ui)));
                 if r.has_focus() {
                     ui.ctx().data_mut(|d| d.insert_temp(key, t.clone()));
                 }
@@ -479,12 +512,12 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
         egui::CollapsingHeader::new(RichText::new("Phasing").strong())
             .default_open(true)
             .show(ui, |ui| {
-                egui::Grid::new("view_phasing").num_columns(2).show(ui, |ui| {
-                    ui.label("Phase Filter");
+                grid("view_phasing").show(ui, |ui| {
+                    plabel(ui, "Phase Filter");
                     ui.add_enabled_ui(!locked, |ui| {
                         egui::ComboBox::from_id_salt("vp_phase_filter")
                             .selected_text(v.phase_filter.label())
-                            .width(140.0)
+                            .width(value_w(ui))
                             .show_ui(ui, |ui| {
                                 for f in hausit_model::PhaseFilter::ALL {
                                     ui.selectable_value(&mut v.phase_filter, f, f.label());
@@ -494,12 +527,12 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                     .response
                     .on_disabled_hover_text("Set by the view template");
                     ui.end_row();
-                    ui.label("Phase");
+                    plabel(ui, "Phase");
                     let current = app.doc.view_phase(&v);
                     let mut pick = current;
                     egui::ComboBox::from_id_salt("vp_phase")
                         .selected_text(app.doc.phase_name(current))
-                        .width(140.0)
+                        .width(value_w(ui))
                         .show_ui(ui, |ui| {
                             for p in &app.doc.phases {
                                 ui.selectable_value(&mut pick, Some(p.id), p.name.clone());
@@ -516,16 +549,16 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
         egui::CollapsingHeader::new(RichText::new("Color Scheme").strong())
             .default_open(true)
             .show(ui, |ui| {
-                egui::Grid::new("view_color_scheme").num_columns(2).show(ui, |ui| {
+                grid("view_color_scheme").show(ui, |ui| {
                     if let Some(s) = v.area_scheme {
-                        ui.label("Area Scheme");
+                        plabel(ui, "Area Scheme");
                         ui.label(s.label());
                         ui.end_row();
                     }
-                    ui.label("Color Scheme");
+                    plabel(ui, "Color Scheme");
                     egui::ComboBox::from_id_salt("vp_color_scheme")
                         .selected_text(v.color_scheme.map(|c| c.label()).unwrap_or("<none>"))
-                        .width(140.0)
+                        .width(value_w(ui))
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut v.color_scheme, None, "<none>");
                             for c in hausit_model::ColorBy::ALL {
@@ -533,7 +566,7 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
                             }
                         });
                     ui.end_row();
-                    ui.label("Legend");
+                    plabel(ui, "Legend");
                     let mut shown = v.color_legend.is_some();
                     if ui.add_enabled(shown, egui::Checkbox::without_text(&mut shown)).changed() && !shown {
                         v.color_legend = None;
@@ -560,7 +593,7 @@ fn view_properties(app: &mut HausitApp, ui: &mut Ui, view_id: ElementId) {
 fn text_field(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &mut String) {
     let key = egui::Id::unique(id);
     let mut t = ui.ctx().data(|d| d.get_temp::<String>(key)).unwrap_or_else(|| value.clone());
-    let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(140.0));
+    let r = ui.add(egui::TextEdit::singleline(&mut t).desired_width(value_w(ui)));
     if r.has_focus() {
         ui.ctx().data_mut(|d| d.insert_temp(key, t.clone()));
     }

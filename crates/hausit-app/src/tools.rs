@@ -650,6 +650,7 @@ impl Default for ToolOptions {
 // ----- starting tools ---------------------------------------------------------
 
 pub fn start(app: &mut HausitApp, mut tool: Tool) {
+    let fresh = tool.clone();
     let needs_plan = matches!(
         tool,
         Tool::Wall { .. }
@@ -790,6 +791,10 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
     }
     app.options.typed.clear();
     app.tool = tool;
+    app.last_tool = Some(fresh);
+    if app.ribbon_tab != RibbonTab::Modify {
+        app.home_tab = app.ribbon_tab;
+    }
     app.ribbon_tab = RibbonTab::Modify;
     app.status = app.tool.prompt().into();
 }
@@ -2708,6 +2713,7 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
             i.key_pressed(egui::Key::Space),
         )
     });
+    let was_modify = app.tool == Tool::Modify;
     if esc {
         if app.tool == Tool::Modify {
             app.selection.clear();
@@ -2797,6 +2803,11 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
         }
     }
 
+    // Enter with nothing running repeats the last command, as in Revit.
+    if enter && was_modify && app.tool == Tool::Modify && app.options.typed.is_empty() {
+        app.repeat_last();
+    }
+
     // While drawing, digits go to the typed-length box.
     if app.tool.anchor().is_some() && !app.tool.is_sketch() || (app.tool.is_sketch() && app.tool.anchor().is_some()) {
         for c in text.chars() {
@@ -2829,193 +2840,12 @@ pub fn handle_shortcuts(app: &mut HausitApp, ctx: &egui::Context) {
     let code = app.shortcut.0.clone();
     let tail = |n: usize| if code.len() >= n { &code[code.len() - n..] } else { "" };
     let cmd = tail(2);
-    let handled = match cmd {
-        "WA" => {
-            start(
-                app,
-                Tool::Wall {
-                    start: None,
-                    structural: false,
-                },
-            );
+    let handled = match crate::commands::by_key(cmd) {
+        Some(i) => {
+            crate::commands::run(app, i);
             true
         }
-        "DR" => {
-            start(app, Tool::Door);
-            true
-        }
-        "WN" => {
-            start(app, Tool::Window);
-            true
-        }
-        "FL" => {
-            start(
-                app,
-                Tool::Floor {
-                    sketch: Sketch::default(),
-                    structural: false,
-                },
-            );
-            true
-        }
-        "RF" => {
-            start(app, Tool::Roof { sketch: Sketch::default() });
-            true
-        }
-        "LL" => {
-            start(app, Tool::Level);
-            true
-        }
-        "GR" => {
-            start(app, Tool::Grid { start: None });
-            true
-        }
-        "MV" => {
-            start(app, Tool::Move { base: None });
-            true
-        }
-        "CO" | "CC" => {
-            start(app, Tool::Copy { base: None });
-            true
-        }
-        "ZF" | "ZE" | "ZA" => {
-            if let Some(v) = app.active_view {
-                if let Some(c) = app.cameras.get_mut(&v) {
-                    c.fitted = false;
-                }
-            }
-            true
-        }
-        "DE" => {
-            app.delete_selection();
-            true
-        }
-        "BX" => {
-            app.selection_box();
-            true
-        }
-        "RM" => {
-            start(app, Tool::Room);
-            true
-        }
-        "DI" => {
-            start(app, Tool::Dimension { refs: vec![] });
-            true
-        }
-        "VV" | "VG" => {
-            crate::view_graphics::open_for_active_view(app);
-            true
-        }
-        "TX" => {
-            start(app, Tool::Text);
-            true
-        }
-        "GP" => {
-            crate::groups::create_group(app);
-            true
-        }
-        "DL" => {
-            start(app, Tool::DetailLine { start: None });
-            true
-        }
-        "TG" => {
-            start(app, Tool::Tag);
-            true
-        }
-        "CL" => {
-            start(app, Tool::Column);
-            true
-        }
-        "CM" => {
-            start(
-                app,
-                Tool::Component {
-                    category: Category::Furniture,
-                },
-            );
-            true
-        }
-        "BM" => {
-            start(app, Tool::Beam { start: None, brace: false });
-            true
-        }
-        "BR" => {
-            start(app, Tool::Beam { start: None, brace: true });
-            true
-        }
-        "FT" => {
-            start(app, Tool::WallFoundation);
-            true
-        }
-        "RO" => {
-            start(
-                app,
-                Tool::Rotate {
-                    center: DVec2::ZERO,
-                    from: None,
-                },
-            );
-            true
-        }
-        "MM" | "DM" => {
-            start(
-                app,
-                Tool::Mirror {
-                    draw: cmd == "DM",
-                    start: None,
-                },
-            );
-            true
-        }
-        "TR" => {
-            start(app, Tool::Trim { first: None });
-            true
-        }
-        "SL" => {
-            start(app, Tool::Split);
-            true
-        }
-        "AL" => {
-            start(app, Tool::Align { reference: None });
-            true
-        }
-        "OF" => {
-            start(app, Tool::Offset);
-            true
-        }
-        "AR" => {
-            start(app, Tool::Array { start: None });
-            true
-        }
-        "PN" => {
-            crate::hide_isolate::pin(app, true);
-            true
-        }
-        "UP" => {
-            crate::hide_isolate::pin(app, false);
-            true
-        }
-        "HH" | "HI" | "HC" | "IC" | "HR" => {
-            use crate::hide_isolate::HideCmd;
-            let cmd = match cmd {
-                "HH" => HideCmd::HideElement,
-                "HI" => HideCmd::IsolateElement,
-                "HC" => HideCmd::HideCategory,
-                "IC" => HideCmd::IsolateCategory,
-                _ => HideCmd::Reset,
-            };
-            crate::hide_isolate::temporary(app, cmd);
-            true
-        }
-        "EH" => {
-            crate::hide_isolate::hide_in_view(app);
-            true
-        }
-        "VH" => {
-            crate::canvas::hide_category_in_view(app);
-            true
-        }
-        _ => false,
+        None => false,
     };
     if handled {
         app.shortcut.0.clear();

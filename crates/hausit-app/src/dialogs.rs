@@ -114,6 +114,8 @@ pub struct Dialogs {
     pub revisions: Option<crate::revisions::RevisionsDialog>,
     pub paste_levels: Option<crate::hide_isolate::PasteLevels>,
     pub plan_views: Option<PlanViews>,
+    pub filter: Option<crate::palette::FilterDialog>,
+    pub shortcuts: bool,
 }
 
 /// View ▸ Plan Views: levels to make plans for.
@@ -955,7 +957,7 @@ pub fn home(app: &mut HausitApp, ui: &mut Ui) {
         ui.set_min_size(ui.available_size());
         ui.heading(RichText::new("Hausit").size(32.0).color(crate::theme::FILE_TAB));
         ui.label(
-            RichText::new("Building information modelling, the Revit way.")
+            RichText::new("Building information modelling for houses and industrial buildings.")
                 .size(15.0)
                 .color(Color32::DARK_GRAY),
         );
@@ -986,6 +988,32 @@ pub fn home(app: &mut HausitApp, ui: &mut Ui) {
                 app.set_document(crate::sheets::sample_warehouse(), None);
             }
         });
+        let recent: Vec<PathBuf> = app.ui.recent.iter().filter(|p| p.exists()).cloned().collect();
+        if !recent.is_empty() {
+            ui.add_space(24.0);
+            ui.label(RichText::new("Recent projects").strong().size(16.0));
+            ui.add_space(6.0);
+            for p in recent.iter().take(8) {
+                let name = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                ui.horizontal(|ui| {
+                    if ui.link(RichText::new(&name).size(14.0)).clicked() {
+                        app.open_path(p);
+                    }
+                    ui.label(RichText::new(p.display().to_string()).color(Color32::GRAY).small());
+                });
+            }
+        }
+        ui.add_space(24.0);
+        ui.label(RichText::new("Tips").strong().size(16.0));
+        ui.add_space(4.0);
+        for tip in [
+            "Ctrl+K (or F3) finds any command by name, with its shortcut.",
+            "Type two-letter shortcuts in a view: WA wall, DR door, FL floor, MV move. Help is under File ▸ Keyboard Shortcuts.",
+            "Enter repeats the last tool; right-click a view for Repeat and Recent Commands.",
+            "View ▸ User Interface shows or hides the palettes and changes the interface size.",
+        ] {
+            ui.label(format!("•  {tip}"));
+        }
         ui.add_space(24.0);
         egui::Frame::new()
             .fill(Color32::from_rgb(243, 247, 252))

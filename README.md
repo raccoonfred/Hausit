@@ -48,15 +48,29 @@ and status bar.
 | Files | Native `.hausit` project format (versioned JSON). IFC2x3 and IFC4 files open as projects, with walls, floors, columns, doors, windows, rooms, grids and levels as native elements; IFC4 export. See [docs/ifc.md](docs/ifc.md). Any view or sheet exports to DXF with AIA layers (File ▸ Export ▸ DXF) |
 | Revit files | `.rvt/.rfa/.rte/.rft` files can be opened to show the Revit version, build and preview image. To bring in a Revit project's model, export it to IFC from Revit and open that. See below |
 
-Revit keyboard shortcuts work: `WA` wall, `DR` door, `WN` window, `FL` floor,
-`RF` roof, `CL` column, `RM` room, `DI` dimension, `LL` level, `GR` grid,
-`MV` move, `CO` copy, `RO` rotate, `MM`/`DM` mirror, `TR` trim, `SL` split,
-`DE` delete, `ZF` zoom to fit, plus `Esc`, `Delete`, `Tab` (cycle overlapping elements) and
-`Ctrl+Z/Y/S/O/N`.
+### Working faster
 
-Ribbon buttons for features that are not built yet (stairs, railings,
-ceilings, beams, foundations, text, sheets and so on) are shown greyed out with
-a "planned" tooltip, so the layout matches Revit while the features arrive.
+- **Search commands** with `Ctrl+K` or `F3` (or the search box at the top
+  right): type part of a name, press Enter. Every result shows its shortcut.
+- **Two-letter shortcuts** as in Revit: `WA` wall, `DR` door, `WN` window,
+  `FL` floor, `RF` roof, `CL` column, `RM` room, `DI` dimension, `LL` level,
+  `GR` grid, `MV` move, `CO` copy, `RO` rotate, `MM`/`DM` mirror, `TR` trim,
+  `SL` split, `DE` delete, `ZF` zoom to fit, `VV` visibility/graphics,
+  `FI` filter selection, `SA` select all instances, `PP` Properties. The full
+  list is under File ▸ Keyboard Shortcuts (`KS`).
+- **Enter repeats** the last tool, and right-clicking a view offers Repeat and
+  Recent Commands.
+- The **Modify tab comes forward** when you select something or start a tool,
+  and the tab you were on comes back when you press Esc.
+- **Filter** the selection by category from the Modify tab, the Options Bar
+  or the selection count in the status bar.
+- The **Project Browser has a search box**; right-click a type and choose
+  Create Instance to place it.
+- **View ▸ User Interface** shows or hides the Properties palette
+  (`Ctrl+1`) and Project Browser, sets the interface size (90 % to 150 %)
+  and stops the Modify tab opening on selection. Double-click a ribbon tab to
+  minimize the ribbon. These settings and your recent projects (listed on the
+  Home screen) are remembered between sessions.
 
 ## Roadmap
 

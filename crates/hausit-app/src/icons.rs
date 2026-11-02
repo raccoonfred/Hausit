@@ -81,6 +81,8 @@ pub enum Icon {
     Pin,
     Paste,
     Phases,
+    Filter,
+    Interface,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -730,6 +732,29 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             seg((17.0, 23.0), (15.0, 29.0), line(1.4, Color32::WHITE));
             seg((8.0, 15.0), (22.0, 4.0), line(2.6, Color32::from_rgb(140, 100, 60)));
             poly(&[(18.0, 3.0), (24.0, 0.5), (28.0, 6.0), (22.0, 9.0)], Color32::from_gray(110), ink);
+        }
+        Icon::Filter => {
+            // A funnel over a few picked dots.
+            poly(
+                &[(4.0, 5.0), (28.0, 5.0), (19.0, 16.0), (13.0, 16.0)],
+                Color32::from_rgb(120, 170, 230),
+                ink,
+            );
+            poly(
+                &[(13.0, 16.0), (19.0, 16.0), (19.0, 25.0), (13.0, 29.0)],
+                Color32::from_rgb(120, 170, 230),
+                ink,
+            );
+            for (x, y) in [(8.0, 23.0), (25.0, 22.0), (24.0, 28.0)] {
+                p.circle_filled(at(x, y), 1.8 * s, k(BRICK));
+            }
+        }
+        Icon::Interface => {
+            // A window with a palette on the left and a ribbon on top.
+            p.rect(rect(3.0, 5.0, 29.0, 27.0), 1.0, k(Color32::WHITE), ink, egui::StrokeKind::Middle);
+            p.rect_filled(rect(3.0, 5.0, 29.0, 10.0), 0.0, k(Color32::from_rgb(120, 170, 230)));
+            p.rect_filled(rect(3.0, 10.0, 11.0, 27.0), 0.0, k(Color32::from_gray(215)));
+            p.rect_stroke(rect(3.0, 5.0, 29.0, 27.0), 1.0, ink, egui::StrokeKind::Middle);
         }
         Icon::Phases => {
             // Three stages in time: existing grey, demolished dashed, new.

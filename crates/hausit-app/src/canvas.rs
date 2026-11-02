@@ -1499,6 +1499,31 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
 
 fn context_menu(app: &mut HausitApp, response: &egui::Response) {
     response.context_menu(|ui| {
+        // Revit's "Repeat [last command]" and "Recent Commands".
+        if app.tool == Tool::Modify {
+            if let Some(t) = app.last_tool.clone() {
+                if ui
+                    .button(format!("Repeat [{}]", t.context_title().trim_start_matches("Modify | ")))
+                    .clicked()
+                {
+                    tools::start(app, t);
+                    ui.close();
+                }
+            }
+            if !app.recent_commands.is_empty() {
+                ui.menu_button("Recent Commands", |ui| {
+                    for i in app.recent_commands.clone() {
+                        if ui.button(crate::commands::COMMANDS[i].name).clicked() {
+                            crate::commands::run(app, i);
+                            ui.close();
+                        }
+                    }
+                });
+            }
+            if app.last_tool.is_some() || !app.recent_commands.is_empty() {
+                ui.separator();
+            }
+        }
         if app.tool != Tool::Modify {
             if ui.button("Cancel").clicked() {
                 app.tool.cancel();
