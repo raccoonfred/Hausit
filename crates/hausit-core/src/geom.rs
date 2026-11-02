@@ -178,6 +178,81 @@ pub fn clip_polygon_3d(poly: &[DVec3], plane: &Plane) -> Vec<DVec3> {
     out
 }
 
+/// Whether segments `a`-`b` and `c`-`d` cross at a point inside both
+/// (touching at an end does not count).
+pub fn segments_cross(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
+    let d1 = cross2(b - a, c - a);
+    let d2 = cross2(b - a, d - a);
+    let d3 = cross2(d - c, a - c);
+    let d4 = cross2(d - c, b - c);
+    let eps = 1e-9 * (1.0 + (b - a).length() * (d - c).length());
+    ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) && ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps))
+}
+
+/// Joins holes into an outer polygon with bridges ("keyholes"), giving
+/// one polygon that [`triangulate`] can fill. The result is
+/// counter-clockwise; each hole runs clockwise inside it.
+pub fn merge_holes(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Vec<DVec2> {
+    let mut poly: Vec<DVec2> = outer.to_vec();
+    if polygon_area(&poly) < 0.0 {
+        poly.reverse();
+    }
+    let mut holes: Vec<Vec<DVec2>> = holes
+        .iter()
+        .filter(|h| h.len() >= 3)
+        .map(|h| {
+            let mut h = h.clone();
+            if polygon_area(&h) > 0.0 {
+                h.reverse();
+            }
+            h
+        })
+        .collect();
+    // Rightmost holes first, so later bridges can pass to the right.
+    holes.sort_by(|a, b| {
+        let mx = |h: &Vec<DVec2>| h.iter().map(|p| p.x).fold(f64::MIN, f64::max);
+        mx(b).total_cmp(&mx(a))
+    });
+    for (hi, hole) in holes.iter().enumerate() {
+        let others: Vec<&Vec<DVec2>> = holes[hi + 1..].iter().collect();
+        let crosses = |m: DVec2, v: DVec2| {
+            let ring = |r: &[DVec2]| (0..r.len()).any(|i| segments_cross(m, v, r[i], r[(i + 1) % r.len()]));
+            ring(&poly) || ring(hole) || others.iter().any(|o| ring(o))
+        };
+        // The hole vertex and polygon vertex with the shortest bridge
+        // that crosses nothing.
+        let mut best: Option<(f64, usize, usize)> = None;
+        for (mi, m) in hole.iter().enumerate() {
+            for (vi, v) in poly.iter().enumerate() {
+                let d = m.distance_squared(*v);
+                if best.is_some_and(|b| b.0 <= d) || crosses(*m, *v) {
+                    continue;
+                }
+                best = Some((d, mi, vi));
+            }
+        }
+        let Some((_, mi, vi)) = best else { continue };
+        let mut merged = Vec::with_capacity(poly.len() + hole.len() + 2);
+        merged.extend_from_slice(&poly[..=vi]);
+        for k in 0..=hole.len() {
+            merged.push(hole[(mi + k) % hole.len()]);
+        }
+        merged.push(poly[vi]);
+        merged.extend_from_slice(&poly[vi + 1..]);
+        poly = merged;
+    }
+    poly
+}
+
+/// Triangles filling `outer` minus `holes`.
+pub fn triangulate_with_holes(outer: &[DVec2], holes: &[Vec<DVec2>]) -> Vec<[DVec2; 3]> {
+    let merged = merge_holes(outer, holes);
+    triangulate(&merged)
+        .into_iter()
+        .map(|[a, b, c]| [merged[a], merged[b], merged[c]])
+        .collect()
+}
+
 /// Triangulates a simple polygon by ear clipping. Returns index triples.
 /// Works for either winding.
 pub fn triangulate(pts: &[DVec2]) -> Vec<[usize; 3]> {
@@ -199,9 +274,12 @@ pub fn triangulate(pts: &[DVec2]) -> Vec<[usize; 3]> {
             if cross2(b - a, c - b) <= 1e-12 {
                 continue; // reflex or degenerate
             }
+            // Points at the ear's corners (the doubled bridge points of a
+            // polygon with holes) do not block it.
+            let corner = |q: DVec2| q.distance_squared(a) < 1e-12 || q.distance_squared(b) < 1e-12 || q.distance_squared(c) < 1e-12;
             let contains = idx
                 .iter()
-                .any(|&k| k != ia && k != ib && k != ic && point_in_triangle(pts[k], a, b, c));
+                .any(|&k| k != ia && k != ib && k != ic && !corner(pts[k]) && point_in_triangle(pts[k], a, b, c));
             if contains {
                 continue;
             }
@@ -235,6 +313,43 @@ pub fn triangulate(pts: &[DVec2]) -> Vec<[usize; 3]> {
         tris.push([idx[0], idx[1], idx[2]]);
     }
     tris
+}
+
+#[cfg(test)]
+mod hole_tests {
+    use super::*;
+
+    fn area(tris: &[[DVec2; 3]]) -> f64 {
+        tris.iter().map(|t| polygon_area(t).abs()).sum()
+    }
+
+    #[test]
+    fn square_with_hole() {
+        let sq = |x0: f64, y0: f64, s: f64| {
+            vec![
+                DVec2::new(x0, y0),
+                DVec2::new(x0 + s, y0),
+                DVec2::new(x0 + s, y0 + s),
+                DVec2::new(x0, y0 + s),
+            ]
+        };
+        let tris = triangulate_with_holes(&sq(0.0, 0.0, 10.0), &[sq(3.0, 3.0, 2.0)]);
+        assert!((area(&tris) - 96.0).abs() < 1e-6, "{}", area(&tris));
+        // Two holes.
+        let tris = triangulate_with_holes(&sq(0.0, 0.0, 10.0), &[sq(1.0, 1.0, 2.0), sq(6.0, 6.0, 3.0)]);
+        assert!((area(&tris) - (100.0 - 4.0 - 9.0)).abs() < 1e-6, "{}", area(&tris));
+        // L-shaped outer, hole in one arm.
+        let l = vec![
+            DVec2::new(0.0, 0.0),
+            DVec2::new(10.0, 0.0),
+            DVec2::new(10.0, 4.0),
+            DVec2::new(4.0, 4.0),
+            DVec2::new(4.0, 10.0),
+            DVec2::new(0.0, 10.0),
+        ];
+        let tris = triangulate_with_holes(&l, &[sq(1.0, 6.0, 2.0)]);
+        assert!((area(&tris) - (64.0 - 4.0)).abs() < 1e-6, "{}", area(&tris));
+    }
 }
 
 fn point_in_triangle(p: DVec2, a: DVec2, b: DVec2, c: DVec2) -> bool {

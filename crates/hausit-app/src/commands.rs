@@ -66,6 +66,23 @@ pub static COMMANDS: &[Command] = &[
         Tool::Roof { sketch: Sketch::default() }
     )),
     cmd!("Ceiling", [], "Architecture ▸ Build", |a| tools::start(a, Tool::Ceiling)),
+    cmd!("Sketch Ceiling", [], "Architecture ▸ Build ▸ Ceiling", |a| {
+        tools::start(
+            a,
+            Tool::Boundary {
+                sketch: Sketch::default(),
+                kind: tools::BoundaryKind::Ceiling,
+            },
+        );
+        a.options.sketch_mode = tools::DrawShape::Line;
+    }),
+    cmd!("Shaft Opening", [], "Architecture ▸ Opening", start_shaft),
+    cmd!("Edit Boundary", ["EB"], "Modify | Floors, Roofs, Ceilings", |a| {
+        match a.selection.first().copied().filter(|id| crate::canvas::sketched(a, *id)) {
+            Some(id) => tools::edit_boundary(a, id),
+            None => a.status = "Select a floor, roof, ceiling, shaft opening or toposolid first.".into(),
+        }
+    }),
     cmd!("Floor", ["FL"], "Architecture ▸ Build", |a| tools::start(
         a,
         Tool::Floor {
@@ -359,6 +376,17 @@ pub static COMMANDS: &[Command] = &[
     cmd!("Keyboard Shortcuts", ["KS"], "Help", |a| a.dialogs.shortcuts = true),
     cmd!("Search Commands", [], "Ctrl+K or F3", |a| a.palette.open = true),
 ];
+
+pub fn start_shaft(app: &mut HausitApp) {
+    tools::start(
+        app,
+        Tool::Boundary {
+            sketch: Sketch::default(),
+            kind: tools::BoundaryKind::Shaft,
+        },
+    );
+    app.options.sketch_mode = tools::DrawShape::Rectangle;
+}
 
 fn select_all_instances(app: &mut HausitApp) {
     if let Some(t) = app.selection.first().and_then(|s| app.doc.element(*s)).and_then(|e| e.type_id()) {

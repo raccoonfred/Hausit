@@ -64,6 +64,7 @@ impl Element {
             | ElementData::SpotElevation(_)
             | ElementData::RevisionCloud(_)
             | ElementData::PropertyLine(_)
+            | ElementData::Shaft(_)
             | ElementData::LinkInstance(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
@@ -99,6 +100,7 @@ impl Element {
             | ElementData::SpotElevation(_)
             | ElementData::RevisionCloud(_)
             | ElementData::PropertyLine(_)
+            | ElementData::Shaft(_)
             | ElementData::LinkInstance(_)
             | ElementData::AreaBoundary(_)
             | ElementData::Area(_)
@@ -161,6 +163,7 @@ pub enum ElementData {
     Toposolid(crate::site::Toposolid),
     PropertyLine(crate::site::PropertyLine),
     LinkInstance(crate::links::LinkInstance),
+    Shaft(crate::openings::ShaftOpening),
 }
 
 impl ElementData {
@@ -177,6 +180,7 @@ impl ElementData {
             ElementData::Floor(f) => vec![&mut f.level],
             ElementData::Toposolid(t) => vec![&mut t.level],
             ElementData::PropertyLine(l) => vec![&mut l.level],
+            ElementData::Shaft(s) => vec![&mut s.base_level, &mut s.top_level],
             ElementData::Roof(r) => vec![&mut r.level],
             ElementData::Column(c) => vec![&mut c.base_level, &mut c.top_level],
             ElementData::Framing(f) => vec![&mut f.level],
@@ -221,6 +225,7 @@ impl ElementData {
             ElementData::RevisionCloud(_) => Category::RevisionClouds,
             ElementData::Toposolid(_) => Category::Toposolid,
             ElementData::PropertyLine(_) => Category::PropertyLines,
+            ElementData::Shaft(_) => Category::ShaftOpenings,
             ElementData::LinkInstance(_) => Category::RvtLinks,
             ElementData::Group(_) => Category::ModelGroups,
             ElementData::AreaBoundary(_) => Category::AreaBoundary,
@@ -475,6 +480,9 @@ pub struct Floor {
     pub type_id: ElementId,
     pub level: ElementId,
     pub boundary: Vec<DVec2>,
+    /// Holes sketched inside the boundary (stair openings and the like).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openings: Vec<Vec<DVec2>>,
     #[serde(default)]
     pub height_offset: f64,
     #[serde(default = "yes")]
@@ -707,6 +715,9 @@ pub struct Ceiling {
     pub type_id: ElementId,
     pub level: ElementId,
     pub boundary: Vec<DVec2>,
+    /// Holes sketched inside the boundary.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub openings: Vec<Vec<DVec2>>,
     /// Height of its underside above the level.
     pub height_offset: f64,
 }

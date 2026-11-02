@@ -1923,6 +1923,7 @@ impl<'a> Importer<'a> {
             boundary.reverse();
         }
         self.doc.add_element(ElementData::Floor(Floor {
+            openings: Vec::new(),
             type_id,
             level,
             boundary,

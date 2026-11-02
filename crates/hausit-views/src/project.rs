@@ -546,15 +546,18 @@ fn section_caps(
         for part in &g.parts {
             match &part.shape {
                 Shape::Prism(p) => {
-                    // Intersections of the footprint with the cut line.
-                    let n = p.footprint.len();
+                    // Intersections of the footprint (and any openings
+                    // through it) with the cut line.
                     let mut us = Vec::new();
-                    for i in 0..n {
-                        let (a, b) = (p.footprint[i], p.footprint[(i + 1) % n]);
-                        let (da, db) = ((a - o).dot(f2), (b - o).dot(f2));
-                        if (da < 0.0) != (db < 0.0) {
-                            let t = da / (da - db);
-                            us.push((a + (b - a) * t - o).dot(r2));
+                    for ring in p.loops() {
+                        let n = ring.len();
+                        for i in 0..n {
+                            let (a, b) = (ring[i], ring[(i + 1) % n]);
+                            let (da, db) = ((a - o).dot(f2), (b - o).dot(f2));
+                            if (da < 0.0) != (db < 0.0) {
+                                let t = da / (da - db);
+                                us.push((a + (b - a) * t - o).dot(r2));
+                            }
                         }
                     }
                     us.sort_by(f64::total_cmp);

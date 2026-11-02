@@ -25,6 +25,11 @@ pub enum Tool {
     Roof {
         sketch: Sketch,
     },
+    /// Sketch-based ceilings and shaft openings.
+    Boundary {
+        sketch: Sketch,
+        kind: BoundaryKind,
+    },
     Level,
     Grid {
         start: Option<DVec2>,
@@ -184,6 +189,13 @@ impl Tool {
             Tool::Door => "Modify | Place Door",
             Tool::Window => "Modify | Place Window",
             Tool::Floor { .. } => "Modify | Create Floor Boundary",
+            Tool::Boundary {
+                kind: BoundaryKind::Ceiling,
+                ..
+            } => "Modify | Create Ceiling Boundary",
+            Tool::Boundary {
+                kind: BoundaryKind::Shaft, ..
+            } => "Modify | Create Shaft Opening Sketch",
             Tool::Toposolid { .. } => "Modify | Create Toposolid Boundary",
             Tool::TopoPoint => "Modify | Toposolid | Add Point",
             Tool::PropertyLine { .. } => "Modify | Create Property Line Sketch",
@@ -240,7 +252,7 @@ impl Tool {
             Tool::Wall { .. } => "Click to enter wall end point, or type a length and press Enter. Esc ends the chain.",
             Tool::Door => "Click on a wall to place a door. The side you click is the side it swings to.",
             Tool::Window => "Click on a wall to place a window.",
-            Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } => {
+            Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } | Tool::Boundary { .. } => {
                 "Sketch a closed loop: pick walls or draw lines. Finish Edit Mode (Enter) creates it; Ctrl+Z removes the last line."
             }
             Tool::Level => "Click in an elevation or section to place a level at that height.",
@@ -322,6 +334,10 @@ impl Tool {
             Tool::Door => Some(Category::Doors),
             Tool::Window => Some(Category::Windows),
             Tool::Floor { .. } => Some(Category::Floors),
+            Tool::Boundary {
+                kind: BoundaryKind::Ceiling,
+                ..
+            } => Some(Category::Ceilings),
             Tool::Toposolid { .. } => Some(Category::Toposolid),
             Tool::Roof { .. } => Some(Category::Roofs),
             Tool::Column => Some(Category::StructuralColumns),
@@ -382,7 +398,7 @@ impl Tool {
             Tool::Array { start } => *start,
             Tool::DetailLine { start } => *start,
             Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } | Tool::PropertyLine { pts } => pts.last().copied(),
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => sketch.start,
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } | Tool::Boundary { sketch, .. } => sketch.start,
             Tool::Stair { pts } | Tool::Railing { pts } => pts.last().copied(),
             _ => None,
         }
@@ -390,20 +406,23 @@ impl Tool {
 
     pub fn sketch(&self) -> Option<&Sketch> {
         match self {
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => Some(sketch),
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } | Tool::Boundary { sketch, .. } => Some(sketch),
             _ => None,
         }
     }
 
     pub fn sketch_mut(&mut self) -> Option<&mut Sketch> {
         match self {
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => Some(sketch),
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } | Tool::Boundary { sketch, .. } => Some(sketch),
             _ => None,
         }
     }
 
     pub fn is_sketch(&self) -> bool {
-        matches!(self, Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. })
+        matches!(
+            self,
+            Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } | Tool::Boundary { .. }
+        )
     }
 
     /// Forgets in-progress input but stays in the tool.
@@ -425,7 +444,9 @@ impl Tool {
             Tool::DetailLine { start } => *start = None,
             Tool::FilledRegion { pts } | Tool::RevisionCloud { pts } | Tool::PropertyLine { pts } => pts.clear(),
             Tool::SpotElevation { point } => *point = None,
-            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => sketch.start = None,
+            Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } | Tool::Boundary { sketch, .. } => {
+                sketch.start = None
+            }
             _ => {}
         }
     }
@@ -477,6 +498,13 @@ pub struct SketchLine {
     pub wall: Option<ElementId>,
 }
 
+/// What a [`Tool::Boundary`] sketch makes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BoundaryKind {
+    Ceiling,
+    Shaft,
+}
+
 /// A floor or roof boundary sketch ("Edit Boundary" mode in Revit).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Sketch {
@@ -492,7 +520,34 @@ pub struct Sketch {
 impl Sketch {
     /// Orders the lines into one closed loop. Returns the loop's corner
     /// points with the line each edge came from.
+    /// Every closed loop of the sketch: a boundary and the openings in
+    /// it. Errors when a line is left over or open.
+    pub fn closed_loops(&self) -> Result<Vec<Vec<(DVec2, SketchLine)>>, String> {
+        let mut rest = self.clone();
+        let mut loops = Vec::new();
+        while !rest.lines.is_empty() {
+            let (one, left) = rest.first_loop()?;
+            loops.push(one);
+            rest.lines = left;
+        }
+        if loops.is_empty() {
+            return Err("The sketch is empty. Pick walls or draw lines first.".into());
+        }
+        Ok(loops)
+    }
+
+    /// The single loop of a sketch that may only have one (roofs, sites).
     pub fn closed_loop(&self) -> Result<Vec<(DVec2, SketchLine)>, String> {
+        let (one, left) = self.first_loop()?;
+        if !left.is_empty() {
+            return Err("This sketch can only have one loop. Delete the extra lines (Ctrl+Z).".into());
+        }
+        Ok(one)
+    }
+
+    /// The loop through the first line, and the lines not in it.
+    #[allow(clippy::type_complexity)]
+    fn first_loop(&self) -> Result<(Vec<(DVec2, SketchLine)>, Vec<SketchLine>), String> {
         const TOL: f64 = 1.0;
         let open = || "Lines must be in closed loops. Some sketch lines are open at one end.".to_string();
         if self.lines.len() < 3 {
@@ -523,10 +578,26 @@ impl Sketch {
             out.push((from, self.lines[i]));
             cur = to;
         }
-        if used.iter().any(|u| !u) {
-            return Err("A sketch can only have one loop for now. Delete the extra lines (Ctrl+Z).".into());
+        let left = self.lines.iter().zip(&used).filter(|(_, u)| !**u).map(|(l, _)| *l).collect();
+        Ok((out, left))
+    }
+
+    /// A sketch of existing loops, for Edit Boundary.
+    pub fn from_loops(loops: &[Vec<DVec2>]) -> Sketch {
+        let mut s = Sketch::default();
+        for l in loops {
+            let n = l.len();
+            for i in 0..n {
+                s.lines.push(SketchLine {
+                    a: l[i],
+                    b: l[(i + 1) % n],
+                    slope: false,
+                    overhang: 0.0,
+                    wall: None,
+                });
+            }
         }
-        Ok(out)
+        s
     }
 }
 
@@ -607,6 +678,9 @@ pub struct ToolOptions {
     pub cloud_tag: bool,
     /// Toposolid points: height above the level.
     pub topo_height: f64,
+    /// Edit Boundary: the floor, roof, ceiling, shaft or toposolid whose
+    /// sketch is being edited (None when creating a new one).
+    pub edit_target: Option<ElementId>,
 }
 
 impl Default for ToolOptions {
@@ -643,6 +717,7 @@ impl Default for ToolOptions {
             cloud_revision: None,
             cloud_tag: true,
             topo_height: 1000.0,
+            edit_target: None,
         }
     }
 }
@@ -651,6 +726,7 @@ impl Default for ToolOptions {
 
 pub fn start(app: &mut HausitApp, mut tool: Tool) {
     let fresh = tool.clone();
+    app.options.edit_target = None;
     let needs_plan = matches!(
         tool,
         Tool::Wall { .. }
@@ -672,6 +748,7 @@ pub fn start(app: &mut HausitApp, mut tool: Tool) {
             | Tool::Stair { .. }
             | Tool::Railing { .. }
             | Tool::Ceiling
+            | Tool::Boundary { .. }
             | Tool::Room
             | Tool::RoomSeparation { .. }
             | Tool::AreaBoundary { .. }
@@ -1234,7 +1311,7 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 }
             }
         }
-        Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => {
+        Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } | Tool::Boundary { sketch, .. } => {
             let (slope, overhang) = if roof { (app.options.defines_slope, 0.0) } else { (false, 0.0) };
             let line = |a: DVec2, b: DVec2| SketchLine {
                 a,
@@ -1545,6 +1622,7 @@ pub fn click(app: &mut HausitApp, p: DVec2) {
                 let Some(level) = app.active_level() else { return };
                 let Some(type_id) = app.type_for(Category::Ceilings) else { return };
                 let c = Ceiling {
+                    openings: Vec::new(),
                     type_id,
                     level,
                     boundary,
@@ -2382,6 +2460,7 @@ pub fn selection_center(app: &HausitApp) -> Option<DVec2> {
             ElementData::RevisionCloud(c) => pts.extend(&c.boundary),
             ElementData::Toposolid(t) => pts.extend(&t.boundary),
             ElementData::PropertyLine(l) => pts.extend(&l.points),
+            ElementData::Shaft(s) => pts.extend(&s.boundary),
             ElementData::LinkInstance(i) => pts.push(i.origin),
             ElementData::Level(_) | ElementData::Dimension(_) => {}
         }
@@ -2551,19 +2630,175 @@ pub fn pick_wall_face(app: &HausitApp, p: DVec2, roof: bool) -> Option<SketchLin
 }
 
 /// Completes a floor or roof sketch ("Finish Edit Mode").
-pub fn finish_sketch(app: &mut HausitApp) {
-    let Some(level) = app.active_level() else { return };
-    let Some(sketch) = app.tool.sketch().cloned() else { return };
-    let corners = match sketch.closed_loop() {
-        Ok(c) => c,
-        Err(e) => {
-            app.dialogs.error = Some(e.clone());
-            app.status = e;
+/// Modify ▸ Edit Boundary: reopens the sketch of a floor, roof, ceiling,
+/// shaft opening or toposolid.
+pub fn edit_boundary(app: &mut HausitApp, id: ElementId) {
+    let Some(e) = app.doc.element(id).cloned() else { return };
+    let level = hausit_model::annotation::element_level(&app.doc, id);
+    // Edit in a plan of the element's level.
+    if level.is_some() && app.active_level() != level {
+        let plan = app
+            .doc
+            .views()
+            .find(|v| matches!(v.kind, ViewKind::FloorPlan { level: l } if Some(l) == level))
+            .map(|v| v.id);
+        if let Some(v) = plan {
+            app.open_view(v);
+        }
+    }
+    let (tool, arrow) = match &e.data {
+        ElementData::Floor(f) => {
+            let mut loops = vec![f.boundary.clone()];
+            loops.extend(f.openings.iter().cloned());
+            (
+                Tool::Floor {
+                    sketch: Sketch::from_loops(&loops),
+                    structural: f.structural,
+                },
+                None,
+            )
+        }
+        ElementData::Ceiling(c) => {
+            let mut loops = vec![c.boundary.clone()];
+            loops.extend(c.openings.iter().cloned());
+            app.options.ceiling_height = c.height_offset;
+            (
+                Tool::Boundary {
+                    sketch: Sketch::from_loops(&loops),
+                    kind: BoundaryKind::Ceiling,
+                },
+                None,
+            )
+        }
+        ElementData::Shaft(s) => (
+            Tool::Boundary {
+                sketch: Sketch::from_loops(std::slice::from_ref(&s.boundary)),
+                kind: BoundaryKind::Shaft,
+            },
+            None,
+        ),
+        ElementData::Toposolid(t) => (
+            Tool::Toposolid {
+                sketch: Sketch::from_loops(std::slice::from_ref(&t.boundary)),
+            },
+            None,
+        ),
+        ElementData::Roof(r) => {
+            let mut sketch = Sketch::from_loops(std::slice::from_ref(&r.footprint));
+            for (l, s) in sketch.lines.iter_mut().zip(r.edge_slopes()) {
+                l.slope = s;
+            }
+            let arrow = r.slope_arrow.as_ref().map(|a| (a.tail, a.head));
+            app.options.roof_slope = r.slope;
+            (Tool::Roof { sketch }, arrow)
+        }
+        _ => {
+            app.status = "Edit Boundary works on floors, roofs, ceilings, shaft openings and toposolids.".into();
             return;
         }
     };
-    let pts: Vec<DVec2> = corners.iter().map(|c| c.0).collect();
+    let type_id = e.type_id();
+    start(app, tool);
+    if !matches!(
+        app.tool,
+        Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } | Tool::Boundary { .. }
+    ) {
+        return;
+    }
+    if let Some(sk) = app.tool.sketch_mut() {
+        sk.arrow = arrow;
+    }
+    // No "Lowest Level Notice" when editing an existing roof.
+    app.dialogs.roof_level = None;
+    if let (Some(t), Some(cat)) = (type_id, app.tool.category()) {
+        app.current_type.insert(cat, t);
+    }
+    app.options.sketch_mode = DrawShape::Line;
+    app.options.edit_target = Some(id);
+    app.status = "Edit the sketch, then Finish (Enter). Extra closed loops cut openings in floors and ceilings.".into();
+}
+
+/// Finish of Edit Boundary: the element keeps its id (and so its tags,
+/// hosted and attached elements), with the new sketch.
+fn finish_edit_boundary(
+    app: &mut HausitApp,
+    id: ElementId,
+    tool: &Tool,
+    pts: Vec<DVec2>,
+    openings: Vec<Vec<DVec2>>,
+    corners: &[(DVec2, SketchLine)],
+    arrow: Option<(DVec2, DVec2)>,
+) {
+    let overhangs: Vec<f64> = corners.iter().map(|c| c.1.overhang).collect();
+    let slopes: Vec<bool> = corners.iter().map(|c| c.1.slope).collect();
+    let roof_pts = offset_outwards(&pts, &overhangs);
+    let is_roof = matches!(tool, Tool::Roof { .. });
+    app.transact("Edit Boundary", |doc| {
+        let e = doc.element_mut(id).ok_or(hausit_model::ModelError::NotFound(id))?;
+        match &mut e.data {
+            ElementData::Floor(f) => {
+                f.boundary = pts;
+                f.openings = openings;
+            }
+            ElementData::Ceiling(c) => {
+                c.boundary = pts;
+                c.openings = openings;
+            }
+            ElementData::Shaft(s) => s.boundary = pts,
+            ElementData::Toposolid(t) => t.boundary = pts,
+            ElementData::Roof(r) if is_roof => {
+                r.footprint = roof_pts;
+                r.defines_slope = slopes;
+                r.slope_arrow = arrow.map(|(tail, head)| hausit_model::SlopeArrow { tail, head });
+            }
+            _ => {
+                return Err(hausit_model::ModelError::Rejected(
+                    "The element changed while its sketch was open.".into(),
+                ))
+            }
+        }
+        doc.touch();
+        Ok(())
+    });
+    app.selection = vec![id];
+    app.status = "Boundary updated.".into();
+}
+
+pub fn finish_sketch(app: &mut HausitApp) {
+    let Some(level) = app.active_level() else { return };
+    let Some(sketch) = app.tool.sketch().cloned() else { return };
+    // Floors, ceilings and shafts take openings as extra loops.
+    let multi = matches!(app.tool, Tool::Floor { .. } | Tool::Boundary { .. });
+    let loops = if multi {
+        sketch.closed_loops()
+    } else {
+        sketch.closed_loop().map(|l| vec![l])
+    };
+    let fail = |app: &mut HausitApp, e: String| {
+        app.dialogs.error = Some(e.clone());
+        app.status = e;
+    };
+    let loops = match loops {
+        Ok(l) => l,
+        Err(e) => return fail(app, e),
+    };
+    let pt_loops: Vec<Vec<DVec2>> = loops.iter().map(|l| l.iter().map(|c| c.0).collect()).collect();
+    let (pts, openings) = match hausit_model::openings::outline_and_openings(pt_loops) {
+        Ok(v) => v,
+        Err(e) => return fail(app, e),
+    };
+    // The roof keeps the per-line settings of its outline loop.
+    let corners = loops
+        .iter()
+        .find(|l| l.iter().map(|c| c.0).eq(pts.iter().copied()))
+        .cloned()
+        .unwrap_or_else(|| loops[0].clone());
+    let edit = app.options.edit_target.take().filter(|id| app.doc.contains(*id));
     let tool = std::mem::replace(&mut app.tool, Tool::Modify);
+    if let Some(id) = edit {
+        finish_edit_boundary(app, id, &tool, pts, openings, &corners, sketch.arrow);
+        return;
+    }
     match tool {
         Tool::Toposolid { .. } => {
             let type_id = match app.type_for(Category::Toposolid) {
@@ -2585,7 +2820,9 @@ pub fn finish_sketch(app: &mut HausitApp) {
         }
         Tool::Floor { structural, .. } => {
             let Some(type_id) = app.type_for(Category::Floors) else { return };
+            let n = openings.len();
             let f = Floor {
+                openings,
                 type_id,
                 level,
                 boundary: pts,
@@ -2594,7 +2831,46 @@ pub fn finish_sketch(app: &mut HausitApp) {
                 structural,
             };
             app.transact("Create Floor", |doc| Ok(doc.add_element(ElementData::Floor(f))));
-            app.status = "Floor created.".into();
+            app.status = if n > 0 {
+                format!("Floor created with {n} opening(s).")
+            } else {
+                "Floor created.".into()
+            };
+        }
+        Tool::Boundary {
+            kind: BoundaryKind::Ceiling,
+            ..
+        } => {
+            let Some(type_id) = app.type_for(Category::Ceilings) else { return };
+            let c = hausit_model::Ceiling {
+                openings,
+                type_id,
+                level,
+                boundary: pts,
+                height_offset: app.options.ceiling_height,
+            };
+            app.transact("Create Ceiling", |doc| Ok(doc.add_element(ElementData::Ceiling(c))));
+            app.status = "Ceiling created.".into();
+        }
+        Tool::Boundary {
+            kind: BoundaryKind::Shaft, ..
+        } => {
+            // Up to the level above, or 3 m when there is none.
+            let (top_level, top_offset) = match app.doc.level_above(level) {
+                Some(l) => (l, 0.0),
+                None => (level, 3000.0),
+            };
+            let s = hausit_model::ShaftOpening {
+                base_level: level,
+                base_offset: 0.0,
+                top_level,
+                top_offset,
+                boundary: pts,
+            };
+            if let Some(id) = app.transact("Create Shaft Opening", |doc| Ok(doc.add_element(ElementData::Shaft(s)))) {
+                app.selection = vec![id];
+            }
+            app.status = "Shaft opening created. Set its Top Constraint in Properties to cut more floors.".into();
         }
         Tool::Roof { .. } => {
             let Some(type_id) = app.type_for(Category::Roofs) else { return };

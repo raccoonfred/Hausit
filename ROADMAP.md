@@ -11,31 +11,36 @@ Autodesk's Revit documentation (help.autodesk.com/view/RVT) is the reference
 for behaviour. When this roadmap says "like Revit", it means a user who knows
 Revit should find the same tool in the same place, doing the same thing.
 
-Last reviewed: 26 October 2026.
+Last reviewed: 2 November 2026.
 
 ---
 
 ## 1. Where Hausit is today
 
-Hausit 0.1 already covers the core of a small architectural model:
+Hausit already covers a small house or a portal-frame shed from first wall
+to issued sheets:
 
-- Revit-style shell: ribbon, Quick Access Toolbar, Options Bar, Properties
-  palette, Project Browser, view tabs, View Control Bar, status bar, Revit
-  keyboard shortcuts.
-- Model: levels, grids, walls with joins and Attach Top/Base, floors,
-  footprint roofs (any shape, hips, valleys, gables), doors and windows,
-  structural columns, rooms with automatic boundaries.
-- Views: floor plans, elevations, sections, orthographic 3D with a ViewCube,
-  four visual styles.
-- Annotation: aligned dimensions, room tags, door and window tags.
-- Editing: Move, Copy, Rotate, Mirror, Trim/Extend, Split, Delete, grips,
-  undo/redo, snapping with temporary dimensions.
-- Schedules with sorting, grouping, totals and CSV export.
-- Native `.hausit` format (versioned JSON).
-- `.rvt/.rfa` files: container, version and preview only, no model import.
+- Revit-style shell: ribbon with a contextual Modify tab, Quick Access
+  Toolbar, Options Bar, Properties palette, Project Browser (with search),
+  view tabs, View Control Bar, status bar, Revit keyboard shortcuts, command
+  search (Ctrl+K), Repeat (Enter) and saved interface settings.
+- Model: levels, grids, straight, arc and curtain walls with joins and
+  Attach Top/Base, compound layers, floors with openings, shaft openings,
+  footprint roofs (hips, valleys, gables, slope arrows), ceilings, stairs and
+  railings, doors, windows and components as loadable families, structural
+  columns, beams, braces and foundations, rooms, areas, toposolids, model
+  groups, linked models.
+- Views: floor and ceiling plans, elevations, sections, callouts, 3D with a
+  ViewCube and section box, schedules, sheets; view templates and
+  Visibility/Graphics; phasing, worksets and design options.
+- Annotation: aligned and linear dimensions, spot elevations, text, tags,
+  detail lines, filled regions, revision clouds, colour fill legends.
+- Editing: Move, Copy, Rotate, Mirror, Align, Offset, Array, Trim/Extend,
+  Split, Pin, Edit Boundary, Filter, grips, undo/redo, snapping.
+- Files: native `.hausit`, IFC import and export, PDF and DXF export, `.rvt`
+  header, preview and schema reading.
 
-That is roughly what a Revit user touches in the first week of a project. The
-gaps below are what stands between that and replacing Revit on a real job.
+The gaps below are what stands between that and replacing Revit on a real job.
 
 ---
 
@@ -52,22 +57,22 @@ needed for full parity, **P3** is long-tail.
 |---|---|---|---|
 | Walls (basic, joins, attach) | Have | — | |
 | Compound wall layers, wrapping, layer joins | Partial | P0 | Layers with plan and section poché and an assembly editor; wrapping at ends and layer joins still to do |
-| Stacked walls, curtain walls, curtain grids, mullions, panels | Missing | P1 | Curtain walls are on almost every commercial job |
+| Stacked walls, curtain walls, curtain grids, mullions, panels | Partial | P1 | Curtain walls with grids, mullions and panels done; stacked walls to do |
 | Wall sweeps and reveals, profile edits, wall openings | Missing | P1 | |
-| Arc, ellipse and spline walls | Missing | P1 | Arc walls are P0 for many users |
-| Floors (sketch, slope arrows, shape editing, sub-elements) | Partial | P0 | Shape editing for falls is P1 |
+| Arc, ellipse and spline walls | Partial | P1 | Arc walls done; ellipse and spline to do |
+| Floors (sketch, slope arrows, shape editing, sub-elements) | Partial | P0 | Sketch with openings (extra loops cut holes), Edit Boundary (double-click or EB). Slope arrows and shape editing for falls are P1 |
 | Roofs by footprint | Have | — | |
 | Roof by extrusion, soffits, fascia, gutters, dormers, join/unjoin roof | Missing | P1 | |
-| Ceilings (automatic and sketch, ceiling grids, reflected ceiling plans) | Partial | P0 | Automatic ceilings, layered types with a square grid, ceiling plans for every level; sketched ceilings still to do |
+| Ceilings (automatic and sketch, ceiling grids, reflected ceiling plans) | Have | — | Automatic and sketched ceilings with openings, Edit Boundary, layered types with a square grid, ceiling plans for every level |
 | Stairs by component and by sketch, landings, supports | Partial | P0 | Runs with landings at turns, risers from the level heights, plan cut line and UP arrow; concrete stairs with a waist slab, assembled stairs with stringers, nosings and optional closed risers; sketch-based stairs and winders still to do |
 | Railings (path, host to stairs, balusters, top rails) | Partial | P0 | Sketched or hosted on stairs (created with them), balusters, top and intermediate rails |
 | Ramps | Missing | P1 | |
-| Shafts, vertical and face openings, dormer openings | Missing | P1 | |
-| Rooms, areas, area plans (gross, rentable), color fill schemes | Partial | P1 | Rooms done; areas and color schemes missing |
-| Model text, model lines, model groups, detail groups | Missing | P1 | Groups are used heavily |
+| Shafts, vertical and face openings, dormer openings | Partial | P1 | Shaft openings (Architecture ▸ Opening ▸ Shaft) cut floors and ceilings between their base and top; cutting roofs, vertical and face openings to do |
+| Rooms, areas, area plans (gross, rentable), color fill schemes | Have | — | Rooms, area plans (gross and rentable), areas, colour fill schemes and legends |
+| Model text, model lines, model groups, detail groups | Partial | P1 | Model groups done; model text, model lines and detail groups to do |
 | Components (furniture, casework, plumbing fixtures as families) | Missing | P0 | Depends on the family system (2.4) |
 | Massing, conceptual mass, wall/floor/roof by face | Missing | P2 | |
-| Toposolid, site, building pads, property lines | Missing | P2 | |
+| Toposolid, site, building pads, property lines | Partial | P2 | Toposolids with points and contours, property lines, planting; building pads to do |
 | Curtain systems, adaptive components | Missing | P3 | |
 
 ### 2.2 Structure
@@ -124,12 +129,12 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
 | Aligned dimensions | Have | — | |
-| Linear, angular, radial, diameter, arc length, spot elevation/coordinate/slope | Missing | P0/P1 | Linear and spot elevation P0 |
+| Linear, angular, radial, diameter, arc length, spot elevation/coordinate/slope | Partial | P0/P1 | Linear dimensions and spot elevations done; angular, radial, arc length, spot coordinate and slope to do |
 | Text, leaders, keynotes, symbols | Partial | P0 | Text notes (Annotate ▸ Text, TX) with size and an arrow leader, in plans, sections and elevations; keynotes and symbols to do |
 | Tag all, multi-category, material tags | Partial | P1 | Tags are view elements: Tag by Category (TG) for doors, windows, walls, structure, furniture and other model elements, with leaders; Tag on Placement for doors and windows; Tag All Not Tagged. Multi-category, material and room tags as elements to do |
-| Detail lines, filled regions, masking regions, detail components, insulation, repeating details | Missing | P0 | |
+| Detail lines, filled regions, masking regions, detail components, insulation, repeating details | Partial | P0 | Detail lines, filled and masking regions done; detail components, insulation and repeating details to do |
 | Callouts, drafting views, legends | Partial | P0 | Callouts of plans, sections and elevations (cropped, 1:20, Fine) with a boundary and bubble in the parent view; drafting views and legends still to do |
-| Revision clouds and revision tracking | Missing | P1 | |
+| Revision clouds and revision tracking | Have | — | Revisions, clouds and revision schedules on title blocks |
 | Object styles, line styles, line weights by scale, line patterns, fill patterns | Missing | P0 | Drawing quality depends on this |
 | View templates, visibility/graphics overrides, filters | Partial | P0 | Visibility/Graphics (VV) per view: hide categories, halftone, projection and cut colour and line weight. View templates with Include per setting (scale, detail level, visual style, cut plane, V/G), assigned in view properties or applied once; Architectural Plan, Structural Plan and 3D Presentation to start. Filters to do |
 | View range, underlay, crop regions, scope boxes, detail levels | Partial | P0 | |
@@ -152,22 +157,22 @@ Families are what make Revit Revit. Almost every other gap depends on this.
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
 | Central model, local copies, Synchronize with Central | Missing | P2 | |
-| Worksets, element borrowing, ownership | Missing | P2 | |
-| Linked Revit/Hausit models, copy/monitor, coordination review | Missing | P1 | Linking is more common than worksharing on small jobs |
+| Worksets, element borrowing, ownership | Partial | P2 | Worksets with visibility; borrowing and ownership come with a central model |
+| Linked Revit/Hausit models, copy/monitor, coordination review | Partial | P1 | Linked Hausit and IFC models (Insert ▸ Link); copy/monitor to do |
 | Cloud collaboration (Autodesk Docs/BIM 360 equivalent) | Missing | P3 | Hausit should offer its own open server instead, see Phase 4 |
 
 ### 2.8 Phasing
 
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
-| Phases, Phase Created/Demolished, phase filters, graphic overrides | Missing | P1 | Essential for renovation work |
-| Demolish tool, temporary elements | Missing | P1 | |
+| Phases, Phase Created/Demolished, phase filters, graphic overrides | Have | — | |
+| Demolish tool, temporary elements | Partial | P1 | Demolish done; temporary elements to do |
 
 ### 2.9 Design options
 
 | Revit feature | Status | Priority | Notes |
 |---|---|---|---|
-| Option sets, primary/secondary options, accept primary | Missing | P2 | |
+| Option sets, primary/secondary options, accept primary | Have | — | |
 
 ### 2.10 API and add-ins
 

@@ -640,10 +640,18 @@ impl<'a> Exporter<'a> {
             let item = match &part.shape {
                 Shape::Prism(p) if p.footprint.len() >= 3 && p.z1 - p.z0 > 1e-6 => {
                     swept = true;
-                    let mut pts: Vec<Ref> = p.footprint.iter().map(|q| frame.local2(*q)).map(|q| self.point2(q)).collect();
-                    pts.push(pts[0]);
-                    let line = self.add("IFCPOLYLINE", list(&pts));
-                    let profile = self.add("IFCARBITRARYCLOSEDPROFILEDEF", format!(".AREA.,$,{line}"));
+                    let mut ring = |r: &[DVec2]| {
+                        let mut pts: Vec<Ref> = r.iter().map(|q| frame.local2(*q)).map(|q| self.point2(q)).collect();
+                        pts.push(pts[0]);
+                        self.add("IFCPOLYLINE", list(&pts))
+                    };
+                    let line = ring(&p.footprint);
+                    let voids: Vec<Ref> = p.holes.iter().map(|h| ring(h)).collect();
+                    let profile = if voids.is_empty() {
+                        self.add("IFCARBITRARYCLOSEDPROFILEDEF", format!(".AREA.,$,{line}"))
+                    } else {
+                        self.add("IFCARBITRARYPROFILEDEFWITHVOIDS", format!(".AREA.,$,{line},{}", list(&voids)))
+                    };
                     let at = self.placement3(DVec3::new(0.0, 0.0, p.z0 - frame.origin.z), None);
                     let z = self.z;
                     self.add("IFCEXTRUDEDAREASOLID", format!("{profile},{at},{z},{}", r(p.z1 - p.z0)))

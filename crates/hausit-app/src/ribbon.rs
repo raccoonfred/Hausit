@@ -84,7 +84,12 @@ fn tab_row(app: &mut HausitApp, ui: &mut Ui) {
         for tab in RibbonTab::ALL {
             let selected = app.ribbon_tab == tab;
             let label = if tab == RibbonTab::Modify && app.tool != Tool::Modify {
-                RichText::new(app.tool.context_title())
+                let title = if app.options.edit_target.is_some() && app.tool.is_sketch() {
+                    "Modify | Edit Boundary"
+                } else {
+                    app.tool.context_title()
+                };
+                RichText::new(title)
                     .color(if selected { Color32::WHITE } else { CONTEXT_TAB })
                     .strong()
             } else if tab == RibbonTab::Modify && !app.selection.is_empty() {
@@ -487,6 +492,24 @@ fn architecture(app: &mut HausitApp, ui: &mut Ui) {
                 structural: false,
             },
         );
+    });
+    panel(ui, "Opening", |ui| {
+        if big(
+            ui,
+            Icon::Shaft,
+            "Shaft",
+            "Shaft Opening: sketch a hole that cuts every floor and ceiling between its base and top levels (stairs, lifts, risers)",
+            matches!(
+                app.tool,
+                Tool::Boundary {
+                    kind: tools::BoundaryKind::Shaft,
+                    ..
+                }
+            ),
+            true,
+        ) {
+            crate::commands::start_shaft(app);
+        }
     });
     panel(ui, "Circulation", |ui| {
         tool_button(app, ui, Icon::Stair, "Stair", "Stair: Run", Tool::Stair { pts: vec![] });
@@ -1320,6 +1343,54 @@ fn modify(app: &mut HausitApp, ui: &mut Ui) {
         }
     });
     wall_panel(app, ui);
+    if app.tool == Tool::Modify && app.selection.len() == 1 && crate::canvas::sketched(app, app.selection[0]) {
+        panel(ui, "Mode", |ui| {
+            if big(
+                ui,
+                Icon::EditBoundary,
+                "Edit Boundary",
+                "Edit Boundary (EB): reopen the sketch. Extra closed loops cut openings in floors and ceilings. Double-clicking the element in plan does the same.",
+                false,
+                true,
+            ) {
+                let id = app.selection[0];
+                tools::edit_boundary(app, id);
+            }
+        });
+    }
+    if matches!(
+        app.tool,
+        Tool::Ceiling
+            | Tool::Boundary {
+                kind: tools::BoundaryKind::Ceiling,
+                ..
+            }
+    ) {
+        panel(ui, "Ceiling", |ui| {
+            if big(
+                ui,
+                Icon::Ceiling,
+                "Automatic",
+                "Automatic Ceiling: click inside walls to fill the room",
+                app.tool == Tool::Ceiling,
+                true,
+            ) {
+                tools::start(app, Tool::Ceiling);
+            }
+            if big(
+                ui,
+                Icon::EditBoundary,
+                "Sketch Ceiling",
+                "Sketch Ceiling: draw the ceiling's boundary (and openings) yourself",
+                app.tool != Tool::Ceiling,
+                true,
+            ) {
+                if let Some(i) = crate::commands::COMMANDS.iter().position(|c| c.name == "Sketch Ceiling") {
+                    crate::commands::run(app, i);
+                }
+            }
+        });
+    }
     if matches!(app.tool, Tool::Column) {
         panel(ui, "Multiple", |ui| {
             if big(ui, Icon::Grid, "At Grids", "Place a column at every grid intersection", false, true) {
@@ -1364,31 +1435,59 @@ fn draw_panel(app: &mut HausitApp, ui: &mut Ui) {
     if !sketch && !matches!(app.tool, Tool::Wall { .. }) {
         return;
     }
+    let mut items: Vec<(DrawShape, Icon, &str, &str)> = Vec::new();
+    if sketch {
+        items.push((
+            DrawShape::PickWalls,
+            Icon::Wall,
+            "Pick Walls",
+            "Pick Walls: click walls to sketch along them",
+        ));
+    }
+    items.push((
+        DrawShape::Line,
+        Icon::DetailLine,
+        "Line",
+        "Line: click points; type a length and press Enter",
+    ));
+    items.push((
+        DrawShape::Rectangle,
+        Icon::Region,
+        "Rectangle",
+        "Rectangle: click two opposite corners",
+    ));
+    if !sketch {
+        items.push((
+            DrawShape::Arc,
+            Icon::Rotate,
+            "Start-End-Radius Arc",
+            "Arc: click both ends, then the bulge",
+        ));
+    }
+    if roof {
+        items.push((
+            DrawShape::SlopeArrow,
+            Icon::Roof,
+            "Slope Arrow",
+            "Slope Arrow: from the low edge towards the high point",
+        ));
+    }
     panel(ui, "Draw", |ui| {
-        ui.vertical(|ui| {
-            ui.spacing_mut().item_spacing.y = 1.0;
-            let mode = if sketch {
-                &mut app.options.sketch_mode
-            } else {
-                &mut app.options.shape
-            };
-            let mut item = |ui: &mut Ui, m: DrawShape, label: &str| {
-                if ui.selectable_label(*mode == m, label).clicked() {
-                    *mode = m;
+        let mode = if sketch {
+            &mut app.options.sketch_mode
+        } else {
+            &mut app.options.shape
+        };
+        // Three per column, like the ribbon's other stacks.
+        for col in items.chunks(3) {
+            stack(ui, |ui| {
+                for (m, icon, label, tip) in col {
+                    if small(ui, *icon, label, tip, *mode == *m, true) {
+                        *mode = *m;
+                    }
                 }
-            };
-            if sketch {
-                item(ui, DrawShape::PickWalls, "▣ Pick Walls");
-            }
-            item(ui, DrawShape::Line, "╱ Line");
-            item(ui, DrawShape::Rectangle, "▭ Rectangle");
-            if !sketch {
-                item(ui, DrawShape::Arc, "◠ Start-End-Radius Arc");
-            }
-            if roof {
-                item(ui, DrawShape::SlopeArrow, "↗ Slope Arrow");
-            }
-        });
+            });
+        }
     });
 }
 

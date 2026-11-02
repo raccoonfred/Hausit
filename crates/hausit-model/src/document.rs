@@ -263,6 +263,7 @@ impl Document {
                     ElementData::Floor(f) => f.level == id,
                     ElementData::Toposolid(t) => t.level == id,
                     ElementData::PropertyLine(l) => l.level == id,
+                    ElementData::Shaft(s) => s.base_level == id || s.top_level == id,
                     ElementData::Roof(r) => r.level == id,
                     ElementData::Column(c) => c.base_level == id,
                     ElementData::Framing(f) => f.level == id,
@@ -395,7 +396,12 @@ impl Document {
                     g.start += delta;
                     g.end += delta;
                 }
-                ElementData::Floor(f) => f.boundary.iter_mut().for_each(|p| *p += delta),
+                ElementData::Floor(f) => f
+                    .boundary
+                    .iter_mut()
+                    .chain(f.openings.iter_mut().flatten())
+                    .for_each(|p| *p += delta),
+                ElementData::Shaft(s) => s.boundary.iter_mut().for_each(|p| *p += delta),
                 ElementData::Toposolid(t) => {
                     t.boundary.iter_mut().for_each(|p| *p += delta);
                     t.points.iter_mut().for_each(|p| *p += delta.extend(0.0));
@@ -415,7 +421,11 @@ impl Document {
                     *y += delta.y;
                 }),
                 ElementData::Stair(s) => s.path.iter_mut().for_each(|p| *p += delta),
-                ElementData::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p += delta),
+                ElementData::Ceiling(c) => c
+                    .boundary
+                    .iter_mut()
+                    .chain(c.openings.iter_mut().flatten())
+                    .for_each(|p| *p += delta),
                 ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p += delta),
                 ElementData::Room(r) => r.point += delta,
                 ElementData::RoomSeparation(l) => {
@@ -613,7 +623,12 @@ impl Document {
                     g.start = f(g.start);
                     g.end = f(g.end);
                 }
-                ElementData::Floor(fl) => fl.boundary.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Floor(fl) => fl
+                    .boundary
+                    .iter_mut()
+                    .chain(fl.openings.iter_mut().flatten())
+                    .for_each(|p| *p = f(*p)),
+                ElementData::Shaft(s) => s.boundary.iter_mut().for_each(|p| *p = f(*p)),
                 ElementData::Toposolid(t) => {
                     t.boundary.iter_mut().for_each(|p| *p = f(*p));
                     t.points.iter_mut().for_each(|p| *p = f(p.truncate()).extend(p.z));
@@ -651,7 +666,11 @@ impl Document {
                     s.path.iter_mut().for_each(|p| *p = f(*p));
                 }
                 ElementData::Railing(r) => r.path.iter_mut().for_each(|p| *p = f(*p)),
-                ElementData::Ceiling(c) => c.boundary.iter_mut().for_each(|p| *p = f(*p)),
+                ElementData::Ceiling(c) => c
+                    .boundary
+                    .iter_mut()
+                    .chain(c.openings.iter_mut().flatten())
+                    .for_each(|p| *p = f(*p)),
                 ElementData::Room(r) => r.point = f(r.point),
                 ElementData::RoomSeparation(l) => {
                     l.start = f(l.start);

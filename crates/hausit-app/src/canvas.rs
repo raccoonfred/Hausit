@@ -183,7 +183,7 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
             let free_angle = (mode == DrawShape::Rectangle
                 && matches!(
                     app.tool,
-                    Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. }
+                    Tool::Wall { .. } | Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } | Tool::Boundary { .. }
                 ))
                 || (mode == DrawShape::Arc && app.options.arc_end.is_some());
             if let (Some(anchor), true, false) = (app.tool.anchor(), weak, free_angle) {
@@ -222,6 +222,9 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         if let Some(id) = pointer.and_then(|sp| hit_test(&dl, &xf, sp)) {
             if app.doc.view(id).is_some() {
                 app.open_view(id);
+            } else if app.tool == Tool::Modify && is_plan && sketched(app, id) {
+                // Double-clicking a floor, roof or ceiling edits its sketch.
+                tools::edit_boundary(app, id);
             }
         }
     }
@@ -1419,7 +1422,7 @@ fn preview(app: &mut HausitApp, painter: &egui::Painter, xf: &Xform, p: DVec2) {
             };
             paint_list(painter, &moved, &dl, Some((&app.selection, PREVIEW)));
         }
-        Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } => {
+        Tool::Floor { sketch, .. } | Tool::Roof { sketch } | Tool::Toposolid { sketch } | Tool::Boundary { sketch, .. } => {
             let roof = matches!(app.tool, Tool::Roof { .. });
             match (app.options.sketch_mode, sketch.start) {
                 (DrawShape::PickWalls, _) => {
@@ -1569,6 +1572,11 @@ fn context_menu(app: &mut HausitApp, response: &egui::Response) {
                 crate::hide_isolate::copy_to_clipboard(app);
                 ui.close();
             }
+            if app.selection.len() == 1 && sketched(app, app.selection[0]) && ui.button("Edit Boundary").clicked() {
+                let id = app.selection[0];
+                tools::edit_boundary(app, id);
+                ui.close();
+            }
             if let Some((wall, end, allowed)) = wall_end_under_menu(app, ui) {
                 let label = if allowed { "Disallow Join" } else { "Allow Join" };
                 if ui.button(label).clicked() {
@@ -1602,6 +1610,14 @@ fn context_menu(app: &mut HausitApp, response: &egui::Response) {
             ui.close();
         }
     });
+}
+
+/// Elements with a sketched boundary that Edit Boundary can reopen.
+pub fn sketched(app: &HausitApp, id: ElementId) -> bool {
+    matches!(
+        app.doc.element(id).map(|e| &e.data),
+        Some(ElementData::Floor(_) | ElementData::Roof(_) | ElementData::Ceiling(_) | ElementData::Shaft(_) | ElementData::Toposolid(_))
+    )
 }
 
 /// The selected wall end the context menu was opened on (within 600 mm

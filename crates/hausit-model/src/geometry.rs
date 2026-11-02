@@ -19,6 +19,8 @@ pub struct Prism {
     pub footprint: Vec<DVec2>,
     pub z0: f64,
     pub z1: f64,
+    /// Openings through the prism (floor openings, shafts), clockwise.
+    pub holes: Vec<Vec<DVec2>>,
 }
 
 impl Prism {
@@ -30,30 +32,71 @@ impl Prism {
             footprint,
             z0: z0.min(z1),
             z1: z0.max(z1),
+            holes: Vec::new(),
         }
+    }
+
+    /// The prism with openings through it. Holes outside the footprint
+    /// or smaller than 1 mm² are ignored.
+    pub fn with_holes(mut self, holes: &[Vec<DVec2>]) -> Self {
+        self.holes = holes
+            .iter()
+            .filter(|h| h.len() >= 3 && polygon_area(h).abs() > 1.0)
+            .filter(|h| h.iter().all(|p| point_in_polygon(*p, &self.footprint)))
+            .map(|h| {
+                let mut h = h.clone();
+                if polygon_area(&h) > 0.0 {
+                    h.reverse();
+                }
+                h
+            })
+            .collect();
+        self
+    }
+
+    /// Every boundary loop: the footprint, then the holes.
+    pub fn loops(&self) -> impl Iterator<Item = &Vec<DVec2>> {
+        std::iter::once(&self.footprint).chain(self.holes.iter())
     }
 
     pub fn faces(&self) -> Vec<Face> {
         let n = self.footprint.len();
         let mut faces = Vec::with_capacity(n + 2);
         let at = |p: DVec2, z: f64| DVec3::new(p.x, p.y, z);
-        faces.push(Face {
-            pts: self.footprint.iter().rev().map(|p| at(*p, self.z0)).collect(),
-        });
-        faces.push(Face {
-            pts: self.footprint.iter().map(|p| at(*p, self.z1)).collect(),
-        });
-        for i in 0..n {
-            let (a, b) = (self.footprint[i], self.footprint[(i + 1) % n]);
+        if self.holes.is_empty() {
             faces.push(Face {
-                pts: vec![at(a, self.z0), at(b, self.z0), at(b, self.z1), at(a, self.z1)],
+                pts: self.footprint.iter().rev().map(|p| at(*p, self.z0)).collect(),
             });
+            faces.push(Face {
+                pts: self.footprint.iter().map(|p| at(*p, self.z1)).collect(),
+            });
+        } else {
+            // Top and bottom as triangles; coplanar seams are hidden when
+            // drawn, so they read as one face with openings.
+            for [a, b, c] in hausit_core::geom::triangulate_with_holes(&self.footprint, &self.holes) {
+                faces.push(Face {
+                    pts: vec![at(c, self.z0), at(b, self.z0), at(a, self.z0)],
+                });
+                faces.push(Face {
+                    pts: vec![at(a, self.z1), at(b, self.z1), at(c, self.z1)],
+                });
+            }
+        }
+        for ring in self.loops() {
+            let n = ring.len();
+            for i in 0..n {
+                let (a, b) = (ring[i], ring[(i + 1) % n]);
+                faces.push(Face {
+                    pts: vec![at(a, self.z0), at(b, self.z0), at(b, self.z1), at(a, self.z1)],
+                });
+            }
         }
         faces
     }
 
     pub fn volume(&self) -> f64 {
-        polygon_area(&self.footprint).abs() * (self.z1 - self.z0)
+        let holes: f64 = self.holes.iter().map(|h| polygon_area(h).abs()).sum();
+        (polygon_area(&self.footprint).abs() - holes).max(0.0) * (self.z1 - self.z0)
     }
 }
 
@@ -191,7 +234,11 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             if f.boundary.len() < 3 {
                 return None;
             }
-            vec![Part::prism(Material::Default, Prism::new(f.boundary.clone(), top - t, top))]
+            let holes = doc.slab_holes(&f.boundary, &f.openings, top - t, top);
+            vec![Part::prism(
+                Material::Default,
+                Prism::new(f.boundary.clone(), top - t, top).with_holes(&holes),
+            )]
         }
         ElementData::Roof(r) => roof_parts(doc, id, r),
         ElementData::Toposolid(t) => toposolid_parts(doc, id, t),
@@ -234,7 +281,11 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
             if c.boundary.len() < 3 {
                 return None;
             }
-            vec![Part::prism(Material::Default, Prism::new(c.boundary.clone(), z, z + t))]
+            let holes = doc.slab_holes(&c.boundary, &c.openings, z, z + t);
+            vec![Part::prism(
+                Material::Default,
+                Prism::new(c.boundary.clone(), z, z + t).with_holes(&holes),
+            )]
         }
         ElementData::Railing(r) => railing_parts(doc, id, r),
         ElementData::Component(c) => crate::component::component_parts(doc, c),
@@ -264,6 +315,7 @@ pub fn element_geometry(doc: &Document, id: ElementId) -> Option<ElementGeometry
         | ElementData::SpotElevation(_)
         | ElementData::RevisionCloud(_)
         | ElementData::PropertyLine(_)
+        | ElementData::Shaft(_)
         | ElementData::Group(_)
         | ElementData::AreaBoundary(_)
         | ElementData::Area(_)

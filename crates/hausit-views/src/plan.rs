@@ -51,6 +51,16 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
                     dl.line(a, b, stroke, None);
                 }
             }
+            // Openings cover the grid.
+            let t = doc.type_of(e.id).map(|t| t.thickness()).unwrap_or(25.0);
+            for h in doc.slab_holes(&c.boundary, &c.openings, z, z + t) {
+                dl.push(
+                    Prim::Polygon(h),
+                    Some(pen(doc, Category::Ceilings, false, view)),
+                    Some([255, 255, 255, 255]),
+                    Some(e.id),
+                );
+            }
         }
     }
 
@@ -96,13 +106,52 @@ pub fn floor_plan(doc: &Document, view: &View, level: ElementId) -> DisplayList 
     for e in doc.elements_of(Category::Floors).filter(|_| !reflected) {
         let ElementData::Floor(f) = &e.data else { continue };
         if f.level == level {
-            dl.push(
-                Prim::Polyline {
-                    pts: f.boundary.clone(),
-                    closed: true,
-                },
-                Some(pen(doc, Category::Floors, false, view)),
-                None,
+            let top = doc.level_elevation(f.level) + f.height_offset;
+            let t = doc.type_of(e.id).map(|t| t.thickness()).unwrap_or(200.0);
+            let holes = doc.slab_holes(&f.boundary, &f.openings, top - t, top);
+            for pts in std::iter::once(&f.boundary).chain(holes.iter()) {
+                dl.push(
+                    Prim::Polyline {
+                        pts: pts.clone(),
+                        closed: true,
+                    },
+                    Some(pen(doc, Category::Floors, false, view)),
+                    None,
+                    Some(e.id),
+                );
+            }
+        }
+    }
+
+    // Shaft openings through this level: the outline with a cross, as
+    // Revit's shaft symbol.
+    for e in doc.elements_of(Category::ShaftOpenings).filter(|_| !reflected) {
+        let ElementData::Shaft(s) = &e.data else { continue };
+        let (z0, z1) = doc.shaft_extent(s);
+        if s.boundary.len() < 3 || z0 > elev + view.cut_height || z1 <= elev {
+            continue;
+        }
+        let stroke = pen(doc, Category::ShaftOpenings, true, view);
+        dl.push(
+            Prim::Polyline {
+                pts: s.boundary.clone(),
+                closed: true,
+            },
+            Some(stroke),
+            None,
+            Some(e.id),
+        );
+        if s.boundary.len() == 4 {
+            dl.line(
+                s.boundary[0],
+                s.boundary[2],
+                pen(doc, Category::ShaftOpenings, false, view),
+                Some(e.id),
+            );
+            dl.line(
+                s.boundary[1],
+                s.boundary[3],
+                pen(doc, Category::ShaftOpenings, false, view),
                 Some(e.id),
             );
         }

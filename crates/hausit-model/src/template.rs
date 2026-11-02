@@ -592,6 +592,7 @@ pub fn sample_project() -> Document {
         DVec2::new(175.0, 7825.0),
     ];
     doc.add_element(ElementData::Floor(Floor {
+        openings: Vec::new(),
         type_id: floor_t,
         level: l1,
         boundary: inner,
@@ -629,6 +630,7 @@ pub fn sample_project() -> Document {
     let ceiling_t = t(&doc, Category::Ceilings, "600 x 600mm Grid");
     for (x0, x1) in [(175.0, 6000.0 - 67.5), (6000.0 + 67.5, 11825.0)] {
         doc.add_element(ElementData::Ceiling(Ceiling {
+            openings: Vec::new(),
             type_id: ceiling_t,
             level: l1,
             boundary: vec![
@@ -892,6 +894,7 @@ pub fn industrial_sample() -> Document {
     let slab = t(&doc, Category::Floors, "Concrete Slab - Industrial 250mm");
     let inset = 75.0;
     doc.add_element(ElementData::Floor(Floor {
+        openings: Vec::new(),
         type_id: slab,
         level: l1,
         boundary: vec![
@@ -952,6 +955,7 @@ pub fn industrial_sample() -> Document {
     }
     let deck = t(&doc, Category::Floors, "Generic 150mm");
     doc.add_element(ElementData::Floor(Floor {
+        openings: Vec::new(),
         type_id: deck,
         level: mezz,
         boundary: vec![

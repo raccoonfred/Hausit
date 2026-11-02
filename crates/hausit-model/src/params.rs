@@ -173,6 +173,15 @@ pub fn element_parameters(doc: &Document, id: ElementId) -> Vec<Parameter> {
             p.push(Parameter::new("Elevation Offset", G::Constraints, V::Length(i.z)));
             p.push(Parameter::new("Rotation", G::Constraints, V::Angle(i.rotation)));
         }
+        ElementData::Shaft(s) => {
+            p.push(Parameter::new("Base Constraint", G::Constraints, V::Element(s.base_level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Base Offset", G::Constraints, V::Length(s.base_offset)));
+            p.push(Parameter::new("Top Constraint", G::Constraints, V::Element(s.top_level)).kind(ParamKind::Level));
+            p.push(Parameter::new("Top Offset", G::Constraints, V::Length(s.top_offset)));
+            let (z0, z1) = doc.shaft_extent(s);
+            p.push(Parameter::new("Unconnected Height", G::Constraints, V::Length(z1 - z0)).ro());
+            p.push(Parameter::new("Area", G::Dimensions, V::Area(hausit_core::geom::polygon_area(&s.boundary).abs())).ro());
+        }
         ElementData::PropertyLine(l) => {
             p.push(Parameter::new("Area", G::Dimensions, V::Area(doc.property_area(l))).ro());
             let n = l.points.len();
@@ -554,6 +563,13 @@ pub fn set_element_parameter(doc: &mut Document, id: ElementId, name: &str, valu
                 _ => return Err(bad()),
             },
             ElementData::PropertyLine(_) => return Err(bad()),
+            ElementData::Shaft(s) => match (name, value) {
+                ("Base Constraint", V::Element(l)) if l.is_valid() => s.base_level = l,
+                ("Base Offset", V::Length(v)) => s.base_offset = v,
+                ("Top Constraint", V::Element(l)) if l.is_valid() => s.top_level = l,
+                ("Top Offset", V::Length(v)) => s.top_offset = v,
+                _ => return Err(bad()),
+            },
             ElementData::LinkInstance(i) => match (name, value) {
                 ("Elevation Offset", V::Length(v)) => i.z = v,
                 ("Rotation", V::Angle(v)) => i.rotation = v,

@@ -63,7 +63,11 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.add_space(4.0);
-            let elements: Vec<ElementId> = app.selection.iter().copied().filter(|id| app.doc.element(*id).is_some()).collect();
+            // Edit Boundary shows the element being edited.
+            let elements: Vec<ElementId> = match app.options.edit_target.filter(|id| app.doc.contains(*id)) {
+                Some(t) if app.tool.is_sketch() => vec![t],
+                _ => app.selection.iter().copied().filter(|id| app.doc.element(*id).is_some()).collect(),
+            };
             let cats: Vec<Category> = elements
                 .iter()
                 .filter_map(|id| app.doc.element(*id))
@@ -79,6 +83,10 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                 ui.label(RichText::new(format!("Common ({})", elements.len())).strong());
             }
 
+            if elements.is_empty() && app.tool.category().is_some() {
+                tool_properties(app, ui);
+                return;
+            }
             if elements.is_empty() {
                 if let Some(v) = app
                     .selection
@@ -601,4 +609,91 @@ fn text_field(ui: &mut Ui, id: impl std::hash::Hash + std::fmt::Debug, value: &m
         ui.ctx().data_mut(|d| d.remove::<String>(key));
         *value = t;
     }
+}
+
+/// While placing an element: the settings the new element will get,
+/// as Revit's Properties palette shows them before you click.
+fn tool_properties(app: &mut HausitApp, ui: &mut Ui) {
+    use crate::tools::Tool;
+    let unit = app.doc.length_unit;
+    let level = app
+        .active_level()
+        .map(|l| app.doc.level_name(l))
+        .unwrap_or_else(|| "<active plan level>".into());
+    let levels: Vec<(ElementId, String)> = app.doc.levels().into_iter().map(|(id, l)| (id, l.name.clone())).collect();
+    egui::CollapsingHeader::new(RichText::new("Constraints").strong())
+        .id_salt("tool_constraints")
+        .default_open(true)
+        .show(ui, |ui| {
+            grid("tool_props").show(ui, |ui| match app.tool {
+                Tool::Wall { .. } => {
+                    plabel(ui, "Location Line");
+                    egui::ComboBox::from_id_salt("tp_locline")
+                        .selected_text(app.options.location_line.label())
+                        .width(value_w(ui))
+                        .show_ui(ui, |ui| {
+                            for l in hausit_model::LocationLine::ALL {
+                                ui.selectable_value(&mut app.options.location_line, l, l.label());
+                            }
+                        });
+                    ui.end_row();
+                    plabel(ui, "Base Constraint");
+                    ui.label(&level);
+                    ui.end_row();
+                    plabel(ui, "Top Constraint");
+                    let top = app.options.wall_top;
+                    let name = if top.is_valid() {
+                        format!("Up to level: {}", app.doc.level_name(top))
+                    } else {
+                        "Unconnected".into()
+                    };
+                    egui::ComboBox::from_id_salt("tp_top")
+                        .selected_text(name)
+                        .width(value_w(ui))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut app.options.wall_top, ElementId::INVALID, "Unconnected");
+                            for (id, n) in &levels {
+                                ui.selectable_value(&mut app.options.wall_top, *id, format!("Up to level: {n}"));
+                            }
+                        });
+                    ui.end_row();
+                    if !app.options.wall_top.is_valid() {
+                        plabel(ui, "Unconnected Height");
+                        prop_length(ui, "tp_height", &mut app.options.wall_height, unit);
+                        ui.end_row();
+                    }
+                }
+                Tool::Ceiling => {
+                    plabel(ui, "Level");
+                    ui.label(&level);
+                    ui.end_row();
+                    plabel(ui, "Height Offset From Level");
+                    prop_length(ui, "tp_ceiling", &mut app.options.ceiling_height, unit);
+                    ui.end_row();
+                }
+                Tool::Component { .. } => {
+                    plabel(ui, "Level");
+                    ui.label(&level);
+                    ui.end_row();
+                    plabel(ui, "Rotation");
+                    ui.add(
+                        egui::DragValue::new(&mut app.options.component_rotation)
+                            .range(0.0..=359.0)
+                            .suffix("°")
+                            .speed(1.0),
+                    );
+                    ui.end_row();
+                }
+                _ => {
+                    plabel(ui, "Level");
+                    ui.label(&level);
+                    ui.end_row();
+                }
+            });
+        });
+    ui.add_space(6.0);
+    ui.label(
+        RichText::new("More settings are on the Options Bar above the view. Select the element after placing it to change the rest.")
+            .color(Color32::GRAY),
+    );
 }

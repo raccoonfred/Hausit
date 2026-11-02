@@ -39,10 +39,11 @@ pub enum Category {
     PropertyLines,
     Planting,
     RvtLinks,
+    ShaftOpenings,
 }
 
 impl Category {
-    pub const ALL: [Category; 34] = [
+    pub const ALL: [Category; 35] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -77,6 +78,7 @@ impl Category {
         Category::PropertyLines,
         Category::Planting,
         Category::RvtLinks,
+        Category::ShaftOpenings,
     ];
 
     /// Categories of loadable components, placed with the Component tool.
@@ -166,6 +168,7 @@ impl Category {
             Category::RevisionClouds => "Revision Clouds",
             Category::Toposolid => "Toposolid",
             Category::PropertyLines => "Property Lines",
+            Category::ShaftOpenings => "Shaft Openings",
             Category::Planting => "Planting",
             Category::RvtLinks => "RVT Links",
         }
@@ -206,6 +209,7 @@ impl Category {
             Category::RevisionClouds => "Revision Cloud",
             Category::Toposolid => "Toposolid",
             Category::PropertyLines => "Property Line",
+            Category::ShaftOpenings => "Shaft Opening",
             Category::Planting => "Planting",
             Category::RvtLinks => "RVT Link",
         }
@@ -250,6 +254,7 @@ impl Category {
                 | Category::Areas
                 | Category::AreaBoundary
                 | Category::PropertyLines
+                | Category::ShaftOpenings
         )
     }
 }

@@ -42,7 +42,12 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         )
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(app.tool.context_title()).strong());
+                let title = if app.options.edit_target.is_some() && app.tool.is_sketch() {
+                    "Modify | Edit Boundary"
+                } else {
+                    app.tool.context_title()
+                };
+                ui.label(RichText::new(title).strong());
                 ui.separator();
                 let unit = app.doc.length_unit;
                 match app.tool.clone() {
@@ -92,7 +97,18 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
                         length_edit(ui, "topo_height", &mut app.options.topo_height, unit);
                         ui.label(RichText::new("above the level").color(Color32::DARK_GRAY));
                     }
-                    Tool::Floor { .. } => {
+                    Tool::Floor { .. } | Tool::Boundary { .. } => {
+                        if matches!(
+                            app.tool,
+                            Tool::Boundary {
+                                kind: crate::tools::BoundaryKind::Ceiling,
+                                ..
+                            }
+                        ) {
+                            ui.label("Height Offset:");
+                            length_edit(ui, "ceiling_h2", &mut app.options.ceiling_height, unit);
+                            ui.separator();
+                        }
                         if app.options.sketch_mode == DrawShape::Line {
                             ui.checkbox(&mut app.options.chain, "Chain");
                         }

@@ -912,6 +912,7 @@ pub fn solid_prisms(s: &Solid, vars: &Vars) -> Result<(Vec<Prism>, Option<String
                     footprint: base.footprint.iter().map(|p| *p + DVec2::new(dx, dy) * k).collect(),
                     z0: base.z0 + dz * k,
                     z1: base.z1 + dz * k,
+                    holes: Vec::new(),
                 }
             })
             .collect();
@@ -1145,12 +1146,39 @@ impl Document {
                 None => added.push(self.add_type(def.category, &def.name, &t.name, def.type_params(t))),
             }
         }
+        if def.category == Category::Windows {
+            self.number_window_types(&added);
+        }
         match self.families.iter_mut().find(|f| f.category == def.category && f.name == def.name) {
             Some(old) => *old = def,
             None => self.families.push(def),
         }
         self.touch();
         Ok(added)
+    }
+
+    /// Gives window types without a Type Mark the next free "W1", "W2"…,
+    /// so window tags read something instead of "?".
+    pub fn number_window_types(&mut self, ids: &[ElementId]) {
+        let mark = |t: &crate::FamilyType| match t.params.get("Type Mark") {
+            Some(ParamValue::Text(s)) => s.trim().to_string(),
+            _ => String::new(),
+        };
+        let mut used: Vec<String> = self.types_of(Category::Windows).map(mark).filter(|m| !m.is_empty()).collect();
+        let mut n = 1;
+        for id in ids {
+            if self.family_type(*id).is_none_or(|t| !mark(t).is_empty()) {
+                continue;
+            }
+            while used.contains(&format!("W{n}")) {
+                n += 1;
+            }
+            let m = format!("W{n}");
+            if let Some(t) = self.family_type_mut(*id) {
+                t.params.insert("Type Mark".into(), ParamValue::Text(m.clone()));
+            }
+            used.push(m);
+        }
     }
 }
 

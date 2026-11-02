@@ -196,6 +196,7 @@ impl Document {
                     Shape::Prism(pr) => {
                         let mut pr = pr.clone();
                         pr.footprint.iter_mut().for_each(|q| *q = inst.map(*q));
+                        pr.holes.iter_mut().flatten().for_each(|q| *q = inst.map(*q));
                         pr.z0 += inst.z;
                         pr.z1 += inst.z;
                         Shape::Prism(pr)

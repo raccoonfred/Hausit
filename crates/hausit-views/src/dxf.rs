@@ -45,6 +45,7 @@ pub fn layer_of(cat: Option<Category>) -> &'static str {
         Some(Category::RevisionClouds) => "G-ANNO-REVS",
         Some(Category::Toposolid) => "C-TOPO",
         Some(Category::PropertyLines) => "C-PROP",
+        Some(Category::ShaftOpenings) => "A-FLOR-OTLN",
         Some(Category::Planting) => "L-PLNT",
         Some(Category::RvtLinks) => "X-LINK",
         Some(Category::Grids) => "S-GRID",

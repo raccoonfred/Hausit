@@ -118,6 +118,7 @@ impl ScheduleField {
             | Category::SpotElevations
             | Category::RevisionClouds
             | Category::PropertyLines
+            | Category::ShaftOpenings
             | Category::RvtLinks
             | Category::ModelGroups
             | Category::AreaBoundary
@@ -159,6 +160,7 @@ impl ScheduleField {
             | Category::SpotElevations
             | Category::RevisionClouds
             | Category::PropertyLines
+            | Category::ShaftOpenings
             | Category::RvtLinks
             | Category::ModelGroups
             | Category::Areas

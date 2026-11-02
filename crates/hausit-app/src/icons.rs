@@ -83,6 +83,8 @@ pub enum Icon {
     Phases,
     Filter,
     Interface,
+    Shaft,
+    EditBoundary,
 }
 
 const INK: Color32 = Color32::from_rgb(50, 60, 75);
@@ -748,6 +750,45 @@ pub fn paint(p: &Painter, r: Rect, icon: Icon, enabled: bool) {
             for (x, y) in [(8.0, 23.0), (25.0, 22.0), (24.0, 28.0)] {
                 p.circle_filled(at(x, y), 1.8 * s, k(BRICK));
             }
+        }
+        Icon::Shaft => {
+            // Two slabs with a hole through both, crossed like a shaft.
+            for y in [8.0, 20.0] {
+                poly(
+                    &[(3.0, y + 4.0), (19.0, y + 4.0), (29.0, y), (13.0, y)],
+                    Color32::from_gray(215),
+                    ink,
+                );
+            }
+            p.rect(
+                rect(12.0, 4.0, 20.0, 28.0),
+                0.0,
+                k(Color32::from_rgb(120, 170, 230)),
+                ink,
+                egui::StrokeKind::Middle,
+            );
+            seg((12.0, 4.0), (20.0, 28.0), line(1.2, INK));
+            seg((20.0, 4.0), (12.0, 28.0), line(1.2, INK));
+        }
+        Icon::EditBoundary => {
+            // A magenta sketch outline with a pencil.
+            p.add(Shape::closed_line(
+                vec![
+                    at(4.0, 8.0),
+                    at(24.0, 8.0),
+                    at(24.0, 18.0),
+                    at(16.0, 18.0),
+                    at(16.0, 26.0),
+                    at(4.0, 26.0),
+                ],
+                line(2.0, Color32::from_rgb(200, 0, 200)),
+            ));
+            poly(
+                &[(20.0, 26.0), (28.0, 18.0), (30.5, 20.5), (22.5, 28.5)],
+                Color32::from_rgb(240, 200, 80),
+                ink,
+            );
+            poly(&[(20.0, 26.0), (22.5, 28.5), (18.5, 30.0)], INK, Stroke::NONE);
         }
         Icon::Interface => {
             // A window with a palette on the left and a ribbon on top.
