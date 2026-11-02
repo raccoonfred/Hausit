@@ -195,6 +195,32 @@ pub fn show(app: &mut HausitApp, ui: &mut Ui) {
         }
     }
 
+    // Sketch lines under the cursor highlight; Delete removes that line.
+    if is_plan {
+        if let (Some(p), Some(sk)) = (raw, app.tool.sketch()) {
+            let tol = xf.px(8.0);
+            let near = sk
+                .lines
+                .iter()
+                .enumerate()
+                .map(|(i, l)| (i, distance_to_segment(p, l.a, l.b)))
+                .filter(|(_, d)| *d < tol)
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|(i, _)| i);
+            if let (Some(i), None) = (near, sk.start) {
+                let l = &sk.lines[i];
+                painter.line_segment([xf.to_screen(l.a), xf.to_screen(l.b)], Stroke::new(4.0, HOVER));
+                let del = ui.input(|i| i.key_pressed(egui::Key::Delete) || i.key_pressed(egui::Key::Backspace));
+                if del && app.options.typed.is_empty() {
+                    if let Some(sk) = app.tool.sketch_mut() {
+                        sk.lines.remove(i);
+                        sk.chain_from = None;
+                    }
+                    app.status = "Sketch line deleted.".into();
+                }
+            }
+        }
+    }
     let flipped = is_plan && flip_controls(app, &response, &painter, &xf, pointer);
     if response.clicked_by(egui::PointerButton::Primary) && !flipped {
         if let Some(p) = snapped {

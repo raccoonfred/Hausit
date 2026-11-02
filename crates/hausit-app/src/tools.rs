@@ -253,7 +253,7 @@ impl Tool {
             Tool::Door => "Click on a wall to place a door. The side you click is the side it swings to.",
             Tool::Window => "Click on a wall to place a window.",
             Tool::Floor { .. } | Tool::Roof { .. } | Tool::Toposolid { .. } | Tool::Boundary { .. } => {
-                "Sketch a closed loop: pick walls or draw lines. Finish Edit Mode (Enter) creates it; Ctrl+Z removes the last line."
+                "Sketch a closed loop: pick walls or draw lines. Finish Edit Mode (Enter) creates it; hover a line and press Delete to remove it."
             }
             Tool::Level => "Click in an elevation or section to place a level at that height.",
             Tool::Grid { start: None } => "Click to enter grid start point.",
@@ -540,7 +540,7 @@ impl Sketch {
     pub fn closed_loop(&self) -> Result<Vec<(DVec2, SketchLine)>, String> {
         let (one, left) = self.first_loop()?;
         if !left.is_empty() {
-            return Err("This sketch can only have one loop. Delete the extra lines (Ctrl+Z).".into());
+            return Err("This sketch can only have one loop. Hover the extra lines and press Delete.".into());
         }
         Ok(one)
     }
